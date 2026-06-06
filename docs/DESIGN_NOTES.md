@@ -283,6 +283,13 @@ GitHub namespace is free; metaphor is dead-on (cross-language structural copy).
 
 ## 9. Roadmap — path to 2026 SOTA
 
+> **Current direction (end of session 2): dogfood on stope first.** Decision is to
+> keep calque pointed at stope for a while before generalizing — real usage there
+> tells us which P0 profile work actually matters, instead of building profiles
+> speculatively. **Treat P0 below as planned, not started; do not begin the
+> profile refactor without that signal.** Near-term value = running scans on stope
+> and adjudicating into `stope/.calque/registry.md`.
+
 Reframed in session 2 around the survey (§6) and the central problem: **calque
 works on stope; making it work on *any* large project is the real challenge**
 (§13). The architecture is SOTA-shaped (recall→adjudicate→verdict, the consensus

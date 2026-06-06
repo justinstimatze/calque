@@ -345,6 +345,7 @@ def missing_twins(
     *,
     min_lines: int = 4,
     min_score: float = 0.18,
+    reachable_terms: frozenset[str] = frozenset(),
 ) -> list[FuncSig]:
     """Left-boundary functions that *look* like they should have a twin but have
     NONE on the right side -- the 'missing twin' case pair-ranking is structurally
@@ -357,6 +358,17 @@ def missing_twins(
     that produced a real match) and report only the gaps within those roles -- so
     engine-internal helpers (`_check_*`, `_build_*` with no counterpart by design)
     don't flood the list. A recall aid, not a verdict, exactly like `rank()`.
+
+    `reachable_terms` is the *reachability gate*: a set of lowercase word tokens
+    drawn from command-string literals in a usage/test corpus (see
+    `extract_command_terms`). A candidate whose role-stripped stem is fully
+    covered by those terms is exercised through a generic dispatcher (e.g. the
+    harness drives it via `step("pray ...")` instead of a dedicated method) and is
+    therefore NOT a real coverage gap -- so it is suppressed. Without this gate,
+    "no dedicated twin method" massively over-flags any harness built around a
+    single command dispatcher (on stope: 93 -> ~6). This is the disciplined form
+    of maturity_check's name-substring grep: word-boundary, over string literals
+    only, used to *suppress* rather than *flag*.
     """
     R = [f for f in right if f.n_lines >= min_lines and not f.name.startswith("__")]
     L = [f for f in left if f.n_lines >= min_lines and not f.name.startswith("__")]
@@ -373,10 +385,86 @@ def missing_twins(
                 if pfx:
                     twinned.add(pfx)
                 break
-    return [
+    out = [
         a
         for a in L
         if a.key not in matched
         and _role_prefix(a.name) in twinned
         and (a.strings or a.writes or a.ret_keys)  # carries real contract signal
     ]
+    if reachable_terms:
+        # Drop candidates reachable via a generic dispatcher (verb appears as a
+        # command string somewhere in the usage/test corpus).
+        out = [a for a in out if not (a.stem and a.stem <= reachable_terms)]
+    return out
+
+
+# Method/function names that act as a generic command dispatcher -- a single
+# entry point you drive with a verb string (`game.step("pray")`). Configurable
+# per project; these are the common conventions. Used by `extract_command_terms`.
+_DEFAULT_DISPATCHERS = frozenset(
+    {
+        "step",
+        "do",
+        "run",
+        "execute",
+        "exec",
+        "send",
+        "dispatch",
+        "perform",
+        "invoke",
+        "act",
+        "command",
+        "cmd",
+    }
+)
+
+
+def _first_str_arg(arg: ast.AST) -> str | None:
+    """The literal string of a call argument, including the leading literal chunk
+    of an f-string (`f"radio {cmd}"` -> 'radio ')."""
+    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+        return arg.value
+    if isinstance(arg, ast.JoinedStr) and arg.values:
+        head = arg.values[0]
+        if isinstance(head, ast.Constant) and isinstance(head.value, str):
+            return head.value
+    return None
+
+
+def extract_command_terms(
+    path: Path, dispatchers: frozenset[str] = _DEFAULT_DISPATCHERS
+) -> frozenset[str]:
+    """Lowercase word tokens of string literals passed to a *dispatcher* call
+    (e.g. `step("pray ...")`) in a Python file -- the vocabulary of commands a
+    test/usage corpus actually drives through a generic entry point. Used to build
+    the `reachable_terms` set for `missing_twins`'s reachability gate.
+
+    Dispatcher-scoped, NOT every string literal: a verb word that merely appears
+    in an assertion or a fact-name string (`'count_unstable'`) must not create
+    false reachability. This is what lets the gate suppress verbs that ARE driven
+    (`eat` via `step("eat the pie")`) while keeping genuinely untested verbs
+    (`pray`/`sing`/`count`) flagged."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+    except SyntaxError:
+        return frozenset()
+    terms: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        name = (
+            fn.attr
+            if isinstance(fn, ast.Attribute)
+            else fn.id
+            if isinstance(fn, ast.Name)
+            else None
+        )
+        if name not in dispatchers:
+            continue
+        for arg in node.args:
+            s = _first_str_arg(arg)
+            if s:
+                terms.update(re.findall(r"[a-z0-9]+", s.lower()))
+    return frozenset(terms)

@@ -12,6 +12,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from . import core
 from .core import FuncSig, extract_file, missing_twins, rank
 
 
@@ -85,6 +86,28 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="also report role-named left fns with no right-side twin (coverage gaps)",
     )
+    sc.add_argument(
+        "--missing-corpus",
+        nargs="+",
+        metavar="GLOB",
+        help="glob(s) of usage/test files; their command-string vocabulary gates "
+        "out missing-twins reachable via a generic dispatcher (e.g. step('verb'))",
+    )
+    sc.add_argument(
+        "--role-prefixes",
+        help="comma-separated extra name role-prefixes to strip (project-specific; "
+        "extends the built-in handle/resolve/check/... set)",
+    )
+    sc.add_argument(
+        "--delegation-roots",
+        help="comma-separated extra attribute roots that mark a forwarding adapter "
+        "(extends the built-in _engine/_impl/... set, e.g. _harness)",
+    )
+    sc.add_argument(
+        "--dispatchers",
+        help="comma-separated extra generic-dispatcher method names for the "
+        "--missing-corpus reachability gate (extends step/do/run/... e.g. play)",
+    )
     sc.add_argument("--out", type=Path, help="write markdown report here")
     args = p.parse_args(argv)
 
@@ -92,6 +115,17 @@ def main(argv: list[str] | None = None) -> int:
     if not repo.is_dir():
         print(f"calque: --repo not a directory: {repo}", file=sys.stderr)
         return 2
+
+    # Per-project config: extend the (stope-shaped) defaults before extraction so
+    # calque generalizes to other naming conventions / wrapper attributes.
+    if args.role_prefixes:
+        core._ROLE_PREFIXES = core._ROLE_PREFIXES + tuple(
+            t.strip().lower() for t in args.role_prefixes.split(",") if t.strip()
+        )
+    if args.delegation_roots:
+        core._DELEGATION_ROOTS = core._DELEGATION_ROOTS | {
+            t.strip() for t in args.delegation_roots.split(",") if t.strip()
+        }
 
     left = _collect(repo, args.left)
     right = _collect(repo, args.right)
@@ -110,8 +144,29 @@ def main(argv: list[str] | None = None) -> int:
         min_score=args.min_score,
         top=args.top,
     )
+    reachable: frozenset[str] = frozenset()
+    if args.missing and args.missing_corpus:
+        dispatchers = core._DEFAULT_DISPATCHERS
+        if args.dispatchers:
+            dispatchers = dispatchers | {
+                t.strip() for t in args.dispatchers.split(",") if t.strip()
+            }
+        terms: set[str] = set()
+        seen: set[Path] = set()
+        for g in args.missing_corpus:
+            for f in sorted(repo.glob(g)):
+                if f.suffix == ".py" and f not in seen:
+                    seen.add(f)
+                    terms |= core.extract_command_terms(f, dispatchers)
+        reachable = frozenset(terms)
     missing = (
-        missing_twins(left, right, min_lines=args.min_lines, min_score=args.min_score)
+        missing_twins(
+            left,
+            right,
+            min_lines=args.min_lines,
+            min_score=args.min_score,
+            reachable_terms=reachable,
+        )
         if args.missing
         else []
     )

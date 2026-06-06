@@ -5,7 +5,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from calque.core import extract_file, missing_twins, rank, _stem_tokens
+from calque.core import (
+    extract_command_terms,
+    extract_file,
+    missing_twins,
+    rank,
+    _stem_tokens,
+)
 
 
 def _write(tmp: Path, name: str, body: str) -> Path:
@@ -162,3 +168,41 @@ def test_missing_twin_reported(tmp_path: Path):
     assert "_handle_beta" in names, names  # twinned role, no counterpart
     assert "_handle_alpha" not in names  # it has a twin
     assert "_internal_warm" not in names  # no role prefix -> not a missing-twin candidate
+
+
+def test_missing_twin_reachability_gate(tmp_path: Path):
+    """A missing twin whose verb is driven via a dispatcher command string in a
+    usage/test corpus is suppressed -- the reachability gate that collapses the
+    over-flagging (stope: 93 -> ~6) when the harness has a generic step()."""
+    _write(
+        tmp_path,
+        "engine.py",
+        "class E:\n"
+        "    def _handle_alpha(self):\n"
+        "        self.world.alpha_done = True\n"
+        "        self.shell.emit_text('alpha authored narrative line one')\n"
+        "        return {'status': 'alpha'}\n"
+        "    def _handle_beta(self):\n"
+        "        self.ctx.beta_count += 1\n"
+        "        self.audio.play('beta-cue-sound')\n"
+        "        return {'result': 'beta'}\n",
+    )
+    _write(
+        tmp_path,
+        "testing.py",
+        "class T:\n"
+        "    def alpha(self):\n"
+        "        self.world.alpha_done = True\n"
+        "        self.shell.emit_text('alpha authored narrative line one')\n"
+        "        return {'status': 'alpha'}\n",
+    )
+    left = extract_file(tmp_path / "engine.py", tmp_path)
+    right = extract_file(tmp_path / "testing.py", tmp_path)
+    # ungated: _handle_beta is a missing twin
+    assert "_handle_beta" in {f.name for f in missing_twins(left, right, min_lines=1)}
+    # a corpus that drives beta via a dispatcher command string suppresses it
+    corpus = _write(tmp_path, "test_play.py", "def t(g):\n    g.step('beta now')\n")
+    reach = extract_command_terms(corpus)
+    assert "beta" in reach and "now" in reach
+    gated = {f.name for f in missing_twins(left, right, min_lines=1, reachable_terms=reach)}
+    assert "_handle_beta" not in gated, gated

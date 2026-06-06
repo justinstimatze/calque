@@ -25,7 +25,7 @@ diverged. You have to index the contract, not the prose.
 
 ## How calque works
 
-It's the recall half of a hybrid heuristic+LLM loop:
+It's the high-recall **gate** of a hybrid heuristic+LLM loop:
 
 ```
 calque scan (cheap, high-recall)  →  LLM/human adjudicates  →  registry (memory)

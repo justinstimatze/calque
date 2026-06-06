@@ -14,10 +14,11 @@ construction* — which is exactly why clone detectors, embeddings, grep, and LS
 miss them. The two twins don't call each other and don't look alike; the only
 thing they share is their *contract*.
 
-**The approach — a hybrid loop.** calque is the cheap, high-recall RECALL half.
-It indexes the signals that stay invariant when a body is rewritten (emitted
-strings, state writes, returned keys, callees, name-stem) and ranks suspect
-pairs. *You* are the precision half — the equivalence oracle. The registry is the
+**The approach — a hybrid loop.** calque is the cheap, high-recall **gate** (the
+deterministic recall half; "recall" describes the tuning, not a separate hybrid
+role). It indexes the signals that stay invariant when a body is rewritten
+(emitted strings, state writes, returned keys, callees, name-stem) and ranks
+suspect pairs. *You* are the precision half — the equivalence oracle. The registry is the
 durable memory so neither of you re-litigates a cleared pair.
 
 ```

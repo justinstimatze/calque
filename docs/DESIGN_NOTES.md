@@ -33,8 +33,9 @@ calque finds **dual-path code**: two implementations of one contract that are
 reimplements production logic, a client that hardcodes a verb list the server
 also owns, a `v2` path that diverged from `v1`. These are **Type-4 (behavioral)
 clones**: dissimilar in syntax *by construction*, which is exactly why grep, LSP,
-embeddings, and clone-detectors all miss them. calque is the **high-recall RECALL
-stage** of a hybrid heuristic→LLM-oracle→registry loop. It indexes the signals
+embeddings, and clone-detectors all miss them. calque is the **high-recall GATE**
+(the *recall* stage — "RECALL" is a description, not a sixth hybrid role) of a
+hybrid heuristic→LLM-oracle→registry loop. It indexes the signals
 that stay invariant when a body is rewritten, ranks suspect pairs, and hands a
 short list to an LLM/agent that makes the actual equivalence call. It never
 *proves* equivalence (that's undecidable) — it's a nose, not a judge.
@@ -99,7 +100,7 @@ Role mapping:
 | hybrid role | calque |
 |---|---|
 | soft input | the codebase / a diff |
-| LENS (usually LLM) | **deterministic AST extract** — collapsed into the gate |
+| LENS (usually LLM) | **deterministic AST extract** — a *code-block lens* (deterministic because the substrate is already structured code) |
 | SUBSTRATE | `.calque/registry.md` (typed pair→verdict records) |
 | GATE | `core.py` — signature overlap → rank suspects |
 | REASONER | the agent — adjudicate drift / twin-ok / false-alarm |
@@ -198,10 +199,49 @@ pins this.
 - **Go clone tools won't help:** `dupl` (suffix-tree over ASTs, *ignores values*)
   catches Type 1–2 only — same blind spot.
 
+### 2026 survey (session 2) — where calque actually sits
+
+A fresh fan-out survey (full source list logged with the session). Bottom line:
+**calque is novel in framing + signal, not architecture.**
+
+- **Nearest neighbor — HyClone** (arXiv 2508.01357, Aug 2025): two-stage Python
+  Type-4 detector, *LLM screens → execution validates*. Same two-leg shape as
+  calque but **inverted** — HyClone spends the LLM on the cheap screen; calque
+  uses cheap *static effect signals* for the screen and reserves LLM + property
+  testing for the verdict. And HyClone is built for *benchmark pair-classification*,
+  not *drift-hunting in a live unlabeled repo*. Cite as closest prior art + the
+  contrast that defines calque.
+- **Verdict-leg backbone — differential fuzzing** (arXiv 2602.15761, Feb 2026):
+  test-free equivalence by input-generation + cross-execution found **19–35% of
+  LLM refactorings non-equivalent, ~21% slipping past existing tests.** This is
+  calque's intended verdict leg, empirically validated, with a great motivating
+  stat ("existing tests miss real drift" = exactly the stope `test_dual_path_parity`
+  blind spots calque found).
+- **LLM is not a sound oracle** — independently confirmed: empirical LLM-clone
+  study (2511.01176), CETBench (2506.04019), the LLM-as-Judge-for-SE survey
+  (2510.24367). Equivalence-judging isn't even a named LLM-judge task category yet.
+  This *validates* demoting the LLM to triage (REASONER) and promoting differential
+  testing to the verdict (ACTION).
+- **Recall-validation datasets to adopt:** GPTCloneBench (Type-4 incl. Python),
+  CETBench transform-pairs. Measure: of known Type-4 pairs, what fraction does
+  calque's effect-signal jaccard rank as suspects? Tune for recall.
+- **The signal is the genuinely original move.** Static *effect/mutation*
+  signatures (write-targets, emitted literals, returned keys) as a recall signal
+  sit in an empty intersection: effect systems exist (for typing/optimization),
+  behavioral-clone detection exists (but goes dynamic) — nobody uses cheap static
+  effect footprints to *match twins*. (NSF 10113743 is the formal "no purely static
+  method detects all behavioral clones" — grounds "a nose, not a judge.")
+- **Commercial near-miss:** SMART TS XL / "Mirror Code" sells the *divergence*
+  narrative across systems but finds duplicates without judging drift and has no
+  open recall→oracle pipeline. API-drift tools (oasdiff etc.) need a *declared*
+  contract; calque's niche is the *undeclared, implicit* contract.
+
 The general "find any two things that should be identical and aren't" is program
 equivalence = undecidable. Everyone converges on **fuzzy discovery + differential
 verdict + an oracle**. The 2026 novelty is that the oracle (LLM) is now cheap and
-good, which inverts the architecture toward recall-index → LLM-judgment.
+good, which inverts the architecture toward recall-index → LLM-judgment. calque's
+unclaimed white space: **undeclared-contract drift-hunting in a live repo, via
+static effect-signatures.**
 
 ---
 
@@ -241,29 +281,68 @@ GitHub namespace is free; metaphor is dead-on (cross-language structural copy).
 
 ---
 
-## 9. Roadmap (prioritized)
+## 9. Roadmap — path to 2026 SOTA
 
-1. ~~**Seed stope's real registry**~~ — **DONE (session 2)**. All 30 suspects
-   adjudicated into `stope/.calque/registry.md`. The 4 `drift` rows are the next
-   single-path cleanups (left to a stope session). Note the boundary now spans 14
-   `engine*.py` files (mixins), not just `engine.py`.
-2. **Calibration layer** — add a `predicted_score` field to registry entries;
-   a `calque calibrate` view that reports precision@k from logged verdicts; use it
-   to tune `_WEIGHTS`.
-3. **Metabolism layer** — `calque audit` re-scans and re-checks `contracted-twin-ok`
-   pairs for fresh drift (re-extract both sides; if a side's signature changed
-   materially since the recorded verdict, re-flag).
-4. ~~**Install as a global Claude skill**~~ — **DONE (session 2)**.
-   `~/.claude/skills/calque/SKILL.md` (aligned to hybrid's roles) + `calque` CLI
-   on PATH via `pipx install --editable`. `/calque` works from any repo.
-5. **Verdict leg** — wire Hypothesis `RuleBasedStateMachine` template for confirmed
-   twins (this is stope's #234: ScriptedGame vs GameSession differential).
-6. **Go + TS extractors** — TS (ts-morph) for undercity; Go as a query layer over
-   defn. The `core.py` ranking is already language-agnostic; only extraction is
-   per-language. Factor `extract_py.py` out of `core.py` behind a `FuncSig`
-   producer interface.
-7. **Boundary presets** — `--preset harness` (engine*×testing), `--preset client-server`,
-   etc., so users don't hand-craft globs.
+Reframed in session 2 around the survey (§6) and the central problem: **calque
+works on stope; making it work on *any* large project is the real challenge**
+(§13). The architecture is SOTA-shaped (recall→adjudicate→verdict, the consensus
+2026 shape); to *be* SOTA, calque must (a) generalize its signal beyond stope's
+conventions, (b) close the loop with a real verdict leg, and (c) prove recall on
+a public benchmark. Prioritized to that end:
+
+**Done (session 2)**
+- ~~Seed stope's registry~~ — 30 suspects adjudicated; loop closed end-to-end
+  (calque found `_check_artifact_flashback`, a real prod bug; stope fixed it).
+- ~~Global skill + CLI~~ — `~/.claude/skills/calque/` + `pipx` editable `calque`.
+- ~~Delegation down-weight~~ — adapters that forward to `self._engine` no longer
+  name-anchor (killed the 21/30 false positives). [commit bc91dca]
+- ~~Missing-twins + reachability gate~~ — coverage-gap sweep, dispatcher-aware
+  gate suppresses verbs driven via `step("x")`. Opt-in; still coarse (§13).
+- ~~Configurability~~ — `--role-prefixes`, `--delegation-roots`, `--dispatchers`
+  let other repos override the stope-shaped defaults.
+
+**P0 — Generalization (the SOTA-blocker; see §13)**
+1. **Pluggable signal profiles.** Factor extraction behind a `FuncSig`-producer
+   interface; ship profiles beyond stope's *effectful-OOP* one: *functional*
+   (return-shape, arg/param names, raised exceptions), *API/contract* (routes,
+   params, status codes), *data-pipeline* (input/output schema). The ranker
+   (jaccard + dedup + gate) is already domain-agnostic — only the signal set is
+   stope-shaped. Per the survey: there is **no universal behavioral signal**, so
+   profile-per-domain is the correct architecture, not a hack.
+2. **Recall benchmark.** Validate on GPTCloneBench + CETBench (§6): measure what
+   fraction of known Type-4 pairs calque ranks as suspects. This is how SOTA is
+   *claimed*, not asserted. Guards against the "generalization cliff" (per-repo
+   tuning that doesn't transfer).
+3. **Auto-learn the conventions** (stretch): infer role-prefixes, delegation
+   roots, and dispatcher names from a repo's own naming distribution instead of
+   flags. Risky (can strip meaningful tokens) — gate behind measurement from #2.
+
+**P1 — Close the loop (recall is half a tool)**
+4. **Verdict leg.** Wire a Hypothesis `RuleBasedStateMachine` template that drives
+   both sides of a `contracted-twin-ok` pair and asserts equal outputs (stope #234:
+   ScriptedGame vs GameSession). The survey's strongest result (2602.15761) is that
+   *differential fuzzing* is the right oracle — generalize the template to
+   rapid (Go) / fast-check (TS).
+5. **Calibration layer.** `calque calibrate` reports precision@k from the
+   registry's `predicted:` scores vs recorded verdicts; tune `_WEIGHTS` from data,
+   per-profile. (Registry already carries the `predicted:` half.)
+6. **Metabolism layer.** `calque audit` re-checks `contracted-twin-ok` pairs for
+   fresh drift (re-extract; re-flag if a side's signature changed since the
+   verdict). `_sync_ruin_cap` is the canonical risk (both delegate today; an
+   inline tomorrow re-drifts).
+
+**P2 — Reach & ergonomics**
+7. **Go + TS extractors.** TS via ts-morph; Go as a query layer over `defn`.
+   Falls out of #1 (profiles) once the producer interface exists.
+8. **Boundary presets.** `--preset harness` (engine*×testing), `--preset
+   client-server`, `--preset v1-v2` so users don't hand-craft globs.
+9. **min-score calibration.** Feedback flagged the engine×testing default could be
+   ~0.25 (post-delegation-downweight, a 0.19–0.21 noise tail appears). Make it
+   boundary-relative rather than a hardcoded constant — but only after #2/#5 give
+   data; don't bake a tuned threshold (generalization-cliff risk).
+10. **Add calque to hybrid's catalog** — under "Knowledge-base auditor" in
+    `hybrid/skills/hybrid-loops/references/BLOCK_GRAPHS.md`, beside `defn`.
+    **Deferred until calque is stabilized + public** (per Justin). Entry drafted.
 
 ---
 
@@ -288,10 +367,13 @@ GitHub namespace is free; metaphor is dead-on (cross-language structural copy).
 
 ```bash
 cd ~/Documents/calque
-python -m pytest tests/ -q            # 5 green
+python -m pytest tests/ -q            # 6 green
 calque scan --repo ~/Documents/lamina/poc/dense/stope \
     --left "engine*.py" --right "testing.py" --out /tmp/calque.md
-# add --missing for the coverage-gap (missing-twin) sweep; see §12.
+# coverage-gap sweep with the reachability gate (see §12):
+#   calque scan --repo <stope> --left "engine*.py" --right "testing.py" \
+#       --missing --missing-corpus "testing.py" "tests/*.py"
+# other-convention repos: --role-prefixes / --delegation-roots / --dispatchers
 # then open /tmp/calque.md and adjudicate, writing verdicts into
 # ~/Documents/lamina/poc/dense/stope/.calque/registry.md (it now exists — grep
 # it first; see registry.template.md for the schema)
@@ -329,13 +411,37 @@ produces zero pairs → invisible to `rank()`. Lifted as `missing_twins()` +
 `--missing`, *generalized*: instead of hardcoding `_handle_`, it **learns which
 role prefixes are twinned on this boundary** (those that produced a real match)
 and reports only gaps within those roles, so engine-internal helpers don't flood.
-On stope it surfaces 93 candidates — a broad triage sweep, not a clean list
-(opt-in, off by default). The `_handle_*` subset (`_handle_pray`, `_handle_answer`,
-the `_handle_*_ending` family) is the gold maturity_check was built for; the
-`_get_*`/`_resolve_*`/`_maybe_*` rows are mostly expected-absent. (Sibling idea
-not lifted: maturity_check's `_check_chokepoint_bypass`, lines 537–643 — a
-"who may mutate this state" allowlist; a future calque precision signal if it
-ever accepts per-repo chokepoint config.)
+
+**Reachability gate (`--missing-corpus`).** "No dedicated twin method" massively
+over-flags any harness built around a single command dispatcher: a verb driven by
+`game.step("pray")` is fully tested with no `def pray()`. So `missing_twins` takes
+`reachable_terms` — the verb vocabulary of *dispatcher-call* string args in a
+usage/test corpus (`extract_command_terms`, scoped to `_DEFAULT_DISPATCHERS` =
+step/do/run/…, configurable via `--dispatchers`). A candidate whose role-stripped
+stem is covered by those terms is suppressed. This is the disciplined form of
+maturity_check's grep: **word-boundary, string-literals-in-dispatcher-calls only,
+used to suppress not flag.** It's deliberately dispatcher-scoped so a verb word in
+an *assertion* or a *fact-name* string (`'count_unstable'`) doesn't create false
+reachability — that scoping is what keeps the genuinely-untested `pray`/`sing`/
+`count` flagged while suppressing `eat`/`pet`/etc.
+
+**Honest precision caveat.** Even gated, stope still shows ~82 (down from 116):
+the reachability gate fixes the *dispatcher-reachable* false positives, but the
+bulk that remain are `_get_*`/`_check_*`/`_resolve_*`/`_maybe_*` **engine
+internals** whose role-prefix was "twinned" by a couple of coincidental matches.
+No structural signal knows those aren't *meant* to have a harness twin — that's
+domain knowledge. So `missing_twins` is a **coarse, opt-in recall aid, not a clean
+report**; the actionable yield on stope is the ~6 player-verb gaps (`pray`, `sing`,
+`count`, `follow`, `inventory`, `wait`). This is a concrete instance of the
+generalization challenge in §13. (Sibling idea not lifted: maturity_check's
+`_check_chokepoint_bypass`, lines 537–643 — a "who may mutate this state"
+allowlist; a future calque precision signal if it ever accepts per-repo config.)
+
+### Configurability (first generalization step)
+The stope-shaped constants are now CLI-overridable (extend the defaults):
+`--role-prefixes`, `--delegation-roots`, `--dispatchers`. This removes the
+*hardcoding* hazard the survey warned about (naming-convention-dependence) but
+not the *signal*-shape assumption (§13) — that needs profiles, not flags.
 
 ### calque vs Hypothesis (they're different legs, not competitors)
 This came up early; pinning the distinction. **calque is discovery; Hypothesis is
@@ -366,3 +472,67 @@ ScriptedGame vs GameSession). Analogy: calque is the smoke detector (cheap,
 whole-house, points you to a room); Hypothesis is the lab assay (one sample,
 near-definitive). You want both — and stope's existing `test_dual_path_parity.py`
 is the hand-rolled, non-generative ancestor of that Hypothesis leg.
+
+---
+
+## 13. The generalization challenge (honest assessment, session 2)
+
+Observed bluntly in session 2: **a lot of calque is specific to stope and its
+effectful-OOP interactive-fiction engine conventions.** Generalizing to *any*
+large project is the central open problem (roadmap P0). Being honest about what's
+specific vs general is the prerequisite.
+
+### What's stope-shaped (the signals encode assumptions)
+The three behavioral signals are not domain-neutral — each assumes a coding style:
+
+| signal | assumes | weak/absent on |
+|---|---|---|
+| **returned dict keys** | functions return `dict` results | objects/dataclasses/tuples/`None` returns |
+| **attribute write-targets** (`self.world.x`) | mutable OOP self-state; mutation = effect | functional / immutable / pure code |
+| **emitted string literals** | functions emit user-facing text (game/IF/CLI) | libs where strings are log lines / dict keys (noisy) |
+
+And the constants encode stope's naming/architecture (now flag-overridable, but
+the *defaults* are stope): `_ROLE_PREFIXES` (verb_noun handlers), `_DELEGATION_ROOTS`
+(harness-wraps-`self._engine`), `_DEFAULT_DISPATCHERS` (a `step("verb")` command
+loop), and the canonical `engine*×testing` boundary (harness-vs-prod drift). The
+`missing_twins` reachability gate is the sharpest example: it only makes sense
+because stope routes everything through one dispatcher.
+
+### What's genuinely general (keep)
+- The **hybrid loop**: recall (gate) → adjudicate (reasoner) → registry
+  (substrate) → verdict (action). This is the consensus 2026 architecture (§6).
+- The **ranker**: per-signal jaccard, weighted + renormalized over available
+  signals, noise-gate, best-match dedup. Nothing in `rank()`/`score_pair` is
+  stope-specific — it scores whatever signals it's handed.
+- The **delegation down-weight** (adapters can't drift), **calibration**,
+  **metabolism**, and the "a nose, not a judge" stance.
+- Per-repo `.calque/registry.md` as portable, git-tracked substrate.
+
+### The design path: pluggable signal *profiles*, not more flags
+The survey's load-bearing finding: **there is no universal behavioral signal** —
+behavior is unknowable statically, so any detector must pick *domain-appropriate
+invariants* (NSF 10113743). Therefore the right architecture is:
+
+> Keep the ranker; make **extraction** a pluggable `FuncSig`-producer profile.
+
+- **`effectful-oop`** (today): emitted strings + attr-writes + ret-dict-keys +
+  callees + name-stem. Fits stope, IF engines, CLIs, stateful services.
+- **`functional`**: return-value shape/type, parameter names, raised exception
+  types, called names. Fits pure/transform-heavy code.
+- **`api-contract`**: routes, HTTP verbs, param names, status codes, payload
+  keys. Fits the client-server drift case (stope #233, JS↔Python) — also the
+  cross-language gap, since both sides map onto the *same* contract vocabulary.
+- **`data-pipeline`**: input/output column/schema names, dtypes.
+
+Configurability (`--role-prefixes` etc.) was step one — it removes *hardcoding*
+but not the *signal-shape* assumption. Profiles are step two. Validation
+(roadmap P0 #2) is how we'd know a profile generalizes rather than just believe
+it — the survey's "generalization cliff" warning is that per-repo intuition does
+*not* transfer; only benchmark recall numbers do.
+
+**Bottom line.** calque is a validated *instance* (stope) of a general *shape*.
+The shape is SOTA-aligned; the instance is one profile. The work to "become 2026
+SOTA for this kind of problem" is precisely: factor the profile boundary, add 2–3
+profiles, and prove recall on GPTCloneBench/CETBench. Until then, calque is
+honestly described as "a dual-path finder tuned for effectful-OOP Python," not "a
+universal one."

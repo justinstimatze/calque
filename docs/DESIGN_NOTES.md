@@ -212,9 +212,12 @@ GitHub namespace is free; metaphor is dead-on (cross-language structural copy).
 - **stope** (`~/Documents/lamina/poc/dense/stope`) — the calibration target and
   first real customer; already cited in hybrid's catalog. Remaining dual-path work
   there (tasks #234, plus the ~17 unadjudicated calque suspects) is downstream.
-- **`/home/gas6amus/Documents`** — another of the user's accounts; not readable as
-  `justin` yet (permission denied). User is granting access via setfacl. Re-check
-  for concept overlap once readable (don't dual-path the dual-path tool).
+- **`/home/gas6amus/Documents`** — another of the user's accounts (access granted
+  via setfacl 2026-06-05). Scanned for overlap: **no prior dual-path / code-
+  equivalence tool exists.** `nondual` is a puzzle game (name was a red herring);
+  `loopback` is a closed-loop EEG/HRV→adaptive-music system (another hybrid-loop
+  instance, different domain); `hybrid` is the framework itself. calque is the
+  user's first solution to this problem — not a duplicate.
 
 ---
 

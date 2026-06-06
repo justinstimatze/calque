@@ -324,6 +324,17 @@ a public benchmark. Prioritized to that end:
    roots, and dispatcher names from a repo's own naming distribution instead of
    flags. Risky (can strip meaningful tokens) — gate behind measurement from #2.
 
+**P1 — Second axis: env/config parity (from stope usage; see §14)**
+3.5. **Env-parity sibling check.** A second lens for the *same* meta-bug ("one value
+   defined in N places that drift") in config rather than code: diff each launcher's
+   effective boot env (`make dev`, `roleplay-server`, conftest, …) against a canonical
+   prod profile (`fly.toml [env]`), minus a declared dev-override whitelist; flag any
+   parity-critical flag that differs or is unset. Same recall→adjudicate→registry
+   loop, registry keyed on `(flag, launchers, prod value)`. Different lens (shell/
+   Make/TOML/conftest parsing, not Python AST), so a **sibling check, not a profile**.
+   **Planned, not started** — stope's boot-time parity assertion covers its instance
+   today; build the static cross-launcher check when that proves insufficient.
+
 **P1 — Close the loop (recall is half a tool)**
 4. **Verdict leg.** Wire a Hypothesis `RuleBasedStateMachine` template that drives
    both sides of a `contracted-twin-ok` pair and asserts equal outputs (stope #234:
@@ -543,3 +554,53 @@ SOTA for this kind of problem" is precisely: factor the profile boundary, add 2�
 profiles, and prove recall on GPTCloneBench/CETBench. Until then, calque is
 honestly described as "a dual-path finder tuned for effectful-OOP Python," not "a
 universal one."
+
+---
+
+## 14. The env/config-parity axis (a second axis, from stope usage 2026-06-05)
+
+Real-usage feedback from the stope side (`/tmp/calque_feedback_env_parity.md`,
+folded in here so it's durable) surfaced a dual-path divergence calque's code axis
+**cannot** see — and shouldn't be bent to. Worth recording as a distinct axis.
+
+**What happened.** A live playtest booted the app via `make roleplay-server`, which
+left `STOPE_INPUT_LLM` / `STOPE_NOUN_EMBED` **unset** while prod
+(`deploy/fly.toml [env]`) sets both. So the session exercised a non-prod input path
+without knowing it — at least the 6th time a harness/prod flag divergence has bitten,
+despite a standing rule (`feedback_harness_mirror_prod_flags`).
+
+**Why calque misses it.** calque finds Type-4 *code* clones — two code paths that
+should converge. This is the dual: **one** code path fed **different config by two
+launchers**. The divergence lives in the *environment a process boots with*, not in
+duplicated code. calque watches code; it has no notion of "these two run targets
+should boot the same effective config."
+
+**Same meta-bug, different substrate.** The deeper finding is squarely calque's
+thesis: config has no single source — ~65 scattered `os.environ.get("STOPE_*", default)`
+reads across ~38 flags, each with its own inline default, plus a hand-maintained
+`PROD_PLAYER_FLAGS` Make var mirroring only 3. "Same value defined in N independent
+places that drift" is *exactly* the meta-bug calque kills, just in config not code.
+
+**Shape of an env-parity check** (sibling to the code axis — same recall→adjudicate→
+registry loop, different lens):
+1. **Inputs / run profiles.** `deploy/fly.toml [env]` as canonical prod, plus every
+   launcher that boots the app (`make dev`, `dev-no-reload`, `roleplay-server`,
+   `panel_driver.sh`, CI/test conftest).
+2. **Check.** For each launcher, diff its effective exported env against the prod
+   profile, minus a declared whitelist of intentional dev overrides (e.g.
+   `STOPE_API_DEV`, `STOPE_DB_PATH`). Flag any parity-critical flag that differs or
+   is unset. This is a *static, across-all-launchers, pre-boot* check.
+3. **Registry.** Keyed on `(flag, [launchers that set it], prod value)` — a launcher
+   omitting a parity-critical flag becomes a registered divergence, not a surprise.
+
+**Relation to the app-level fix.** stope is fixing its instance with a typed config
+layer (`stope/config.py`) + a boot-time parity assertion (server refuses to start if
+effective parity-critical config ≠ the fly.toml prod profile). That boot guard is
+runtime enforcement for one process; a calque env-parity check is strictly broader —
+it catches the gap statically across *all* launchers calque can read, before boot.
+
+**Scope call (don't over-rotate).** This is a genuinely different lens (parse shell/
+Make/TOML/conftest env exports, not Python AST signatures), so it's a *sibling
+check*, not a profile of the code extractor. It is **planned, not started** (same
+dogfood-first discipline as P0). Recorded here and in the roadmap (§9, P1) so it
+isn't lost; build it only when stope usage shows the boot-guard isn't enough.

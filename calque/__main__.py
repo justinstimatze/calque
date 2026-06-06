@@ -12,7 +12,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from .core import FuncSig, extract_file, rank
+from .core import FuncSig, extract_file, missing_twins, rank
 
 
 def _collect(repo: Path, globs: list[str]) -> list[FuncSig]:
@@ -51,6 +51,25 @@ def _report(suspects: list, left_globs: list[str], right_globs: list[str]) -> st
     return "\n".join(lines)
 
 
+def _missing_report(missing: list[FuncSig]) -> str:
+    """Section for left-side contracts with no right-side twin at all."""
+    if not missing:
+        return ""
+    lines = [
+        "",
+        "## missing twins (left contracts with no right-side counterpart)",
+        "",
+        "Role-named left functions (handler/resolver/etc.) whose role IS twinned "
+        "elsewhere on this boundary, but which have NO match on the right side -- "
+        "a counterpart that was never written or was deleted. Pair-ranking can't "
+        "surface these. Verify each: is a right-side twin expected?",
+        "",
+    ]
+    for f in sorted(missing, key=lambda f: (f.file, f.lineno)):
+        lines.append(f"- `{f.qualname}` ({f.file}:{f.lineno})")
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="calque")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -61,6 +80,11 @@ def main(argv: list[str] | None = None) -> int:
     sc.add_argument("--top", type=int, default=30)
     sc.add_argument("--min-score", type=float, default=0.18)
     sc.add_argument("--min-lines", type=int, default=4)
+    sc.add_argument(
+        "--missing",
+        action="store_true",
+        help="also report role-named left fns with no right-side twin (coverage gaps)",
+    )
     sc.add_argument("--out", type=Path, help="write markdown report here")
     args = p.parse_args(argv)
 
@@ -86,10 +110,16 @@ def main(argv: list[str] | None = None) -> int:
         min_score=args.min_score,
         top=args.top,
     )
-    report = _report(suspects, args.left, args.right)
+    missing = (
+        missing_twins(left, right, min_lines=args.min_lines, min_score=args.min_score)
+        if args.missing
+        else []
+    )
+    report = _report(suspects, args.left, args.right) + _missing_report(missing)
     if args.out:
         args.out.write_text(report, encoding="utf-8")
-        print(f"calque: {len(suspects)} suspects -> {args.out}")
+        tail = f" + {len(missing)} missing twins" if args.missing else ""
+        print(f"calque: {len(suspects)} suspects{tail} -> {args.out}")
     else:
         print(report)
     return 0

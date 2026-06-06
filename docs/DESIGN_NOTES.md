@@ -1,9 +1,28 @@
 # calque — design notes & handoff
 
-> Status: **v0.0.1**, committed `591d2b3` (2026-06-05). Python MVP works and is
-> validated against `lamina/stope`. This doc captures the full design
-> conversation so a parallel session can pick up with complete context.
+> Status: **v0.0.1** (2026-06-05). Python MVP works and is validated against
+> `lamina/stope`. This doc captures the full design conversation so a parallel
+> session can pick up with complete context.
 > Written for: someone continuing calque in a separate worktree/session.
+>
+> **Session 2 (2026-06-05) progress** — see git log for hashes (history was
+> re-authored to `justin@justinstimatze.com`):
+> - Roadmap #1 **done**: stope's real registry seeded — 30 suspects adjudicated
+>   (`stope/.calque/registry.md`): **4 drift · 21 contracted-twin-ok · 5
+>   false-alarm**, each with a `predicted:` score (seeds calibration, #2).
+> - Roadmap #4 **done**: installed as a global skill (`~/.claude/skills/calque/`,
+>   `/calque`) + the `calque` CLI is on PATH via `pipx install --editable`
+>   (its own isolated venv). The tool now runs against any repo from any cwd.
+> - stope wired to *act* on the registry: `stope/CLAUDE.md` Pitfall #1 + the
+>   session-start reading list now point at `.calque/registry.md`. Drift fixes
+>   themselves are left to a stope session.
+> - Headline finding: `ScriptedGame` is **mostly an adapter, not a
+>   reimplementation** — 21/30 flagged methods delegate to the real engine
+>   (`self._engine.step(...)`) or a shared `turning.py`/`scheduler` fn, so they
+>   can't behaviorally drift. Only 5 pairs genuinely reimplement; 4 of those
+>   drifted — and 2 sit in blind spots of stope's hand-written
+>   `test_dual_path_parity.py`. That's the recall-tool-beats-handwritten-tests
+>   proof.
 
 ---
 
@@ -171,7 +190,8 @@ pins this.
   Go = **rapid** (`pgregory.net/rapid`, "aims to bring to Go the power Hypothesis
   brings to Python", has state-machine testing + shrinking); gopter is the older
   alt; `go test -fuzz` is coverage fuzzing (different tool). TS = **fast-check**.
-  These confirm a flagged pair; they don't discover.
+  These confirm a flagged pair; they don't discover. (Full calque-vs-Hypothesis
+  contrast in §12.)
 - **Layered drift detection validated** in a 2026 paper, SysTradeBench (arXiv
   2604.04812): Layer 1 canonicalized-code hash + Layer 2 trace-edit-distance with
   thresholds — independently the same Tier-A/Tier-B shape.
@@ -223,17 +243,19 @@ GitHub namespace is free; metaphor is dead-on (cross-language structural copy).
 
 ## 9. Roadmap (prioritized)
 
-1. **Seed stope's real registry** — adjudicate the remaining ~17 suspects into
-   `stope/.calque/registry.md`; the `drift` ones become the next single-path
-   cleanups. This is the immediate value.
+1. ~~**Seed stope's real registry**~~ — **DONE (session 2)**. All 30 suspects
+   adjudicated into `stope/.calque/registry.md`. The 4 `drift` rows are the next
+   single-path cleanups (left to a stope session). Note the boundary now spans 14
+   `engine*.py` files (mixins), not just `engine.py`.
 2. **Calibration layer** — add a `predicted_score` field to registry entries;
    a `calque calibrate` view that reports precision@k from logged verdicts; use it
    to tune `_WEIGHTS`.
 3. **Metabolism layer** — `calque audit` re-scans and re-checks `contracted-twin-ok`
    pairs for fresh drift (re-extract both sides; if a side's signature changed
    materially since the recorded verdict, re-flag).
-4. **Install as a global Claude skill** (`~/.claude/skills/calque/`) so `/calque`
-   works from any repo. Align SKILL.md vocabulary to hybrid's roles.
+4. ~~**Install as a global Claude skill**~~ — **DONE (session 2)**.
+   `~/.claude/skills/calque/SKILL.md` (aligned to hybrid's roles) + `calque` CLI
+   on PATH via `pipx install --editable`. `/calque` works from any repo.
 5. **Verdict leg** — wire Hypothesis `RuleBasedStateMachine` template for confirmed
    twins (this is stope's #234: ScriptedGame vs GameSession differential).
 6. **Go + TS extractors** — TS (ts-morph) for undercity; Go as a query layer over
@@ -266,12 +288,81 @@ GitHub namespace is free; metaphor is dead-on (cross-language structural copy).
 
 ```bash
 cd ~/Documents/calque
-python -m pytest tests/ -q            # 3 green
-python -m calque scan --repo ~/Documents/lamina/poc/dense/stope \
+python -m pytest tests/ -q            # 5 green
+calque scan --repo ~/Documents/lamina/poc/dense/stope \
     --left "engine*.py" --right "testing.py" --out /tmp/calque.md
+# add --missing for the coverage-gap (missing-twin) sweep; see §12.
 # then open /tmp/calque.md and adjudicate, writing verdicts into
-# ~/Documents/lamina/poc/dense/stope/.calque/registry.md (see registry.template.md)
+# ~/Documents/lamina/poc/dense/stope/.calque/registry.md (it now exists — grep
+# it first; see registry.template.md for the schema)
 ```
 
 The loop is in `SKILL.md`. The IP is `core.py` (the signals + scoring). Everything
 else is scaffolding. Tune the boundary (`--left/--right`), not the threshold.
+
+---
+
+## 12. Session-2 technical additions (2026-06-05)
+
+### Delegation gate (precision fix for the 21/30 adapter problem)
+stope's first run was 21/30 *adapters*, not reimplementations: harness methods
+that just `return self._engine.step(...)` and repackage the result. They're
+**named after** what they wrap, so name-stem matches the real method — a
+guaranteed false-positive anchor. `core.py` now detects forwarding to a wrapped
+impl (`_DELEGATION_ROOTS` = `_engine`/`_impl`/`_inner`/…) and sets `FuncSig.delegates`,
+so a **name match alone can no longer anchor a delegating pair** (it must also
+share real surface/effect). Pure delegators drop off; rich adapters that still
+share emitted strings/calls (like stope's `radio`/`share`) remain — correctly,
+since they own a sliver of glue logic that *can* drift. Pinned by
+`test_pure_delegator_named_after_engine_not_flagged`.
+
+### Missing-twins lift (recall fix, from maturity_check overlap)
+Asked whether stope's `maturity_check.py` had dual-path logic worth lifting.
+Finding: its `_check_dual_path_drift` (lines 474–531) is a **name-substring grep**
+— for each engine `_handle_X`, check if `X` appears anywhere in `testing.py` +
+`tests/*`. Strictly *weaker* than calque (no word boundaries → `move` matches
+`remove`; no AST on the test side; **hardcoded 6-file engine list that silently
+ignores 7 of the 13 `engine_*.py` mixins**). **Do not lift the grep.** But it
+catches one thing calque's pair-ranker structurally can't: a contract that exists
+on the left with **no twin on the right at all** (never written / deleted) →
+produces zero pairs → invisible to `rank()`. Lifted as `missing_twins()` +
+`--missing`, *generalized*: instead of hardcoding `_handle_`, it **learns which
+role prefixes are twinned on this boundary** (those that produced a real match)
+and reports only gaps within those roles, so engine-internal helpers don't flood.
+On stope it surfaces 93 candidates — a broad triage sweep, not a clean list
+(opt-in, off by default). The `_handle_*` subset (`_handle_pray`, `_handle_answer`,
+the `_handle_*_ending` family) is the gold maturity_check was built for; the
+`_get_*`/`_resolve_*`/`_maybe_*` rows are mostly expected-absent. (Sibling idea
+not lifted: maturity_check's `_check_chokepoint_bypass`, lines 537–643 — a
+"who may mutate this state" allowlist; a future calque precision signal if it
+ever accepts per-repo chokepoint config.)
+
+### calque vs Hypothesis (they're different legs, not competitors)
+This came up early; pinning the distinction. **calque is discovery; Hypothesis is
+verification.** They sit on opposite ends of the same loop.
+
+| | **calque** | **Hypothesis** (`RuleBasedStateMachine`) |
+|---|---|---|
+| Question | *Which* pairs might be the same contract? | Does *this* known pair actually behave identically? |
+| Method | static AST signal overlap, ranked | runs both, generates inputs, compares impl-vs-model/impl-vs-impl |
+| Input | a whole boundary (`left×right`), zero setup | one pair + a hand-written model/state machine |
+| Output | a ranked suspect list (recall) | a concrete counterexample, or "no counterexample in N tries" |
+| Soundness | unsound both ways (heuristic; over-flags) | a failure is a *real* bug; passing is only probabilistic |
+| Cost | ~instant on the repo | per-pair model authoring + runtime |
+
+The key asymmetry: **Hypothesis cannot *discover* a dual path.** It has no notion
+that `ScriptedGame.move` and `_handle_move` should agree unless *you already
+wrote* the differential test driving both — at which point you already knew. It
+won't tell you the harness drifted; it can only prove/disprove a hypothesis you
+supplied. calque finds the drift you *didn't know to test*. Conversely calque
+never *confirms* equivalence (undecidable; it's a nose, not a judge).
+
+So they **compose** along the hybrid loop: calque = GATE/recall →
+adjudicate = REASONER → for a `contracted-twin-ok` pair, **pin it with a
+Hypothesis `RuleBasedStateMachine` that drives both impls and asserts equal
+outputs** = the ACTION/verdict leg, recorded as `policy: differential-test` in
+the registry. That differential test is exactly roadmap #5 (stope #234:
+ScriptedGame vs GameSession). Analogy: calque is the smoke detector (cheap,
+whole-house, points you to a room); Hypothesis is the lab assay (one sample,
+near-definitive). You want both — and stope's existing `test_dual_path_parity.py`
+is the hand-rolled, non-generative ancestor of that Hypothesis leg.

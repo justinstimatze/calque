@@ -215,6 +215,36 @@ the gate output, and doctor agree on a suspect's identity. Intended.
 - verdict: contracted-twin-ok
 - reviewed: 2026-06-06
 
+---
+
+## Run — 2026-06-06 (prose gate `vocab-check` added)
+
+The prose-axis gate (cupel vocab-audit equivalent, generalized). The compound
+walk→tally is now single-sourced as `tallyCompounds` — the shared helper the
+registered runSynonymReport≟runVocabReport note predicted "once a third prose
+command appears." The remaining overlaps are the intended prose-axis family and
+the prose-gate-mirrors-code-gate parallel.
+
+## Prose command family (report/check/synonym share the tally+walk) — contracted-twin-ok
+- cluster: cmd/calque/synonym_report.go::runSynonymReport | cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/vocab_report.go::runVocabReport
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-06
+- pair: cmd/calque/synonym_report.go::runSynonymReport | cmd/calque/vocab_report.go::tallyCompounds
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-06
+- pair: cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/vocab_report.go::runVocabReport
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-06
+
+## runVocabCheck ≟ runCheck — contracted-twin-ok (prose gate mirrors code gate)
+
+Both are warn-only→`--strict` gates; the prose gate (compounds vs allow-list)
+deliberately parallels the code gate (pairs/clusters vs registry). Same spine
+shape, different substrate — the §16 unification working, not drift.
+- pair: cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/check.go::runCheck
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-06
+
 ## Borderline name-stem collisions among the CLI handlers — false-alarm
 
 `run*`/`build*` handlers share role stems at the 0.18–0.21 noise floor (the gate vs.

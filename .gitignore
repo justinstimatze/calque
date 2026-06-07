@@ -9,9 +9,11 @@ dist/
 /calque
 *.test
 
-# calque's own registry: track the adjudicated registry, ignore calibration logs
+# calque's own memory: track the adjudicated registry + prose allow-list,
+# ignore calibration logs (fires.jsonl / fire-tags.jsonl)
 .calque/*
 !.calque/registry.md
+!.calque/vocab-allowlist.txt
 
 # defn — regenerated per-clone by `defn init` (.mcp.json bakes in absolute local
 # paths; CLAUDE.md is auto-generated). Not committed.

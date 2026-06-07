@@ -1,0 +1,17 @@
+# calque vocab allow-list — the prose registry (contracted-twin-ok vocabulary).
+# Seeded from compounds at freq >= 5. Remove any that are actually drift; the
+# rest are known vocabulary. One slug per line; lines starting with # are comments.
+
+shared-calls
+shared-strings
+dual-path
+meta-bug
+name-stem
+env-parity
+cross-language
+tree-sitter
+behavioral-twin
+false-alarm
+hand-written
+private-symbol
+substrate-general

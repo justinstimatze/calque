@@ -15,6 +15,19 @@ All notable changes to calque. The version string itself comes from the git tag
   axis is ported from the original Python nose.
 
 ### Added
+- **Prose gate: `vocab-check`** — the prose-axis analog of `check` (the last piece
+  blocking cupel from retiring its own `vocab-audit`). Flags hyphenated compounds
+  at freq ≥ threshold not in an allow-list (`.calque/vocab-allowlist.txt` — the
+  *prose registry*, now git-tracked alongside `registry.md`). Warn-only by default,
+  `--strict` to gate, `--bootstrap` to seed the allow-list from the current
+  compound tail. Substrate-general: unlike cupel's vocab-audit there's no auto-seed
+  from project catalogs (engines/clusters/glossary) — that domain logic stays in
+  cupel; the *gate* is shared. The compound walk→tally is single-sourced as
+  `tallyCompounds` across vocab-report and vocab-check (the dedup the registry's
+  runSynonymReport≟runVocabReport note predicted for "a third prose command").
+  Validated on cupel (551 files): 2438 violations → `--bootstrap` → clean.
+  Ported from cupel `cmd/cupel/vocab_audit.go` (MIT, attribution preserved). Pinned
+  by `cmd/calque/vocab_check_test.go`.
 - **Spine: `doctor` + `mark-fire`** — the calibration leg (was stubbed). A "fire"
   is a suspect the gate surfaces; `doctor` does a live scan, joins each suspect to
   a calibration label (registry verdicts double as labels — drift→useful,

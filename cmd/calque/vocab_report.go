@@ -36,6 +36,52 @@ type vocabHit struct {
 	Locations []vocabLocation
 }
 
+// tallyCompounds walks the prose corpus under root and returns every hyphenated
+// compound (sorted by frequency desc, then term) plus the file count. Shared by
+// the prose recall surface (vocab-report) and the prose gate (vocab-check) — the
+// single-sourced walk→tally the registry flagged as due once a third prose
+// command appeared.
+func tallyCompounds(root string, exts []string, maxLocs int) ([]*vocabHit, int, error) {
+	files, err := corpus.Walk(root, exts)
+	if err != nil {
+		return nil, 0, err
+	}
+	hits := map[string]*vocabHit{}
+	for _, path := range files {
+		raw, rerr := os.ReadFile(path)
+		if rerr != nil {
+			continue
+		}
+		text := corpus.StripNonProse(string(raw))
+		for _, m := range hyphenatedCompound.FindAllStringIndex(text, -1) {
+			tok := text[m[0]:m[1]]
+			h := hits[tok]
+			if h == nil {
+				h = &vocabHit{Term: tok}
+				hits[tok] = h
+			}
+			h.Count++
+			if len(h.Locations) < maxLocs {
+				h.Locations = append(h.Locations, vocabLocation{
+					Path: corpus.RelPath(root, path),
+					Line: corpus.LineOf(text, m[0]),
+				})
+			}
+		}
+	}
+	sorted := make([]*vocabHit, 0, len(hits))
+	for _, h := range hits {
+		sorted = append(sorted, h)
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].Count != sorted[j].Count {
+			return sorted[i].Count > sorted[j].Count
+		}
+		return sorted[i].Term < sorted[j].Term
+	})
+	return sorted, len(files), nil
+}
+
 func runVocabReport(args []string) {
 	fs := flag.NewFlagSet("vocab-report", flag.ContinueOnError)
 	root := fs.String("dir", ".", "repo root to walk for prose")
@@ -49,50 +95,15 @@ func runVocabReport(args []string) {
 		return
 	}
 
-	files, err := corpus.Walk(*root, corpus.ParseExts(*ext))
+	sorted, nFiles, err := tallyCompounds(*root, corpus.ParseExts(*ext), *maxLocs)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque vocab-report: walking %s: %v\n", *root, err)
 		os.Exit(1)
 	}
-	if len(files) == 0 {
+	if nFiles == 0 {
 		fmt.Fprintf(os.Stderr, "calque vocab-report: no prose files under %s\n", *root)
 		os.Exit(1)
 	}
-
-	hits := map[string]*vocabHit{}
-	for _, path := range files {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		text := corpus.StripNonProse(string(raw))
-		for _, m := range hyphenatedCompound.FindAllStringIndex(text, -1) {
-			tok := text[m[0]:m[1]]
-			h := hits[tok]
-			if h == nil {
-				h = &vocabHit{Term: tok}
-				hits[tok] = h
-			}
-			h.Count++
-			if len(h.Locations) < *maxLocs {
-				h.Locations = append(h.Locations, vocabLocation{
-					Path: corpus.RelPath(*root, path),
-					Line: corpus.LineOf(text, m[0]),
-				})
-			}
-		}
-	}
-
-	sorted := make([]*vocabHit, 0, len(hits))
-	for _, h := range hits {
-		sorted = append(sorted, h)
-	}
-	sort.Slice(sorted, func(i, j int) bool {
-		if sorted[i].Count != sorted[j].Count {
-			return sorted[i].Count > sorted[j].Count
-		}
-		return sorted[i].Term < sorted[j].Term
-	})
 
 	if *stems {
 		emitStemClusters(sorted, *minCount, *maxLocs)
@@ -100,7 +111,7 @@ func runVocabReport(args []string) {
 	}
 
 	printed := 0
-	fmt.Printf("vocab-report: scanned %d file(s); %d distinct compound(s)\n", len(files), len(hits))
+	fmt.Printf("vocab-report: scanned %d file(s); %d distinct compound(s)\n", nFiles, len(sorted))
 	switch {
 	case *showAll:
 		fmt.Println("count  term")

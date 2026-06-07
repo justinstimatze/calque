@@ -124,10 +124,6 @@ func runScan(args []string) {
 	stub("scan", "code axis: port the Python AST nose (FuncSig + private-symbol touchpoints + N-ary clustering)")
 }
 
-func runVocabReport(args []string) {
-	stub("vocab-report", "prose axis: move from cupel cmd/cupel/vocab_report.go")
-}
-
 func runSynonymReport(args []string) {
 	stub("synonym-report", "prose axis: move from cupel cmd/cupel/synonym_report.go (ollama embeddings)")
 }

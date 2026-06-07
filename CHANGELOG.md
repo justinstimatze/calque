@@ -15,5 +15,9 @@ All notable changes to calque. The version string itself comes from the git tag
   axis is ported from the original Python nose.
 
 ### Added
+- **Prose axis: `vocab-report`** (ported + generalized from cupel) — read-only
+  frequency surface of hyphenated compounds across any prose repo, with `--stems`
+  clustering (the synonym-drift signature). Shared, generic corpus walker +
+  markdown stripper in `internal/corpus` (single-sourced for the prose commands).
 - `.calque/registry.md` is now git-tracked for calque's own self-dogfood
   (`.gitignore`: `.calque/*` + `!.calque/registry.md`).

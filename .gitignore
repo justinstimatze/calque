@@ -12,3 +12,10 @@ dist/
 # calque's own registry: track the adjudicated registry, ignore calibration logs
 .calque/*
 !.calque/registry.md
+
+# defn — regenerated per-clone by `defn init` (.mcp.json bakes in absolute local
+# paths; CLAUDE.md is auto-generated). Not committed.
+.defn/
+.codex/
+.mcp.json
+CLAUDE.md

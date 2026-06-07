@@ -1,0 +1,305 @@
+package code
+
+// Touchpoint clustering — the N-ary recall pass (DESIGN_NOTES §15).
+//
+// Pairwise scoring (score.go) compares whole-function signatures, so it sees the
+// easy "name twins" but misses the expensive case: a small shared block inlined
+// into several large, differently-named functions. stope's #269 triple-shell is
+// the canonical miss — GameEngine.step / GameSession.step / GameEngine.run each
+// inlined `[_parse_action -> read/clear _agent_canon -> dispatch]`; the few seam
+// tokens are swamped in big bodies, and the names share no stem, so pairwise
+// Jaccard scores them below threshold and, being pairwise, can't express a trio
+// at all.
+//
+// This pass inverts the problem. It builds an index of *private seam symbols*
+// (leading-underscore / unexported call, write, or getattr-string names) ->
+// the set of functions that touch each. A symbol touched by a SMALL number of
+// functions (2..MaxFanout) is a shared internal seam: those functions do the
+// same internal job. This is presence-based, so it survives the dilution that
+// defeats Jaccard, and it needs no naming convention beyond "private" — strictly
+// more robust than the name-stem signal. Output is a CLUSTER {members, shared
+// seam symbols}, the N-ary generalization of a suspect pair.
+
+import (
+	"regexp"
+	"sort"
+	"strings"
+
+	"github.com/justinstimatze/calque/internal/pairkey"
+)
+
+// SeamSymbol is one private symbol shared across a cluster's members.
+type SeamSymbol struct {
+	Name   string  // the seam, e.g. "_parse_action"
+	Fanout int     // how many in-scope functions touch it (2..MaxFanout)
+	Rarity float64 // 1/Fanout, optionally private-boosted — higher = rarer = stronger
+}
+
+// Cluster is a set of functions sharing one or more private seam symbols — the
+// N-ary suspect (a 2-member cluster is a pair the pairwise pass may have missed
+// to dilution; an N>=3 cluster is a shape pairwise cannot express at all).
+type Cluster struct {
+	Members []*FuncSig
+	Shared  []SeamSymbol // strongest (rarest) first
+	Score   float64      // sum of shared-symbol Rarity
+}
+
+// MemberKeys returns the cluster's member keys (for registry lines / lookup).
+func (c Cluster) MemberKeys() []string {
+	keys := make([]string, len(c.Members))
+	for i, m := range c.Members {
+		keys[i] = m.Key()
+	}
+	return keys
+}
+
+// Key is the canonical, order-independent identity of the cluster's member set.
+func (c Cluster) Key() string { return pairkey.SetKey(c.MemberKeys()) }
+
+// ClusterOptions tune the touchpoint pass. Zero value is not valid; use
+// DefaultClusterOptions and override.
+type ClusterOptions struct {
+	MinLines   int     // ignore functions shorter than this (dilution-prone noise)
+	MinMembers int     // smallest cluster to report (3 keeps it additive to pairs)
+	MaxFanout  int     // a symbol touched by more than this is plumbing, not a seam
+	MinScore   float64 // drop clusters below this combined rarity
+	Top        int     // cap the report
+}
+
+// DefaultClusterOptions: report N>=3 clusters (the validated gap pairwise can't
+// express), treating a symbol touched by 2..8 functions as a candidate seam.
+func DefaultClusterOptions() ClusterOptions {
+	return ClusterOptions{MinLines: 4, MinMembers: 3, MaxFanout: 8, MinScore: 0.40, Top: 30}
+}
+
+const privateBoost = 1.6 // leading-underscore / unexported seams are the strong tell
+
+var identShaped = regexp.MustCompile(`^_?[a-zA-Z][a-zA-Z0-9_]*$`)
+
+// seamSymbols collects the private/internal symbols a function touches, pooled
+// across channels (a seam shows up as a call in one shell and a getattr-string
+// or write in another — pooling by name is exactly why this beats per-channel
+// Jaccard). Returns identifier-shaped, private symbols only.
+func (f *FuncSig) seamSymbols() set {
+	out := set{}
+	add := func(s string) {
+		if isSeam(s) {
+			out[s] = struct{}{}
+		}
+	}
+	for _, c := range f.Calls {
+		add(c)
+	}
+	for _, s := range f.Strings {
+		if identShaped.MatchString(s) {
+			add(s)
+		}
+	}
+	for _, w := range f.Writes {
+		// a write target is a dotted/indexed path; each component can be a seam
+		for _, comp := range strings.FieldsFunc(w, func(r rune) bool { return r == '.' || r == '[' || r == ']' }) {
+			add(comp)
+		}
+	}
+	return out
+}
+
+// commonIdents are language builtins, predeclared types, and ubiquitous helpers
+// that pass the lower-first "unexported-looking" test but are NOT hand-written
+// seams (everyone uses them) — they would otherwise form spurious clusters.
+var commonIdents = set{
+	// Go builtins / predeclared
+	"string": {}, "rune": {}, "byte": {}, "bool": {}, "error": {}, "int": {},
+	"int8": {}, "int16": {}, "int32": {}, "int64": {}, "uint": {}, "uint8": {},
+	"uint16": {}, "uint32": {}, "uint64": {}, "uintptr": {}, "float32": {},
+	"float64": {}, "complex64": {}, "complex128": {}, "make": {}, "new": {},
+	"append": {}, "copy": {}, "delete": {}, "len": {}, "cap": {}, "close": {},
+	"panic": {}, "recover": {}, "print": {}, "println": {}, "real": {}, "imag": {},
+	"complex": {}, "true": {}, "false": {}, "nil": {}, "iota": {}, "range": {},
+	// Python builtins / ubiquitous helpers
+	"isinstance": {}, "issubclass": {}, "getattr": {}, "setattr": {}, "hasattr": {},
+	"enumerate": {}, "super": {}, "list": {}, "dict": {}, "tuple": {}, "set": {},
+	"str": {}, "repr": {}, "sorted": {}, "reversed": {}, "zip": {}, "map": {},
+	"filter": {}, "format": {}, "join": {}, "split": {}, "strip": {}, "items": {},
+	"keys": {}, "values": {}, "append_": {}, "extend": {}, "update": {},
+}
+
+// isSeam reports whether a symbol is a private internal seam: a leading-
+// underscore name (Python/dunder-stripped private) or an unexported-looking
+// lower-first identifier (Go). Dunders, builtins, and trivially short names are
+// excluded.
+func isSeam(s string) bool {
+	if !identShaped.MatchString(s) {
+		return false
+	}
+	if strings.HasPrefix(s, "__") {
+		return false // dunder / name-mangled — not a hand-written seam
+	}
+	if strings.HasPrefix(s, "_") {
+		return len(s) >= 3 // _x is too short to be meaningful
+	}
+	if commonIdents.has(s) {
+		return false // builtin / predeclared / ubiquitous — not a seam
+	}
+	// unexported-looking (lower-first) identifiers are Go's private convention;
+	// require length to avoid one-letter locals/builtins like i, x, len.
+	r := s[0]
+	return r >= 'a' && r <= 'z' && len(s) >= 4
+}
+
+func isPrivate(s string) bool { return strings.HasPrefix(s, "_") }
+
+// ClusterByTouchpoint finds N-ary suspect clusters: sets of functions sharing
+// one or more rare private seam symbols. See the package doc for why.
+func ClusterByTouchpoint(sigs []*FuncSig, opts ClusterOptions) []Cluster {
+	// Scope: real functions only (mirror Rank's keep filter).
+	var pool []*FuncSig
+	for _, f := range sigs {
+		if f.NLines >= opts.MinLines && !strings.HasPrefix(f.Name, "__") {
+			pool = append(pool, f)
+		}
+	}
+	n := float64(len(pool))
+	if n < 2 {
+		return nil
+	}
+
+	// Inverted index: seam symbol -> functions touching it (deduped by Key, so a
+	// self-scan where a fn appears on both sides doesn't double-count).
+	index := map[string][]*FuncSig{}
+	for _, f := range pool {
+		seen := map[string]bool{}
+		for sym := range f.seamSymbols() {
+			k := f.Key()
+			if seen[sym+"\x00"+k] {
+				continue
+			}
+			seen[sym+"\x00"+k] = true
+			index[sym] = append(index[sym], f)
+		}
+	}
+
+	// Candidate seam groups: a symbol touched by 2..MaxFanout functions.
+	type group struct {
+		sym     SeamSymbol
+		members []*FuncSig
+	}
+	var groups []group
+	for sym, members := range index {
+		members = dedupSigs(members)
+		fanout := len(members)
+		if fanout < 2 || fanout > opts.MaxFanout {
+			continue
+		}
+		// Rarity is kept repo-size-independent on purpose (1/fanout, not a global
+		// IDF) so MinScore means the same thing on a 50-func and a 10k-func repo.
+		rarity := 1.0 / float64(fanout)
+		if isPrivate(sym) {
+			rarity *= privateBoost
+		}
+		groups = append(groups, group{
+			sym:     SeamSymbol{Name: sym, Fanout: fanout, Rarity: rarity},
+			members: members,
+		})
+	}
+
+	// Coalesce: process largest member-sets first; fold a group whose members are
+	// a SUBSET of an already-formed cluster into that cluster (its symbol is shared
+	// by a subset, still relevant). Subset-merge is deterministic and avoids the
+	// transitive-chain blow-up a naive union-find would cause.
+	sort.Slice(groups, func(i, j int) bool {
+		if len(groups[i].members) != len(groups[j].members) {
+			return len(groups[i].members) > len(groups[j].members)
+		}
+		return groups[i].sym.Name < groups[j].sym.Name
+	})
+
+	var clusters []*Cluster
+	for _, g := range groups {
+		gset := keySet(g.members)
+		var host *Cluster
+		for _, c := range clusters {
+			if subsetOf(gset, keySet(c.Members)) {
+				host = c
+				break
+			}
+		}
+		if host != nil {
+			host.Shared = append(host.Shared, g.sym)
+			host.Score += g.sym.Rarity
+		} else {
+			clusters = append(clusters, &Cluster{
+				Members: g.members,
+				Shared:  []SeamSymbol{g.sym},
+				Score:   g.sym.Rarity,
+			})
+		}
+	}
+
+	var out []Cluster
+	for _, c := range clusters {
+		if len(c.Members) < opts.MinMembers || c.Score < opts.MinScore {
+			continue
+		}
+		sort.Slice(c.Shared, func(i, j int) bool {
+			if c.Shared[i].Rarity != c.Shared[j].Rarity {
+				return c.Shared[i].Rarity > c.Shared[j].Rarity
+			}
+			return c.Shared[i].Name < c.Shared[j].Name
+		})
+		sort.Slice(c.Members, func(i, j int) bool { return c.Members[i].Key() < c.Members[j].Key() })
+		out = append(out, *c)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Score != out[j].Score {
+			return out[i].Score > out[j].Score
+		}
+		return out[i].Key() < out[j].Key()
+	})
+	if opts.Top > 0 && len(out) > opts.Top {
+		out = out[:opts.Top]
+	}
+	return out
+}
+
+// Reason renders a cluster's shared seams, strongest first.
+func (c Cluster) Reason() string {
+	bits := make([]string, 0, len(c.Shared))
+	for _, s := range c.Shared {
+		bits = append(bits, s.Name)
+	}
+	return "shared private seam(s): " + strings.Join(bits, ", ")
+}
+
+func dedupSigs(fs []*FuncSig) []*FuncSig {
+	seen := map[string]bool{}
+	out := fs[:0]
+	for _, f := range fs {
+		if seen[f.Key()] {
+			continue
+		}
+		seen[f.Key()] = true
+		out = append(out, f)
+	}
+	return out
+}
+
+func keySet(fs []*FuncSig) set {
+	s := make(set, len(fs))
+	for _, f := range fs {
+		s[f.Key()] = struct{}{}
+	}
+	return s
+}
+
+func subsetOf(a, b set) bool {
+	if len(a) > len(b) {
+		return false
+	}
+	for x := range a {
+		if !b.has(x) {
+			return false
+		}
+	}
+	return true
+}

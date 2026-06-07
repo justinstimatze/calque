@@ -4,8 +4,12 @@ Durable, git-tracked memory of adjudicated dual-path pairs **for calque's own
 source**. calque must eat its own dogfood (cf. the adit irony: a code-health tool
 that contained the patterns it detects).
 
-Run:  `calque scan --repo . --min-score 0.12`   (exploratory recall, all × all)
-Gate: `calque check --repo .`                    (only NEW vs this registry)
+Run:  `calque scan --repo . --exclude 'legacy/**,**/*_test.go'`   (pairs + N-ary clusters)
+Gate: `calque check --repo . --exclude 'legacy/**,**/*_test.go'`  (only NEW vs this registry)
+
+(Exclude `legacy/**` — the Python port reference — and `**/*_test.go`, whose
+synthetic fixtures plant seams on purpose. The registry tracks both `- pair:`
+and `- cluster:` (N-ary, member-set keyed) verdicts.)
 
 Each adjudicated pair carries machine lines (`- pair:` / `- verdict:` /
 `- reviewed:`) that `check` parses; the surrounding prose is for humans.
@@ -123,4 +127,73 @@ to a helper if it grows; pinned for now.
 ## scorePair ≟ _extract — false-alarm (coincidental shared signal-key strings)
 - pair: internal/code/score.go::scorePair | internal/code/extract.py::_extract
 - verdict: false-alarm
+- reviewed: 2026-06-06
+
+---
+
+## Run — 2026-06-06 (N-ary touchpoint clustering added; self-dogfood of the new pass)
+
+Added the private-symbol touchpoint signal + N-ary clustering (DESIGN_NOTES §15,
+the #269 triple-shell gap). Running the new feature on calque itself surfaced one
+real N-ary drift, the intentional cluster-mirrors-pair API parallels, and the
+usual key/set name-token coincidences. Adjudicated below; `check` is clean again.
+
+## Signal taxonomy {name,strings,calls,writes,ret} in 4 sites — DRIFT (N-ary)
+
+The new touchpoint pass caught the **N-ary extent** of the already-registered
+`Suspicion.Reason ≟ scorePair` drift: the signal taxonomy is a contract shared by
+both extractors (which emit those JSON field names) AND both scorers (which read
+them as map keys). The pairwise entry saw 2 of the 4 sites; the cluster sees all
+4. Same root, same fix (make signals table-driven — `[]signalDef{...}`); pinned so
+`check` doesn't re-flag. This is the feature finding the bug it was built to find.
+- cluster: internal/code/extract.py::_extract | internal/code/extract_go.go::goBody.Visit | internal/code/score.go::Suspicion.Reason | internal/code/score.go::scorePair
+- verdict: drift
+- reviewed: 2026-06-06
+
+## Cluster API mirrors pair API — contracted-twin-ok (the N-ary registry, by design)
+
+The cluster path deliberately parallels the pair path (HasCluster≟Has,
+LookupCluster≟Lookup, Cluster.Reason≟Suspicion.Reason, SetKey≟Key). These MUST
+stay in lockstep — calque correctly flags its own intentional parallel.
+- pair: internal/registry/registry.go::Registry.HasCluster | internal/registry/registry.go::Registry.Has
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-06
+- pair: internal/registry/registry.go::Registry.LookupCluster | internal/registry/registry.go::Registry.Lookup
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-06
+- pair: internal/code/touchpoint.go::Cluster.Reason | internal/code/score.go::Suspicion.Reason
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-06
+- pair: internal/pairkey/pairkey.go::SetKey | internal/pairkey/pairkey.go::Key
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-06
+
+## More key/set name-token collisions — false-alarm (a module about keys and sets)
+
+`keySet` (set of member keys, for subset checks) collides on the "key"/"set"
+tokens with `SetKey`/`Key`/`toSet`. Coincidental shared name tokens, distinct
+purposes — same class as the *Key collisions above.
+- pair: internal/code/touchpoint.go::keySet | internal/pairkey/pairkey.go::SetKey
+- verdict: false-alarm
+- reviewed: 2026-06-06
+- pair: internal/code/funcsig.go::toSet | internal/code/touchpoint.go::keySet
+- verdict: false-alarm
+- reviewed: 2026-06-06
+- pair: internal/pairkey/pairkey.go::SetKey | internal/code/funcsig.go::toSet
+- verdict: false-alarm
+- reviewed: 2026-06-06
+- pair: internal/pairkey/pairkey.go::Key | internal/code/touchpoint.go::keySet
+- verdict: false-alarm
+- reviewed: 2026-06-06
+
+## runScan ≟ runCheck ≟ runHook — contracted-twin-ok (shared boundary-flag spine)
+
+The N-ary form of the registered runCheck≟runScan pair: all three code-axis
+command handlers go through `addBoundaryFlags` (single-sourced flag taxonomy) +
+`splitCSV` + `unionSigs`. This is the dedup *working* — the touchpoint pass first
+flagged the verbatim --repo/--left/--right/--exclude block duplicated across the
+three (score 2.83), which prompted factoring `addBoundaryFlags`; what remains is
+the intended shared infrastructure, not drift. Pin, don't collapse.
+- cluster: cmd/calque/check.go::runCheck | cmd/calque/hook.go::runHook | cmd/calque/scan.go::runScan
+- verdict: contracted-twin-ok
 - reviewed: 2026-06-06

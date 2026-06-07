@@ -15,6 +15,30 @@ All notable changes to calque. The version string itself comes from the git tag
   axis is ported from the original Python nose.
 
 ### Added
+- **Spine: `hook`** — makes the gate ongoing/automated (the point of `check`).
+  `calque hook install` writes a git pre-commit hook running `calque check`
+  (warn-only by default — never blocks a commit — `--strict` to gate; no-ops when
+  calque isn't on PATH; never clobbers an existing hook); `calque hook` prints the
+  pre-commit + Claude Code Stop-hook snippets. Boundary flags (`--repo/--left/
+  --right/--exclude`) are single-sourced via `addBoundaryFlags`, shared by
+  scan/check/hook — itself a dedup the N-ary touchpoint pass flagged on calque's
+  own new code (the flag block was duplicated verbatim across the three commands).
+  Pinned by `cmd/calque/hook_test.go`.
+- **Code axis: N-ary touchpoint clustering** (`internal/code/touchpoint.go`) — the
+  recall upgrade for the case pairwise scoring structurally misses: a small shared
+  block inlined into several large, differently-named functions (stope's #269
+  triple-shell). Inverts the problem — an index of *private seam symbols*
+  (leading-underscore / unexported call·write·getattr-string names, minus language
+  builtins) → the functions touching each; a symbol touched by 2..K functions is a
+  shared internal seam, scored by rarity (`1/fanout`, repo-size-independent,
+  private-boosted). Emits a *cluster* `{members, shared seams}` — the N-ary unit a
+  pairwise nose cannot express. Wired into `scan` (report section) and `check`
+  (NEW-CLUSTER / known / STALE-CLUSTER); the registry parses `- cluster:` lines,
+  keyed on the member SET (`pairkey.SetKey`). `scorePair` left untouched to
+  preserve the parity-verified stope baseline. **Validated:** surfaced the exact
+  #269 trio (`GameSession.step`/`GameEngine.run`/`GameEngine.step`) on stope; the
+  self-scan caught the N-ary extent of calque's own taxonomy drift (DESIGN_NOTES
+  §15). Pinned by `internal/code/touchpoint_test.go`.
 - **Spine: `check`** — the registry-aware gate (the keystone for ongoing/hookable
   use). Scans, diffs against `.calque/registry.md`, and surfaces only NEW
   (un-adjudicated) pairs; suppresses known ones; reconciles STALE entries (pairs

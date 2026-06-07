@@ -716,9 +716,36 @@ code axis, they are not a new sibling like §14):
 - **The fix's closing move is a structural antibody,** generated from the registry, so
   a collapse can't silently re-divide.
 
-**Status: planned, not started** — same dogfood-first discipline. Recorded so the
-next build pass starts from this evidence. The private-symbol-touchpoint signal (#1)
-is the single highest-leverage code-axis upgrade the evidence points to.
+**Status: upgrades #1 + #2 IMPLEMENTED (2026-06-06).** The private-symbol
+touchpoint signal + N-ary clustering ship in `internal/code/touchpoint.go`
+(`ClusterByTouchpoint`), wired into `scan` (a "N-ary clusters" report section) and
+`check` (NEW-CLUSTER / known / STALE-CLUSTER, keyed on the member SET via
+`pairkey.SetKey`; the registry parses `- cluster:` lines). The pass inverts the
+problem: an index of private seam symbols (leading-underscore / unexported call,
+write, or getattr-string names, minus language builtins) → the functions touching
+each; a symbol touched by 2..K functions is a shared seam, scored by rarity
+(`1/fanout`, repo-size-independent, ×1.6 for private). Output is a *cluster*
+`{members, shared seams}` — the N-ary unit. `scorePair` is deliberately left
+untouched (folding a seam signal into pairwise scoring would shift the
+parity-verified stope baseline; deferred to the calibration leg).
+
+**Validated on the real target.** Run on stope, the pass surfaced **C87 =
+`GameSession.step` + `GameEngine.run` + `GameEngine.step`** as one cluster sharing
+`_resolve_clause` + `_prepare_command_line` + `_execute_one_turn` — the exact #269
+triple-shell, the case whole-function pairwise Jaccard structurally cannot express.
+(stope has since *fixed* #269 by extracting those primitives, so the live cluster
+reads as the fix working — the three shells correctly routing through the shared
+seam; before the fix the same trio would have clustered on `_parse_action` +
+`_agent_canon` = the drift.) Self-dogfood caught the N-ary extent of calque's own
+signal-taxonomy drift (a 4-site cluster the pairwise registry entry only saw 2 of)
+and was adjudicated into `.calque/registry.md`; `check` is self-clean.
+
+**Open calibration follow-up (#3 antibody still pending):** the cluster score is a
+sum of seam rarities, so bushy multi-seam subsystem clusters (8 members, ~14 shared
+helpers) outrank the tight triple (C87 ranks ~#87). Both are real recall; the
+*ranking* (sum vs. average rarity, tight-seam boost) is a tuning question for the
+calibration leg (§9 P1 #5), not a correctness one. The antibody generator (#3) is
+still planned, not started.
 
 **Live-hunt corroboration (2026-06-06, LLM-as-nose).** Acting as the nose by hand
 (fuzzy-matching the "right spots" rather than running the AST scanner) over stope

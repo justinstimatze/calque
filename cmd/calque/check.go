@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/justinstimatze/calque/internal/code"
 	"github.com/justinstimatze/calque/internal/registry"
@@ -22,14 +23,14 @@ import (
 
 func runCheck(args []string) {
 	fs := flag.NewFlagSet("check", flag.ContinueOnError)
-	repo := fs.String("repo", ".", "repo root to scan")
-	left := fs.String("left", "", "comma-separated glob(s) for the A side (default: all source)")
-	right := fs.String("right", "", "comma-separated glob(s) for the B side (default: all source)")
-	exclude := fs.String("exclude", "", "comma-separated glob(s) to skip entirely (e.g. legacy/**,vendor/**)")
+	b := addBoundaryFlags(fs)
+	repo, left, right, exclude := b.repo, b.left, b.right, b.exclude
 	minScore := fs.Float64("min-score", 0.18, "minimum suspicion score to consider")
 	minLines := fs.Int("min-lines", 4, "ignore functions shorter than this many lines")
 	regPath := fs.String("registry", ".calque/registry.md", "registry file (adjudicated pairs)")
 	strict := fs.Bool("strict", false, "exit 1 if there are new (un-adjudicated) suspects")
+	clusterMinMembers := fs.Int("cluster-min-members", 3, "smallest N-ary cluster to consider (2 includes diluted pairs)")
+	clusterMaxFanout := fs.Int("cluster-max-fanout", 8, "a private symbol touched by more than this is plumbing, not a seam")
 	if err := fs.Parse(args); err != nil {
 		return
 	}
@@ -59,6 +60,24 @@ func runCheck(args []string) {
 		fresh = append(fresh, s)
 	}
 
+	// N-ary clusters (the touchpoint pass): same new/known split, keyed on the
+	// member SET (§15). Whole-corpus, so clustered over the union of the scope.
+	copts := code.DefaultClusterOptions()
+	copts.MinLines = *minLines
+	copts.MinMembers = *clusterMinMembers
+	copts.MaxFanout = *clusterMaxFanout
+	copts.Top = 1 << 30
+	clusters := code.ClusterByTouchpoint(unionSigs(L, R), copts)
+	var freshC []code.Cluster
+	knownC := 0
+	for _, c := range clusters {
+		if reg.HasCluster(c.MemberKeys()) {
+			knownC++
+			continue
+		}
+		freshC = append(freshC, c)
+	}
+
 	// Liveness reconciliation: registry entries whose referenced code is gone.
 	live := make(map[string]bool, len(all))
 	for _, f := range all {
@@ -70,9 +89,18 @@ func runCheck(args []string) {
 			stale = append(stale, e)
 		}
 	}
+	var staleC []registry.ClusterEntry
+	for _, e := range reg.Clusters {
+		for _, k := range e.Keys {
+			if !live[k] {
+				staleC = append(staleC, e)
+				break
+			}
+		}
+	}
 
-	fmt.Printf("calque check: %d new · %d known (suppressed) · %d stale registry entr%s\n",
-		len(fresh), known, len(stale), plural(len(stale), "y", "ies"))
+	fmt.Printf("calque check: pairs %d new · %d known | clusters %d new · %d known | %d stale registry entr%s\n",
+		len(fresh), known, len(freshC), knownC, len(stale)+len(staleC), plural(len(stale)+len(staleC), "y", "ies"))
 
 	for _, s := range fresh {
 		fmt.Printf("\nNEW  %.2f  `%s` (%s:%d)  ≟  `%s` (%s:%d)\n     %s\n",
@@ -80,12 +108,23 @@ func runCheck(args []string) {
 			s.Right.Qualname, s.Right.File, s.Right.Line, s.Reason())
 		fmt.Printf("     adjudicate in %s — add:  - pair: %s | %s\n", *regPath, s.Left.Key(), s.Right.Key())
 	}
+	for _, c := range freshC {
+		fmt.Printf("\nNEW-CLUSTER  %.2f  (%d members)  %s\n", c.Score, len(c.Members), c.Reason())
+		for _, m := range c.Members {
+			fmt.Printf("     `%s` (%s:%d)\n", m.Qualname, m.File, m.Line)
+		}
+		fmt.Printf("     adjudicate in %s — add:  - cluster: %s\n", *regPath, strings.Join(c.MemberKeys(), " | "))
+	}
 	for _, e := range stale {
-		fmt.Printf("\nSTALE  %s  `%s` ≟ `%s` — referenced code no longer exists; prune or re-home (was: %s%s)\n",
-			"", e.Key1, e.Key2, e.Verdict, reviewedSuffix(e))
+		fmt.Printf("\nSTALE  `%s` ≟ `%s` — referenced code no longer exists; prune or re-home (was: %s%s)\n",
+			e.Key1, e.Key2, e.Verdict, reviewedSuffix(e))
+	}
+	for _, e := range staleC {
+		fmt.Printf("\nSTALE-CLUSTER  {%s} — a referenced member no longer exists; prune or re-home (was: %s)\n",
+			strings.Join(e.Keys, ", "), e.Verdict)
 	}
 
-	if *strict && len(fresh) > 0 {
+	if *strict && (len(fresh) > 0 || len(freshC) > 0) {
 		os.Exit(1)
 	}
 }

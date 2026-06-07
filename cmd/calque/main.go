@@ -79,6 +79,8 @@ Usage:
   calque synonym-report  prose axis: embedding near-synonyms (single words)
   calque check           spine: registry-aware gate — flag new/drifted vs the
                          registry  (warn-only; --strict to exit 1)
+  calque hook            spine: wire check into a git pre-commit / Stop hook
+                         (calque hook install — auto-installs pre-commit)
   calque doctor          spine: calibration rollup (fire-rate, hit-rate)
   calque mark-fire <id> <verdict>   spine: tag a finding  useful|mixed|not-useful
   calque version         print the version (git tag is the source of truth)
@@ -101,6 +103,8 @@ func main() {
 		runSynonymReport(os.Args[2:])
 	case "check":
 		runCheck(os.Args[2:])
+	case "hook":
+		runHook(os.Args[2:])
 	case "doctor":
 		runDoctor(os.Args[2:])
 	case "mark-fire":

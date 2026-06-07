@@ -323,6 +323,20 @@ a public benchmark. Prioritized to that end:
 3. **Auto-learn the conventions** (stretch): infer role-prefixes, delegation
    roots, and dispatcher names from a repo's own naming distribution instead of
    flags. Risky (can strip meaningful tokens) — gate behind measurement from #2.
+3a. **Rare private-symbol touchpoint signal + N-ary recall (from stope #269; see §15).**
+   Highest-leverage code-axis upgrade the evidence points to. Inverted index of private
+   symbols (leading-underscore call/string/write) → functions touching them; a symbol
+   touched by 2..K functions is a shared internal seam (weight by rarity, TF-IDF). Emit
+   **clusters** `{members, shared-symbols}`, not just pairs, and key the registry on a
+   set. This catches sub-function inlined-block duplication across differently-named
+   functions (the #269 triple shell: `step`/`step`/`run` all touch `_parse_action` +
+   `_agent_canon`) that whole-function pairwise Jaccard drowns. Pairs with #6 (audit)
+   and the antibody generator below. **Planned, not started.**
+3b. **Antibody generator (registry → executable guard).** When a cluster is adjudicated,
+   emit stope's hand-written shape (`inspect.getsource`: assert every member routes
+   through the shared primitive, none call the forbidden bare primitive — cf.
+   `test_session_shell_unification.py`). Makes the verdict leg (#4) concrete for the
+   collapse-to-single-path case. **Planned, not started.**
 
 **P1 — Second axis: env/config parity (from stope usage; see §14)**
 3.5. **Env-parity sibling check.** A second lens for the *same* meta-bug ("one value
@@ -604,3 +618,79 @@ Make/TOML/conftest env exports, not Python AST signatures), so it's a *sibling
 check*, not a profile of the code extractor. It is **planned, not started** (same
 dogfood-first discipline as P0). Recorded here and in the roadmap (§9, P1) so it
 isn't lost; build it only when stope usage shows the boot-guard isn't enough.
+
+
+## 15. The triple-shell finding — granularity + N-ary recall (from stope #269, 2026-06-06)
+
+Two days of stope work (2026-06-04→06) were almost entirely one activity: finding
+and collapsing parallel implementations of a single contract. The meta-bug recurred
+in **four substrates** in 48h — talk paths (#228/#230), constructor-vs-legacy
+(#224/#234), harness-vs-prod tests (the migration waves), env/config (#240, §14) —
+and the dominant one was a **triple**, not a dual. This is the most important recall
+evidence calque has gathered since the seed run, because it shows where the current
+nose is blind.
+
+**The #269 triple session-shell.** Three orchestrations turned a raw player line into
+a dispatched command, each independently inlining the same
+`[_parse_action → read/clear _agent_canon → dispatch]` block:
+`GameEngine.step` (programmatic), `GameSession.step` (web/prod), and
+`GameEngine.run` (interactive CLI loop). The third drifted **silently for months**:
+`run()` called `_parse_action` directly and ignored `_agent_canon`, so it dispatched
+the model's raw line instead of the #128 constructor's canonical command. Cure:
+extract `_resolve_clause` + `_prepare_command_line`, route all three through them.
+
+**What calque caught vs missed.** It caught the harness-vs-prod boundary
+(`engine*×testing`, the seed run — 4 drifts, those are *name twins*). It would have
+**missed the #269 trio**, even though the fingerprint is fully present in today's
+signals: `self._parse_action(...)` is recorded as call `_parse_action`;
+`getattr(self, "_agent_canon", None)` as string `_agent_canon`;
+`self._agent_canon = None` as write `_agent_canon`. Three concrete reasons it misses:
+
+1. **Whole-function granularity dilutes it.** The duplicated unit is a 5-line *block*,
+   but `step`/`step`/`run` are large methods. The seam's few tokens are swamped, so
+   pairwise Jaccard (`score_pair`) scores below threshold. The signal is real but
+   drowned.
+2. **The name signal misleads.** `step` vs `run` share no stem; name weight (.22) plus
+   everything else is diluted. The thing that *should* pair them — a shared private
+   seam — isn't a signal at all today.
+3. **Pairwise, not N-ary.** calque only emits pairs. Even if `step ≟ step` surfaced,
+   `run()` pairs with neither, so the *triple* is structurally invisible.
+
+**The three upgrades this argues for** (all P0-adjacent — they strengthen the existing
+code axis, they are not a new sibling like §14):
+
+1. **Rare private-symbol touchpoint signal.** Inverted index: each private symbol
+   (leading-underscore call/string/write) → set of functions touching it. A symbol
+   touched by 2..K functions (K small) is a *shared internal seam*; weight by rarity
+   (TF-IDF — touched-by-50 is plumbing/noise, touched-by-2-4 is signal). `_parse_action`
+   is touched by exactly the 3 shells → instant triple, **name- and size-agnostic.**
+   This is *presence*-based, so it survives the dilution that defeats Jaccard, and it
+   needs no naming convention — strictly more robust than the name-stem signal.
+2. **N-ary clustering + N-ary registry.** Emit a *cluster* `{members, shared-rare-symbols}`,
+   not just a pair. The registry currently keys on `left/right`; key it on a **set**.
+   This is the *same shape* as the env-parity axis (a set of launchers) — both unify
+   under "a set of sites that should share one seam."
+3. **Emit the antibody.** stope hand-wrote `tests/test_session_shell_unification.py`:
+   `inspect.getsource` over the three shells, asserting each contains `_resolve_clause`
+   and none contain bare `_parse_action(`. That is literally a manual, instance-specific
+   calque output. Once a cluster is adjudicated, calque should generate exactly that
+   structural guard — making "close the loop" (§9, P1) concrete: registry → executable
+   antibody. stope's own phrase: *detection, not vigilance.*
+
+**General lessons (for the profile/generalization work, §13).**
+- **N is usually >2 and the unit is usually sub-function.** Pairwise named-function
+  similarity sees the easy third (name twins) and misses the expensive part (triples,
+  inlined blocks).
+- **The cheap universal tell of a parallel path is a shared touch of a *private*
+  symbol.** Public touchpoints are noise (everyone calls them); private ones mean two
+  sites do the same internal job. Cross-language, convention-free.
+- **Enumerate the project's "shells"** — every entry point that turns the same input
+  into the same effect (CLI loop, programmatic API, web handler, test harness, cron,
+  launcher env). The audit: do all shells share the core primitive (code) and boot the
+  same effective config (env)? Same question, two substrates.
+- **The fix's closing move is a structural antibody,** generated from the registry, so
+  a collapse can't silently re-divide.
+
+**Status: planned, not started** — same dogfood-first discipline. Recorded so the
+next build pass starts from this evidence. The private-symbol-touchpoint signal (#1)
+is the single highest-leverage code-axis upgrade the evidence points to.

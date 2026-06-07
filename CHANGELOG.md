@@ -15,6 +15,15 @@ All notable changes to calque. The version string itself comes from the git tag
   axis is ported from the original Python nose.
 
 ### Added
+- **`migrate-registry`** — one-time converter for Python-era registries. The
+  Python calque wrote `## id — verdict` + `- left:`/`- right:` blocks; the Go
+  parser keys on `- pair: <left> | <right>`, so an un-migrated registry parses to
+  ZERO entries and `check` falsely flags the whole repo as new (hit on stope: a
+  30-entry registry read as 0 known → 26k "new"). Conservative: preserves all
+  human prose, skips ``` fences (the registry's own template), inserts the
+  `- pair:` line, and normalizes verdict (`contracted-twin-ok (collapsed) — was
+  drift` → `contracted-twin-ok`) and reviewed-date. `--write` overwrites in place
+  after a `.bak` backup; default is a dry run to stdout.
 - **Spine: `mcp`** — serve the gates over MCP (stdio JSON-RPC 2.0) so an agent
   editing code or prose can ask "did my change introduce new drift?" inline,
   without shelling out, and get the same report the CLI prints. Two tools — the

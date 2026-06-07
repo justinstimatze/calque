@@ -88,6 +88,8 @@ Usage:
   calque mark-fire <id> <verdict>   spine: tag a finding  useful|mixed|not-useful
   calque mcp             spine: serve the gates over MCP (stdio JSON-RPC) —
                          tools calque_check + calque_vocab_check for inline use
+  calque migrate-registry   one-time: convert a Python-era registry
+                         (- left:/- right:) to the Go format (- pair:)  [--write]
   calque version         print the version (git tag is the source of truth)
 
 Registry: .calque/registry.md (git-tracked memory of adjudicated pairs/groups).
@@ -118,6 +120,8 @@ func main() {
 		runMarkFire(os.Args[2:])
 	case "mcp":
 		runMCP(os.Args[2:])
+	case "migrate-registry":
+		runMigrateRegistry(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println("calque", buildVersion())
 	case "-h", "--help", "help":

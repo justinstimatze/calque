@@ -393,3 +393,25 @@ Sibling MCP test cases and clusters sharing protocol/version tokens
 - cluster: cmd/calque/mcp.go::checkToolDefinition | cmd/calque/mcp.go::handleMCP | cmd/calque/mcp_test.go::TestMCPToolsList
 - verdict: false-alarm
 - reviewed: 2026-06-07
+
+## migrate-registry (2026-06-07)
+
+The old-registry migrator. wrapper/core split is intended; it shares the registry
+grammar with the canonical parser (must stay in step). The `normalize*`/`verdict`
+overlaps are coincidental name tokens with unrelated purposes.
+
+- pair: cmd/calque/migrate.go::migrateRegistry | cmd/calque/migrate.go::runMigrateRegistry
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/migrate.go::migrateRegistry | internal/registry/registry.go::Load
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/calib.go::verdictLabel | cmd/calque/migrate.go::normalizeVerdict
+- verdict: false-alarm
+- reviewed: 2026-06-07
+- pair: internal/embed/embed.go::normalize | cmd/calque/migrate.go::normalizeReviewed
+- verdict: false-alarm
+- reviewed: 2026-06-07
+- pair: cmd/calque/calib_test.go::TestVerdictLabel | cmd/calque/migrate.go::normalizeVerdict
+- verdict: false-alarm
+- reviewed: 2026-06-07

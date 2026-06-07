@@ -120,10 +120,6 @@ func main() {
 // Each prints its port plan and exits 70 (EX_SOFTWARE: not ready) so the
 // skeleton builds and runs while the axes land one at a time.
 
-func runScan(args []string) {
-	stub("scan", "code axis: port the Python AST nose (FuncSig + private-symbol touchpoints + N-ary clustering)")
-}
-
 func runCheck(args []string) {
 	stub("check", "spine: registry-aware gate — generalize cupel vocab_audit.go over the .calque registry")
 }

@@ -1,65 +1,55 @@
 # calque registry — calque on calque
 
 Durable record of adjudicated dual-path pairs **for calque's own source**. calque
-should eat its own dogfood (cf. the adit irony: a code-health tool that contained the
-patterns it detects — calque must not). Grep this before assuming two paths are
-independent; update it when a pair is fixed/cleared/found.
+must eat its own dogfood (cf. the adit irony: a code-health tool that contained the
+patterns it detects). Grep before assuming two paths are independent; update when a
+pair is fixed/cleared/found.
 
-Run: `calque scan --repo . --left "calque/*.py" --right "calque/*.py" --min-score 0.12`
+Run: `calque scan --repo . --min-score 0.12`   (self-scan; all source × all source)
 
 Verdicts: **drift** (same contract, behavior diverges → collapse) · **contracted-twin-ok**
 (intentionally parallel, in sync → pin) · **false-alarm** (coincidental overlap → suppress).
 
 ---
 
-## Run — 2026-06-06 (first self-scan; calque was NOT previously dogfooded on itself)
+## Run — 2026-06-06 (Go rewrite; first self-scan of the Go source)
 
-656 LOC, 3 files. 3 unique suspect pairs (calque reported each twice — see known-bug
-below). Tally: **1 drift · 1 contracted-twin-ok · 1 false-alarm.**
+52 funcs / 10 files. The Go port self-scanned during implementation; two prior
+Python-era self-bugs are now resolved, one new dup was caught-and-fixed live, and the
+old taxonomy bug reappeared in the port.
 
----
+**Resolved from the Python era:**
+- *Symmetric output not deduped* — FIXED: `Rank` now dedups on the unordered pair
+  `{left,right}` (`unorderedKey`), so a self-scan no longer prints A≟B and B≟A.
 
-## score_pair ≟ Suspicion.reason — DRIFT (real; calque's own P2/P3 bug)
-- left:  calque/core.py::score_pair (268)
-- right: calque/core.py::Suspicion.reason (243)
-- signal: shared-strings=4; shared-calls=1   (predicted 0.23)
-- verdict: **drift** — the signal taxonomy `{strings, writes, name, calls, ret}` is
-  hand-written in FOUR places: `_WEIGHTS` (line 233, the canon), the `sig` dict and the
-  `avail` dict inside `score_pair` (275–290), and the `elif` branches in
-  `Suspicion.reason` (250–264). Add or rename a signal → must edit all four by hand.
-  This is exactly PATTERN_CATALOG P2 (taxonomy in N literal sets) / P3 (constant set
-  redefined), in calque's own scorer. calque's nose caught it via the shared signal-key
-  string literals.
-- policy: collapse-to-single-path — drive `sig`/`avail`/`reason` off `_WEIGHTS` keys
-  (one taxonomy: the keys of `_WEIGHTS`), so a new signal is one edit. [TODO]
-- reviewed: 2026-06-06
+**Caught live during implementation (the meta loop closing in real time):**
 
-## _report ≟ _missing_report — CONTRACTED-TWIN-OK (latent twin; pin)
-- left:  calque/__main__.py::_report (32)
-- right: calque/__main__.py::_missing_report (55)
-- signal: name~0.50(report); shared-calls=2   (predicted 0.23)
-- verdict: contracted-twin-ok — two markdown-report builders with deliberately
-  different bodies (suspects vs missing-twins). They share header/format scaffolding;
-  if the report format changes, both must move together (latent drift). Acceptable
-  today; pin with a shared header helper if a third report appears.
-- policy: none (watch)
-- reviewed: 2026-06-06
+## relTo ≟ corpus.RelPath — DRIFT, FIXED same session
+- was: internal/code/extract_go.go::relTo  ≟  internal/corpus/corpus.go::RelPath  (0.66)
+- verdict: drift (I duplicated the filepath.Rel wrapper while writing the Go extractor).
+- policy: collapse-to-single-path — DONE: deleted `relTo`, extract_go.go now calls
+  `corpus.RelPath`. Re-scan confirms the pair is gone. Caught by calque's own scan.
 
-## extract_file ≟ extract_command_terms — FALSE-ALARM
-- left:  calque/core.py::extract_file (184)
-- right: calque/core.py::extract_command_terms (435)
-- signal: shared-strings=2; name~0.25(extract); shared-calls=5   (predicted 0.29)
-- verdict: false-alarm — both are AST walkers (hence shared ast.* calls) and both named
-  `extract_*`, but they do unrelated jobs (file→FuncSigs vs a command-corpus term set).
-  Coincidental signal overlap; suppress.
-- policy: none
-- reviewed: 2026-06-06
+## Suspicion.Reason ≟ scorePair — DRIFT (open; calque's own taxonomy bug, again)
+- left:  internal/code/score.go::Suspicion.Reason
+- right: internal/code/score.go::scorePair
+- signal: shared-strings=4; shared-calls=1   (score 0.21)
+- verdict: **drift** — the signal taxonomy `{strings,writes,name,calls,ret}` is listed in
+  FOUR places: the `weights` map, the `sig` map + the `avail` map in `scorePair`, and the
+  `switch` in `Reason`. The Python version had this (P2/P3); the port reproduced it.
+- policy: collapse — make signals **table-driven** (one `[]signalDef{key,weight,sim,
+  avail,render}`), so a new signal is one entry. [TODO — next]
 
----
+## runSynonymReport ≟ runVocabReport — CONTRACTED-TWIN-OK (latent; watch)
+- signal: shared-writes=[Count Locations]; shared-calls=21; name~0.33(report); shared-strings=5
+- verdict: contracted-twin-ok — both prose commands share the walk→tally loop. Already
+  single-source the walk+strip via internal/corpus; the per-token tally could move to a
+  shared helper if a third prose command appears. Pin, don't collapse yet.
 
-# Known calque self-bug (found by running calque on calque)
+## toSet ≟ setEqual — FALSE-ALARM
+- both are tiny set helpers (name~set, one shared call). Coincidental. Suppress.
 
-**Symmetric output not deduped.** The scan printed all 3 pairs TWICE — once as `A ≟ B`
-and once as `B ≟ A` (6 rows for 3 pairs). The ranker dedups, but not by unordered pair,
-so direction-flipped duplicates survive into the report. Minor, but ironic for a tool
-about duplication. Fix: key dedup on `frozenset({a.key, b.key})`. [TODO]
+## texts ≟ TextsBatched — FALSE-ALARM (adapter)
+- `TextsBatched` is the batching wrapper around `texts`; named after what it wraps. Suppress.
+
+Tally: **2 drift (1 fixed, 1 open) · 1 contracted-twin-ok · 2 false-alarm.**

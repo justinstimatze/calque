@@ -15,6 +15,13 @@ All notable changes to calque. The version string itself comes from the git tag
   axis is ported from the original Python nose.
 
 ### Added
+- **Code axis: `scan`** (ported from the Python nose to Go) — ranks dual-path /
+  behavioral-twin (Type-4) suspects across a boundary. `internal/code` holds the
+  language-agnostic scorer (FuncSig + jaccard + delegation gate + **unordered-pair
+  dedup**, fixing the Python era's symmetric-output self-bug) and a `go/ast`
+  extractor (no deps). Default is a self-scan (all source × all source). Python
+  targets (the stope use case) land next via a `python3`-subprocess extractor.
+  Self-scan caught a live dup during implementation (`relTo`/`RelPath`) — fixed.
 - **Prose axis: `vocab-report`** (ported + generalized from cupel) — read-only
   frequency surface of hyphenated compounds across any prose repo, with `--stems`
   clustering (the synonym-drift signature). Shared, generic corpus walker +

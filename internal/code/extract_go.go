@@ -45,10 +45,19 @@ func ExtractGoFile(path, root string) []*FuncSig {
 			RetKeys: bv.retKeys.slice(), Calls: bv.calls.slice(),
 			Delegates: bv.delegates,
 		}
-		fs.Prepare()
 		out = append(out, fs)
 	}
 	return out
+}
+
+// extractGoBatch extracts every path in-process (go/ast). Errors per file are
+// tolerated (the file is skipped). Returns unprepared FuncSigs.
+func extractGoBatch(paths []string, root string) ([]*FuncSig, error) {
+	var all []*FuncSig
+	for _, p := range paths {
+		all = append(all, ExtractGoFile(p, root)...)
+	}
+	return all, nil
 }
 
 type goBody struct {

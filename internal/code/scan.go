@@ -1,16 +1,19 @@
 package code
 
 import (
+	"fmt"
 	"io/fs"
 	"path/filepath"
 	"regexp"
 	"strings"
 )
 
-// extractors maps a file extension to its FuncSig extractor. go/ast is
-// in-process; .py lands next as a python3-subprocess extractor (the stope target).
-var extractors = map[string]func(path, root string) []*FuncSig{
-	".go": ExtractGoFile,
+// extractors maps a file extension to a BATCH extractor (all paths of that ext
+// in one call). go/ast runs in-process; python3 runs once per scan as a
+// subprocess (so a stope scan spawns one interpreter, not one per file).
+var extractors = map[string]func(paths []string, root string) ([]*FuncSig, error){
+	".go": extractGoBatch,
+	".py": extractPyBatch,
 }
 
 // codeExts are extensions calque considers "code" — used to count files skipped
@@ -38,8 +41,8 @@ type ScanStats struct {
 // and hidden dirs. legacy/ is intentionally NOT special-cased — once a .py
 // extractor exists, exclude it via --left/--right if needed.
 func Extract(repo string) ([]*FuncSig, ScanStats, error) {
-	var all []*FuncSig
 	st := ScanStats{SkippedExts: map[string]int{}}
+	byExt := map[string][]string{}
 	err := filepath.WalkDir(repo, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -51,21 +54,32 @@ func Extract(repo string) ([]*FuncSig, ScanStats, error) {
 			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(p))
-		ex, ok := extractors[ext]
-		if !ok {
-			if codeExts.has(ext) {
-				st.Skipped++
-				st.SkippedExts[ext]++
-			}
-			return nil
+		if _, ok := extractors[ext]; ok {
+			byExt[ext] = append(byExt[ext], p)
+		} else if codeExts.has(ext) {
+			st.Skipped++
+			st.SkippedExts[ext]++
 		}
-		sigs := ex(p, repo)
-		all = append(all, sigs...)
-		st.Files++
-		st.Funcs += len(sigs)
 		return nil
 	})
-	return all, st, err
+	if err != nil {
+		return nil, st, err
+	}
+
+	var all []*FuncSig
+	for ext, paths := range byExt {
+		sigs, exErr := extractors[ext](paths, repo)
+		if exErr != nil {
+			return nil, st, fmt.Errorf("%s extractor: %w", ext, exErr)
+		}
+		for _, s := range sigs {
+			s.Prepare()
+		}
+		all = append(all, sigs...)
+		st.Files += len(paths)
+		st.Funcs += len(sigs)
+	}
+	return all, st, nil
 }
 
 // Filter returns the FuncSigs whose File matches any of the comma-separated glob

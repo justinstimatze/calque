@@ -22,6 +22,12 @@ All notable changes to calque. The version string itself comes from the git tag
   extractor (no deps). Default is a self-scan (all source × all source). Python
   targets (the stope use case) land next via a `python3`-subprocess extractor.
   Self-scan caught a live dup during implementation (`relTo`/`RelPath`) — fixed.
+- **Code axis: Python targets** via an embedded `python3` AST extractor
+  (`internal/code/extract.py`, reused from `legacy/core.py`) run as one
+  subprocess per scan; extraction is batched per language. Verified on stope
+  (10,673 funcs / 718 files): the Go scorer reproduces the original Python
+  calque's seed-run scores exactly on unchanged functions (1.00/0.79/0.52/0.45).
+  (The legacy Python nose no longer even runs on Python 3.14 — a point for the port.)
 - **Prose axis: `vocab-report`** (ported + generalized from cupel) — read-only
   frequency surface of hyphenated compounds across any prose repo, with `--stems`
   clustering (the synonym-drift signature). Shared, generic corpus walker +

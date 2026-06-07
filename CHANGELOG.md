@@ -5,14 +5,27 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-07
+
+First tagged release. The Go rewrite is complete: a substrate-general drift nose
+with a finished spine (recall → registry → check → calibrate) across two axes
+(code · prose), git + MCP hooks, and calibration — dogfooded clean on its own
+source and validated on a real Python codebase.
+
 ### Changed
-- **Rewrite in Go, underway.** calque becomes a substrate-general drift engine
+- **Rewrite in Go — complete.** calque is a substrate-general drift engine
   (code · prose · planned config) sharing one spine (recall → registry → check →
-  calibrate). Decision + rationale in `docs/DESIGN_NOTES.md` §16. Scaffolded the
-  Go module (`cmd/calque`, hindcast-style git-tag versioning); subcommands land
-  one axis at a time. The prose axis, calibration, and hook are consolidated from
-  the sibling project `cupel` (MIT → Apache-2.0, attribution preserved); the code
-  axis is ported from the original Python nose.
+  calibrate). Decision + rationale in `docs/DESIGN_NOTES.md` §16. Go module
+  (`cmd/calque`, hindcast-style git-tag versioning); each subcommand is one leg
+  of the spine or one axis. The prose axis, calibration, and hook are
+  consolidated from the sibling project `cupel` (MIT → Apache-2.0, attribution
+  preserved); the code axis is ported from the original Python nose.
+
+### Removed
+- **The `legacy/` Python tree.** It held the original Python calque as a port
+  reference; the Go rewrite reached and exceeded parity (the live Python AST
+  extractor it depended on now lives standalone at `internal/code/extract.py`),
+  so the reference is retired. README/SKILL no longer document `python -m calque`.
 
 ### Added
 - **`check` warns on a zero-parse registry** — if a registry file exists and has

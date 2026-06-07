@@ -1,9 +1,7 @@
-# Python (legacy; being removed as the Go rewrite reaches parity)
-.venv/
+# Python — only internal/code/extract.py remains (the embedded AST extractor,
+# run as a subprocess); these guard its incidental artifacts.
 __pycache__/
 *.pyc
-dist/
-*.egg-info/
 
 # Go
 /calque

@@ -120,10 +120,6 @@ func main() {
 // Each prints its port plan and exits 70 (EX_SOFTWARE: not ready) so the
 // skeleton builds and runs while the axes land one at a time.
 
-func runCheck(args []string) {
-	stub("check", "spine: registry-aware gate — generalize cupel vocab_audit.go over the .calque registry")
-}
-
 func runDoctor(args []string) {
 	stub("doctor", "spine: calibration rollup — move from cupel cmd/cupel/calib.go")
 }

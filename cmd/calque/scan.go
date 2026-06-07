@@ -22,6 +22,7 @@ func runScan(args []string) {
 	repo := fs.String("repo", ".", "repo root to scan")
 	left := fs.String("left", "", "comma-separated glob(s) for the A side (default: all source)")
 	right := fs.String("right", "", "comma-separated glob(s) for the B side (default: all source)")
+	exclude := fs.String("exclude", "", "comma-separated glob(s) to skip entirely (e.g. legacy/**,vendor/**)")
 	top := fs.Int("top", 30, "max suspect pairs to report")
 	minScore := fs.Float64("min-score", 0.18, "minimum suspicion score to report")
 	minLines := fs.Int("min-lines", 4, "ignore functions shorter than this many lines")
@@ -29,7 +30,7 @@ func runScan(args []string) {
 		return
 	}
 
-	all, st, err := code.Extract(*repo)
+	all, st, err := code.Extract(*repo, splitCSV(*exclude))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque scan: walking %s: %v\n", *repo, err)
 		os.Exit(1)
@@ -68,4 +69,15 @@ func orAll(s string) string {
 		return "**/* (all source)"
 	}
 	return s
+}
+
+// splitCSV splits a comma list into trimmed non-empty parts.
+func splitCSV(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

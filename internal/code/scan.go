@@ -40,17 +40,40 @@ type ScanStats struct {
 // returns every FuncSig (Prepared) plus coverage stats. Skips VCS/dep/build dirs
 // and hidden dirs. legacy/ is intentionally NOT special-cased — once a .py
 // extractor exists, exclude it via --left/--right if needed.
-func Extract(repo string) ([]*FuncSig, ScanStats, error) {
+func Extract(repo string, exclude []string) ([]*FuncSig, ScanStats, error) {
 	st := ScanStats{SkippedExts: map[string]int{}}
+	var exRe []*regexp.Regexp
+	for _, g := range exclude {
+		g = strings.TrimSpace(g)
+		if g == "" {
+			continue
+		}
+		if re, err := globToRegexp(g); err == nil {
+			exRe = append(exRe, re)
+		}
+	}
+	excluded := func(rel string) bool {
+		for _, re := range exRe {
+			if re.MatchString(rel) {
+				return true
+			}
+		}
+		return false
+	}
+
 	byExt := map[string][]string{}
 	err := filepath.WalkDir(repo, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
+		rel, _ := filepath.Rel(repo, p)
 		if d.IsDir() {
-			if p != repo && (sourceSkipDirs.has(d.Name()) || strings.HasPrefix(d.Name(), ".")) {
+			if p != repo && (sourceSkipDirs.has(d.Name()) || strings.HasPrefix(d.Name(), ".") || excluded(rel)) {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+		if excluded(rel) {
 			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(p))

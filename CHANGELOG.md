@@ -15,6 +15,17 @@ All notable changes to calque. The version string itself comes from the git tag
   axis is ported from the original Python nose.
 
 ### Added
+- **Spine: `check`** — the registry-aware gate (the keystone for ongoing/hookable
+  use). Scans, diffs against `.calque/registry.md`, and surfaces only NEW
+  (un-adjudicated) pairs; suppresses known ones; reconciles STALE entries (pairs
+  whose referenced code no longer exists — the dusty-registry problem, handled by
+  liveness, not age-eviction). Warn-only; `--strict` exits 1 on new suspects
+  (pre-commit / Stop-hook shaped). `internal/registry` parses the human-readable
+  registry's `- pair:`/`- verdict:`/`- reviewed:` lines. calque now self-checks
+  clean (0 new), and the self-scan caught a real dup (`unordered`/`unorderedKey`)
+  → single-sourced into `internal/pairkey`.
+- **`--exclude` glob(s)** on `scan`/`check` (e.g. `legacy/**`) — also the corpus-
+  scoping knob the prose axis needs.
 - **Code axis: `scan`** (ported from the Python nose to Go) — ranks dual-path /
   behavioral-twin (Type-4) suspects across a boundary. `internal/code` holds the
   language-agnostic scorer (FuncSig + jaccard + delegation gate + **unordered-pair

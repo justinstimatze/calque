@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/justinstimatze/calque/internal/pairkey"
 )
 
 // weights: surface (strings) + effect (writes) + role (name) carry the most —
@@ -153,7 +155,7 @@ func Rank(left, right []*FuncSig, minLines int, minScore float64, top int) []Sus
 	seen := map[string]bool{}
 	var deduped []Suspicion
 	for _, s := range out {
-		pk := unorderedKey(s.Left.Key(), s.Right.Key())
+		pk := pairkey.Key(s.Left.Key(), s.Right.Key())
 		if seen[pk] {
 			continue
 		}
@@ -164,11 +166,4 @@ func Rank(left, right []*FuncSig, minLines int, minScore float64, top int) []Sus
 		deduped = deduped[:top]
 	}
 	return deduped
-}
-
-func unorderedKey(a, b string) string {
-	if a <= b {
-		return a + "\x00" + b
-	}
-	return b + "\x00" + a
 }

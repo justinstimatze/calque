@@ -936,6 +936,17 @@ The axes stack by level of abstraction:
   should be identical but aren't). This is where the user's projects overlap and
   is the most leveraged — and least built — level.
 
+  **L3 already has a named substrate: `hybrid`** (`github.com/justinstimatze/hybrid`,
+  working copy `~/Documents/hybrid`). hybrid is the framework/vocabulary for
+  recurring LLM-and-code shapes (RAG, ReAct, knowledge-base auditor, the canonical
+  5-role lens→substrate→gate→reasoner→action loop); its shape catalog *is* the L3
+  registry, and calque / cupel / defn are cited instances in it (calque is the
+  "knowledge-base auditor" shape). So L3 is not hypothetical — the registry exists
+  by hand; the gap is the *automated* cross-repo recall extractor that flags where
+  two instances of one hybrid shape have drifted apart. (Keep calque's prose
+  consistent with hybrid's canonical vocabulary: RECALL is *not* a role — it is
+  the gate tuned for recall.)
+
 The ladder is the same invariant at each rung; only the canonical unit changes
 (instance → contract → named pattern → architectural shape).
 

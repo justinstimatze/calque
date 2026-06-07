@@ -753,3 +753,91 @@ LLM-driven over LLM-surfaced candidates, with the static nose as the cheap first
 Fed back to stope as `reference/calque-language-design-feedback.md` (Python levers:
 parse-once into a typed Command, `NewType` raw-vs-canon, single-source taxonomies as
 data, registry-driven antibody, import-linter contracts). See [[calque-triple-shell-recall]].
+
+
+## 16. calque as a substrate-general drift engine — the cupel convergence + consolidation
+
+**The third substrate: prose.** `cupel` (a sibling project, MIT, `/home/gas6amus/Documents/cupel`)
+is a ~400-`.md` literary-criticism corpus. Over 2026-06-05→06 its agent fought exactly
+calque's meta-bug — "one concept expressed N ways that drift" — in *prose*, where there
+are **no native guardrails at all** (no compiler, types, or tests). It independently
+**reinvented calque's entire loop**, and got further than calque on two axes:
+
+| cupel piece (Go, `cmd/cupel/`) | what it is | calque analog |
+|---|---|---|
+| `vocab-report` | read-only frequency surface of hyphenated compounds | the **recall nose** |
+| `synonym-report` | embedding near-synonyms (local ollama), explicitly "noisy… a SURFACING tool… not a gate" | **recall signal for [WEAK] P2/P9** (calque lacks this) |
+| `vocab-audit` | warn-only→`--strict` gate; flags compounds ≥freq not in allowlist + auto-seeded canon (glossary/cluster slugs) | the missing **registry-aware `calque check`** |
+| `theory/vocab-allowlist.txt` | canonical/known-vocab allowlist | the **registry** (contracted-twin-ok set) |
+| `calib.go` (`mark-fire <id> <verdict>` → hit-rate over `fires.jsonl`) | **calibration** | calque roadmap **P1 #5**, already built |
+| `hook.go` (pre-commit / agent-loop, embedded substrate, event log) | **automation** | calque's agent-build-loop integration |
+| `critic.go` | adjudicator | the **LLM adjudicate leg** |
+
+So the meta-bug is **substrate-independent**: code (§15), config/env (§14), and now prose
+(§16) — three axes of "one value/contract/concept defined in N places that drift." And
+calque + cupel are **sibling instantiations of the same recall→registry→audit→calibrate
+loop**, converged independently. That is strong thesis validation (cf.
+[[hybrid-framework-relationship]] — both instantiate the hybrid loop).
+
+**Direction (Justin, 2026-06-06): consolidate cupel's drift tooling INTO calque** — "dedup
+it so it can be calque." The two toolchains are themselves an instance of the meta-bug
+(two impls of one loop); collapse to one. **calque is the keeper**; cupel becomes a
+*consumer* ("run the enhanced calque back on cupel later"). License: cupel is MIT, calque
+Apache-2.0 — compatible; preserve MIT attribution for any moved/lifted portions.
+
+**Broad demand for the prose axis.** Justin: "a lot of my projects probably need the cupel
+version of calque" — e.g. `/home/gas6amus/Documents/lexicon` ("going to be a nightmare
+later"). So the prose/vocab axis is not a cupel one-off; it's a general capability many
+of the user's corpora need. Whatever we build must run easily on arbitrary prose repos.
+
+**Open architecture decision (consolidation shape).** calque is Python (656 LOC, code-AST
+nose); cupel is mature Go (~6.1k LOC: prose extractor + the registry/audit/calibrate/hook
+spine + embedding synonyms). Justin: "we can move the code if you want." Options:
+(A) **polyglot** — move cupel's Go spine+prose in, keep the Python code-AST extractor, a
+common JSON candidate-record contract between them (preserves mature/calibrated code,
+least rework); (B) **all-Python** — port cupel's Go into calque (single-language, but
+reimplements 6k LOC of working, calibrated code + embeddings/hook; regression risk);
+(C) **all-Go** — make cupel's Go the base, port the AST nose to Go via tree-sitter
+(single-language, keeps the spine; redoes the nose); (D) **federate** — shared
+registry/candidate format now, merge codebases later.
+
+**DECISION (Justin + analysis, 2026-06-06): option (C) — calque is rewritten in Go.**
+Reasoning: (1) the mature, *calibrated* spine (registry/audit/calibrate/hook/embeddings)
+already exists in cupel's Go — moving a bunch of it anyway makes Go the path of least
+rework; (2) **single static binary** is the killer requirement — calque must drop into
+*many* repos + CI + git hooks + agent loops with zero runtime deps (pipx Python is
+friction at that scale); (3) multi-language code parsing goes through **tree-sitter**
+regardless of host language, so Python's only real edge (native `ast` for Python) is moot
+beyond Python itself — and Go's tree-sitter bindings are solid; (4) Justin already
+maintains in Go (gemot/defn/adit/cupel). Cost: port the small (656-LOC) Python AST nose to
+Go + tree-sitter (the signals — string literals, call leaf names, assignment targets, name
+stems, private-symbol touchpoints — are shallow/syntactic and map cleanly to tree-sitter
+queries), and redo the install (pipx → `go install`/binary) + the `/calque` skill. The
+substrate-general spine + prose axis come from cupel; the code axis is the port.
+
+**Architecture implication.** §13's "pluggable signal *profiles*" generalizes to
+**substrate axes** sharing one spine:
+- **recall** (substrate-specific extractor: AST FuncSig for code · compound/embedding
+  surface for prose · launcher env-diff for config) →
+- **registry** (substrate-general: a set of canonical/adjudicated entries; allowlist =
+  registry) →
+- **check** (substrate-general: warn-only→strict gate, flag new/drifted vs registry) →
+- **calibrate** (substrate-general: log fires + verdicts → hit-rate → tune signals).
+The recall extractor is the only per-substrate part; registry/check/calibrate/hook are
+shared. This is the unification the env-parity (§14) finding already implied, now with a
+working prototype (cupel) to lift from.
+
+**Go scaffold + versioning (from `hindcast`, the structural model).** Layout:
+`cmd/calque/main.go` + `internal/...` + `Makefile` + `CHANGELOG.md`. **Versioning — adopt
+hindcast's pattern verbatim (it's itself drift-free, on-brand):** the **git tag is the
+single source of truth** — `VERSION := $(shell git describe --tags --always --dirty)`,
+injected via `-ldflags "-X main.version=$(VERSION)"`; `var version = "dev"` with a
+`buildVersion()` that prefers the ldflags value, then `runtime/debug.ReadBuildInfo()` (for
+`go install`), then "dev". **No hand-edited version constant** (nothing to drift). Semver
+tags (`git tag vX.Y.Z`). Carry a `SchemaVersion` const for the registry/data format so it
+can evolve. No dedicated go-template repo found under gas6amus/Documents (checked Templates/,
+personal-cargo-container/, name + minimal-repo search) — use **hindcast as the skeleton +
+cupel as the spine source**. Build sources: spine/prose/calib/hook/embeddings = move from
+cupel (MIT→Apache, keep attribution); code-axis nose = port calque's Python to Go +
+tree-sitter (`go/ast` for Go targets). (lucida lives at `/home/gas6amus/Documents/lucida`,
+not under /home/justin — resolves the earlier "not found".)

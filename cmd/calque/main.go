@@ -124,10 +124,6 @@ func runScan(args []string) {
 	stub("scan", "code axis: port the Python AST nose (FuncSig + private-symbol touchpoints + N-ary clustering)")
 }
 
-func runSynonymReport(args []string) {
-	stub("synonym-report", "prose axis: move from cupel cmd/cupel/synonym_report.go (ollama embeddings)")
-}
-
 func runCheck(args []string) {
 	stub("check", "spine: registry-aware gate — generalize cupel vocab_audit.go over the .calque registry")
 }

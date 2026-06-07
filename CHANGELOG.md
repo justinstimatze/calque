@@ -19,5 +19,10 @@ All notable changes to calque. The version string itself comes from the git tag
   frequency surface of hyphenated compounds across any prose repo, with `--stems`
   clustering (the synonym-drift signature). Shared, generic corpus walker +
   markdown stripper in `internal/corpus` (single-sourced for the prose commands).
+- **Prose axis: `synonym-report`** (ported from cupel) — embedding-based
+  near-synonym surfacing (the harder word-level drift: people/person/human,
+  want/wanted/desire). Local ollama client in `internal/embed`
+  (`CALQUE_OLLAMA_URL`/`CALQUE_EMBED_MODEL`). A recall surface, not a gate.
+  Validated on cupel: surfaces real concept clusters.
 - `.calque/registry.md` is now git-tracked for calque's own self-dogfood
   (`.gitignore`: `.calque/*` + `!.calque/registry.md`).

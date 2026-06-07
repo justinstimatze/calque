@@ -181,6 +181,12 @@ pins this.
 
 ## 6. Prior art / research (2026)
 
+> **Extended in `docs/RESEARCH_AND_MARKET.md` (2026-06-06, primary-sourced):** calque's
+> true lineage is the *inconsistency-bug* line (Engler 2001 → CP-Miner → DejaVu → FICS
+> 2021), not clone detection; plus a primary-source competitive scan (niche unoccupied;
+> Greptile diff-gated, Larridin an exec score), verified market tailwind (DORA, arXiv
+> 304K-commit, SO-2025 "66% almost right"), and the go/no-go verdict.
+
 - **The problem is named and measured.** LLMs disproportionately produce Type-4
   clones (they re-derive behavior vs reuse it), and existing tools miss them:
   *More Code, Less Reuse* (arXiv 2601.21276); *Detecting Semantic Clones of Unseen

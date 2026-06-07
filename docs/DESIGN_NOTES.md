@@ -868,3 +868,112 @@ cupel as the spine source**. Build sources: spine/prose/calib/hook/embeddings = 
 cupel (MIT→Apache, keep attribution); code-axis nose = port calque's Python to Go +
 tree-sitter (`go/ast` for Go targets). (lucida lives at `/home/gas6amus/Documents/lucida`,
 not under /home/justin — resolves the earlier "not found".)
+
+## 17. The axis roadmap — how far "meta" the drift goes (2026-06-07)
+
+The thesis of §16 generalizes further than code+prose. Captured here as the
+durable roadmap (it is a roadmap, not a build queue — most rows are reasoned
+from the invariant, not yet proven on a real substrate; prove one extractor at
+a time, the way code was).
+
+### 17.1 The invariant and the axis template
+
+The meta-bug is one shape: **one canonical thing → N expressions → independent
+drift.** An *axis* is just a pair `(canonical unit, recall extractor)` bolted
+onto the shared spine (recall → registry → check/`mcp` → calibrate). The spine
+is substrate-general; **the recall extractor is the only per-substrate part.**
+So "is there more slop like this?" reduces to "what other recall extractors are
+worth writing?" — and adding an axis is "write an extractor"; the registry, the
+gate, the MCP tool, and calibration come free.
+
+### 17.2 The axis map
+
+| Axis | Canonical unit | Drift it catches | Status |
+|---|---|---|---|
+| code | a function's behavior | dual-path twins; N-ary inlined seams | **live** (validated on stope C87) |
+| prose-vocab | a hyphenated compound | invented noun-stacks | **live** |
+| prose-synonym | a word | people/person/human word drift | **live** (recall-only) |
+| config-env parity | an env var / config key | same key drifts across launchers (Dockerfile/compose/CI/Make) | planned §14 |
+| pattern-pattern (catalog) | a *catalog atom* (named pattern/term) | two atoms = the same move under different names | gap — nearest neighbor of synonym (reuses `internal/embed`) |
+| value/constant | a magic value | same threshold/URL/port hardcoded in N places | gap (cheap, deterministic) |
+| schema/shape | a data shape | struct ↔ JSON ↔ OpenAPI ↔ migration ↔ TS diverge | gap (heavier) |
+| interface-doc | a declared flag/route | code says `--bar`, docs say `--foo` | gap |
+| dependency/version | a pinned version | same dep pinned differently across manifests/lockfiles | gap |
+| narrative | a world-fact / state | see §17.4 | gap (rich; partly reuses §12) |
+
+Suggested sequence after code+prose: **config-env** (already scoped, deterministic,
+hit on stope) → **pattern-pattern/catalog** (smallest delta; we own the
+substrates) → **value/constant** (cheap win). Schema/doc/version are real but
+heavier and lower immediate demand.
+
+### 17.3 The meta-ladder — pattern, pattern-pattern, pattern-pattern-pattern
+
+The axes stack by level of abstraction:
+
+- **L0 — instance.** A single function, paragraph, config value. Not drift; the
+  raw material.
+- **L1 — pattern.** "One contract expressed in N sites that drift." Code twins,
+  vocab compounds, config keys. *This is calque's current floor.*
+- **L2 — pattern-pattern (the catalog/lexicon level).** The units are *named
+  patterns themselves*; drift is two catalog atoms that are the same underlying
+  move under different names. Substrates: lexicon (~atoms), cupel's engine
+  catalog, any glossary. Mechanically this is prose-synonym promoted one level —
+  cluster *entries* (name+description) by embedding instead of *words*. (Note:
+  cupel's `clusters.go` is a renderer, not a detector — this axis is genuinely
+  unbuilt, the way the vocab gate was before consolidation.)
+- **L3 — pattern-pattern-pattern (cross-project).** The units are L2 shapes that
+  recur *across the portfolio*. The user's projects independently grow the same
+  architectural pattern-patterns — a recall→registry→gate→calibrate loop, a
+  seed/contract plugin point, git-tag versioning, a catalog→render build step,
+  the MCP stdio framing this very file records lifting from hindcast. Drift at
+  L3 = the same shape reimplemented divergently in N repos. **calque is itself an
+  L3 drift-fix:** the §16 cupel convergence (two projects grew the same drift
+  loop → consolidate into one substrate-general engine) was exactly an L3
+  deduplication. The L3 "registry" is the house-pattern catalog — the global
+  CLAUDE.md house patterns and lexicon partially are it already. An L3 recall
+  extractor would read *across repos* for recurring architectural shapes and
+  flag where they've diverged (e.g. three projects' versioning schemes that
+  should be identical but aren't). This is where the user's projects overlap and
+  is the most leveraged — and least built — level.
+
+The ladder is the same invariant at each rung; only the canonical unit changes
+(instance → contract → named pattern → architectural shape).
+
+### 17.4 Narrative as a substrate (stope) — drift beyond code/vocab/config
+
+A sprawling high-agency narrative (characters, plot, player choice) has drift
+axes of its own. Several map directly onto machinery calque already has:
+
+- **Continuity / canon-fact drift.** A character's established fact (backstory,
+  what they know, relationship state) asserted in multiple scenes that
+  contradict. The prose axis lifted from *word* to *entity-fact*: a character
+  bible vs the actual prose.
+- **State-vs-narrative drift (the high-agency special).** The game *state*
+  (flags/variables: has-key, NPC-dead, faction-hostile) vs the *narrative text*
+  shown. Branch explosion lets a path describe a world inconsistent with the
+  state machine (text greets a guard the state says you killed). This is the
+  purest instance of the invariant for games — one world, two representations
+  (engine state + prose), drifting — and is unique to interactive fiction.
+- **Voice / register drift per character.** Speech style drifts across a long
+  script — prose-synonym scoped per-speaker.
+- **Rule / affordance drift.** A game rule ("you can always rest at a campfire")
+  stated/implemented across code + config + tutorial text that diverge — the
+  config-parity axis applied to game rules.
+- **Dangling setup/payoff (Chekhov drift).** A foreshadowed event that never
+  resolves, or a payoff with no setup — a *left with no right*. This is calque's
+  **missing-twins** recall (§12) pointed at narrative.
+- **Orphan / unreachable scene.** High agency strands branches; dead narrative
+  content is dead code. Maps to the **reachability/coverage-gap gate** (§12).
+
+The genuinely-new narrative extractors are the first two (canon-fact and
+state-vs-narrative); the rest reuse existing calque signals with a narrative
+extractor in front.
+
+### 17.5 Scaling the registry
+
+The human-readable `.calque/registry.md` is right for dogfood-scale repos but
+will not scale to large projects — appending and re-parsing a growing markdown
+file is O(n) per check and gets unwieldy to hand-edit. Roadmap: move the
+*storage* to a structured/indexed store (SQLite) while keeping a human-readable
+projection for review and git history. Not urgent — defer until a real consumer
+hits the wall; the markdown format stays the source of truth until then.

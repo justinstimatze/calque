@@ -118,21 +118,3 @@ func main() {
 		os.Exit(2)
 	}
 }
-
-// --- subcommand stubs (ported incrementally; see DESIGN_NOTES §16) ---
-//
-// Each prints its port plan and exits 70 (EX_SOFTWARE: not ready) so the
-// skeleton builds and runs while the axes land one at a time.
-
-func runDoctor(args []string) {
-	stub("doctor", "spine: calibration rollup — move from cupel cmd/cupel/calib.go")
-}
-
-func runMarkFire(args []string) {
-	stub("mark-fire", "spine: tag a finding verdict — move from cupel cmd/cupel/calib.go")
-}
-
-func stub(name, plan string) {
-	fmt.Fprintf(os.Stderr, "calque %s: not yet implemented — %s\n", name, plan)
-	os.Exit(70)
-}

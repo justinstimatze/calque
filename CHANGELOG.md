@@ -15,6 +15,20 @@ All notable changes to calque. The version string itself comes from the git tag
   axis is ported from the original Python nose.
 
 ### Added
+- **Spine: `doctor` + `mark-fire`** — the calibration leg (was stubbed). A "fire"
+  is a suspect the gate surfaces; `doctor` does a live scan, joins each suspect to
+  a calibration label (registry verdicts double as labels — drift→useful,
+  false-alarm→not-useful, contracted-twin-ok→mixed; manual `mark-fire <id>
+  <verdict>` fills the rest), and reports the **discrimination signal**: mean score
+  of useful vs not-useful suspects + precision@k. On calque itself it reads
+  *✓ ranker discriminates — drift outscores false-alarms by 0.17* — the first
+  data-grounded evidence the score tracks real drift (DESIGN_NOTES §9 #5). `check`
+  appends NEW suspects to `.calque/fires.jsonl` (stable-id'd, deduped, gitignored;
+  `--no-fire-log` to disable) and prints each fire's id for `mark-fire`. Shape
+  ported from cupel `cmd/cupel/calib.go` (MIT, attribution preserved). The
+  extract→rank→cluster pipeline is single-sourced as `codeAxis` across
+  scan/check/doctor (another dedup the touchpoint pass drove on calque's own code).
+  Pinned by `cmd/calque/calib_test.go`.
 - **Spine: `hook`** — makes the gate ongoing/automated (the point of `check`).
   `calque hook install` writes a git pre-commit hook running `calque check`
   (warn-only by default — never blocks a commit — `--strict` to gate; no-ops when

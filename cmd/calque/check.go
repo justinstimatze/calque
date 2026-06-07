@@ -31,28 +31,27 @@ func runCheck(args []string) {
 	strict := fs.Bool("strict", false, "exit 1 if there are new (un-adjudicated) suspects")
 	clusterMinMembers := fs.Int("cluster-min-members", 3, "smallest N-ary cluster to consider (2 includes diluted pairs)")
 	clusterMaxFanout := fs.Int("cluster-max-fanout", 8, "a private symbol touched by more than this is plumbing, not a seam")
+	noFireLog := fs.Bool("no-fire-log", false, "do not append NEW suspects to .calque/fires.jsonl (calibration telemetry)")
 	if err := fs.Parse(args); err != nil {
 		return
 	}
 
-	all, _, err := code.Extract(*repo, splitCSV(*exclude))
+	copts := clusterOptsFrom(*minLines, *clusterMinMembers, *clusterMaxFanout, 1<<30)
+	r, err := codeAxis(*repo, *left, *right, *exclude, *minScore, *minLines, 1<<30, copts, true)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque check: %v\n", err)
 		os.Exit(1)
 	}
+	all := r.All
 	reg, err := registry.Load(joinRepo(*repo, *regPath))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque check: reading registry: %v\n", err)
 		os.Exit(1)
 	}
 
-	L := code.Filter(all, *left)
-	R := code.Filter(all, *right)
-	susp := code.Rank(L, R, *minLines, *minScore, 1<<30)
-
 	var fresh []code.Suspicion
 	known := 0
-	for _, s := range susp {
+	for _, s := range r.Pairs {
 		if reg.Has(s.Left.Key(), s.Right.Key()) {
 			known++
 			continue
@@ -61,16 +60,10 @@ func runCheck(args []string) {
 	}
 
 	// N-ary clusters (the touchpoint pass): same new/known split, keyed on the
-	// member SET (§15). Whole-corpus, so clustered over the union of the scope.
-	copts := code.DefaultClusterOptions()
-	copts.MinLines = *minLines
-	copts.MinMembers = *clusterMinMembers
-	copts.MaxFanout = *clusterMaxFanout
-	copts.Top = 1 << 30
-	clusters := code.ClusterByTouchpoint(unionSigs(L, R), copts)
+	// member SET (§15).
 	var freshC []code.Cluster
 	knownC := 0
-	for _, c := range clusters {
+	for _, c := range r.Clusters {
 		if reg.HasCluster(c.MemberKeys()) {
 			knownC++
 			continue
@@ -103,17 +96,21 @@ func runCheck(args []string) {
 		len(fresh), known, len(freshC), knownC, len(stale)+len(staleC), plural(len(stale)+len(staleC), "y", "ies"))
 
 	for _, s := range fresh {
-		fmt.Printf("\nNEW  %.2f  `%s` (%s:%d)  ≟  `%s` (%s:%d)\n     %s\n",
-			s.Score, s.Left.Qualname, s.Left.File, s.Left.Line,
+		fmt.Printf("\nNEW  %.2f  [%s]  `%s` (%s:%d)  ≟  `%s` (%s:%d)\n     %s\n",
+			s.Score, pairID(s), s.Left.Qualname, s.Left.File, s.Left.Line,
 			s.Right.Qualname, s.Right.File, s.Right.Line, s.Reason())
 		fmt.Printf("     adjudicate in %s — add:  - pair: %s | %s\n", *regPath, s.Left.Key(), s.Right.Key())
 	}
 	for _, c := range freshC {
-		fmt.Printf("\nNEW-CLUSTER  %.2f  (%d members)  %s\n", c.Score, len(c.Members), c.Reason())
+		fmt.Printf("\nNEW-CLUSTER  %.2f  [%s]  (%d members)  %s\n", c.Score, clusterID(c), len(c.Members), c.Reason())
 		for _, m := range c.Members {
 			fmt.Printf("     `%s` (%s:%d)\n", m.Qualname, m.File, m.Line)
 		}
 		fmt.Printf("     adjudicate in %s — add:  - cluster: %s\n", *regPath, strings.Join(c.MemberKeys(), " | "))
+	}
+
+	if !*noFireLog && (len(fresh) > 0 || len(freshC) > 0) {
+		logFires(*repo, fresh, freshC)
 	}
 	for _, e := range stale {
 		fmt.Printf("\nSTALE  `%s` ≟ `%s` — referenced code no longer exists; prune or re-home (was: %s%s)\n",

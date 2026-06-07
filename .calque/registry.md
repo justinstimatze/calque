@@ -186,14 +186,45 @@ purposes — same class as the *Key collisions above.
 - verdict: false-alarm
 - reviewed: 2026-06-06
 
-## runScan ≟ runCheck ≟ runHook — contracted-twin-ok (shared boundary-flag spine)
+## runScan ≟ runCheck ≟ runHook ≟ runDoctor — contracted-twin-ok (shared spine)
 
-The N-ary form of the registered runCheck≟runScan pair: all three code-axis
-command handlers go through `addBoundaryFlags` (single-sourced flag taxonomy) +
-`splitCSV` + `unionSigs`. This is the dedup *working* — the touchpoint pass first
-flagged the verbatim --repo/--left/--right/--exclude block duplicated across the
-three (score 2.83), which prompted factoring `addBoundaryFlags`; what remains is
-the intended shared infrastructure, not drift. Pin, don't collapse.
-- cluster: cmd/calque/check.go::runCheck | cmd/calque/hook.go::runHook | cmd/calque/scan.go::runScan
+The N-ary form of the registered runCheck≟runScan pair: all four code-axis command
+handlers go through the single-sourced spine — `addBoundaryFlags` (flag taxonomy),
+`codeAxis` (the extract→rank→cluster pipeline), `clusterOptsFrom`, `splitCSV`. This
+is the dedup *working*: the touchpoint pass first flagged the verbatim flag block
+(score 2.83 → factored `addBoundaryFlags`), then the duplicated pipeline (→ factored
+`codeAxis`); what remains is intended shared infrastructure, not drift. Pin.
+- cluster: cmd/calque/calib.go::runDoctor | cmd/calque/check.go::runCheck | cmd/calque/hook.go::runHook | cmd/calque/scan.go::runScan
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-06
+
+## calib.go commands (logFires/printDoctor/runDoctor/runMarkFire) — contracted-twin-ok
+
+The calibration functions all resolve `.calque/` via `calqueDir`, append via
+`appendJSONL`, and key suspects via `pairDisplayKey`/`clusterDisplayKey`. Intended
+shared infra within the calibration leg.
+- cluster: cmd/calque/calib.go::logFires | cmd/calque/calib.go::printDoctor | cmd/calque/calib.go::runDoctor | cmd/calque/calib.go::runMarkFire
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-06
+
+## logFires ≟ runDoctor ≟ runCheck — contracted-twin-ok (suspect-id helpers)
+
+All three id suspects via the single-sourced `pairID`/`clusterID` so the fire log,
+the gate output, and doctor agree on a suspect's identity. Intended.
+- cluster: cmd/calque/calib.go::logFires | cmd/calque/calib.go::runDoctor | cmd/calque/check.go::runCheck
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-06
+
+## Borderline name-stem collisions among the CLI handlers — false-alarm
+
+`run*`/`build*` handlers share role stems at the 0.18–0.21 noise floor (the gate vs.
+the hook's command string; doctor's run/print split). Coincidental name tokens.
+- pair: cmd/calque/check.go::runCheck | cmd/calque/hook.go::buildCheckCmd
+- verdict: false-alarm
+- reviewed: 2026-06-06
+- pair: cmd/calque/calib.go::runDoctor | cmd/calque/calib.go::printDoctor
+- verdict: false-alarm
+- reviewed: 2026-06-06
+- pair: cmd/calque/calib.go::runDoctor | cmd/calque/check.go::runCheck
 - verdict: contracted-twin-ok
 - reviewed: 2026-06-06

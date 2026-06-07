@@ -46,33 +46,30 @@ func runScan(args []string) {
 		return
 	}
 
-	all, st, err := code.Extract(*repo, splitCSV(*exclude))
+	copts := clusterOptsFrom(*minLines, *clusterMinMembers, *clusterMaxFanout, *top)
+	r, err := codeAxis(*repo, *left, *right, *exclude, *minScore, *minLines, *top, copts, !*noClusters)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque scan: walking %s: %v\n", *repo, err)
 		os.Exit(1)
 	}
-	if st.Funcs == 0 {
+	if r.Stats.Funcs == 0 {
 		fmt.Fprintf(os.Stderr, "calque scan: no extractable source under %s (supported: %v; %d code file(s) skipped %v)\n",
-			*repo, code.SupportedExts(), st.Skipped, st.SkippedExts)
+			*repo, code.SupportedExts(), r.Stats.Skipped, r.Stats.SkippedExts)
 		os.Exit(1)
 	}
-
-	L := code.Filter(all, *left)
-	R := code.Filter(all, *right)
-	susp := code.Rank(L, R, *minLines, *minScore, *top)
 
 	fmt.Println("# calque — dual-path suspects")
 	fmt.Println()
 	fmt.Printf("boundary: `%s`  ×  `%s`\n", orAll(*left), orAll(*right))
-	fmt.Printf("scanned %d func(s) in %d file(s); suspect pairs: %d\n", st.Funcs, st.Files, len(susp))
-	if st.Skipped > 0 {
-		fmt.Printf("note: %d code file(s) skipped (no extractor yet): %v\n", st.Skipped, st.SkippedExts)
+	fmt.Printf("scanned %d func(s) in %d file(s); suspect pairs: %d\n", r.Stats.Funcs, r.Stats.Files, len(r.Pairs))
+	if r.Stats.Skipped > 0 {
+		fmt.Printf("note: %d code file(s) skipped (no extractor yet): %v\n", r.Stats.Skipped, r.Stats.SkippedExts)
 	}
 	fmt.Println()
 	fmt.Println("calque is recall-only — adjudicate each as drift / contracted-twin-ok / false-alarm,")
 	fmt.Println("then record the verdict in .calque/registry.md.")
 	fmt.Println()
-	for i, s := range susp {
+	for i, s := range r.Pairs {
 		fmt.Printf("## %d. %.2f  `%s` (%s:%d)  ≟  `%s` (%s:%d)\n",
 			i+1, s.Score, s.Left.Qualname, s.Left.File, s.Left.Line,
 			s.Right.Qualname, s.Right.File, s.Right.Line)
@@ -80,24 +77,53 @@ func runScan(args []string) {
 	}
 
 	if !*noClusters {
-		opts := code.DefaultClusterOptions()
-		opts.MinLines = *minLines
-		opts.MinMembers = *clusterMinMembers
-		opts.MaxFanout = *clusterMaxFanout
-		opts.Top = *top
-		clusters := code.ClusterByTouchpoint(unionSigs(L, R), opts)
 		fmt.Println()
 		fmt.Printf("# calque — N-ary clusters (shared private seams)\n\n")
-		fmt.Printf("%d cluster(s) of >=%d functions sharing a rare private symbol — the\n", len(clusters), opts.MinMembers)
+		fmt.Printf("%d cluster(s) of >=%d functions sharing a rare private symbol — the\n", len(r.Clusters), copts.MinMembers)
 		fmt.Println("sub-function / triple-shell shape pairwise scoring structurally misses (§15).")
 		fmt.Println()
-		for i, c := range clusters {
+		for i, c := range r.Clusters {
 			fmt.Printf("## C%d. %.2f  (%d members)  %s\n", i+1, c.Score, len(c.Members), c.Reason())
 			for _, m := range c.Members {
 				fmt.Printf("- `%s` (%s:%d)\n", m.Qualname, m.File, m.Line)
 			}
 		}
 	}
+}
+
+// clusterOptsFrom builds ClusterOptions from the common cluster flags — shared by
+// scan/check/doctor so the cluster knobs stay single-sourced.
+func clusterOptsFrom(minLines, minMembers, maxFanout, top int) code.ClusterOptions {
+	o := code.DefaultClusterOptions()
+	o.MinLines, o.MinMembers, o.MaxFanout, o.Top = minLines, minMembers, maxFanout, top
+	return o
+}
+
+// codeAxisResult is the full code-axis recall output (pairs + N-ary clusters +
+// the extracted corpus + coverage stats).
+type codeAxisResult struct {
+	Pairs    []code.Suspicion
+	Clusters []code.Cluster
+	All      []*code.FuncSig
+	Stats    code.ScanStats
+}
+
+// codeAxis runs the shared recall pipeline — extract → filter → rank (pairs) +
+// touchpoint cluster (N-ary) — single-sourced so scan, check, and doctor can't
+// drift on how they recall (the pipeline calque flagged duplicated across them).
+// withClusters lets a caller skip the N-ary pass.
+func codeAxis(repo, left, right, exclude string, minScore float64, minLines, top int, copts code.ClusterOptions, withClusters bool) (codeAxisResult, error) {
+	all, st, err := code.Extract(repo, splitCSV(exclude))
+	if err != nil {
+		return codeAxisResult{}, err
+	}
+	L := code.Filter(all, left)
+	R := code.Filter(all, right)
+	res := codeAxisResult{All: all, Stats: st, Pairs: code.Rank(L, R, minLines, minScore, top)}
+	if withClusters {
+		res.Clusters = code.ClusterByTouchpoint(unionSigs(L, R), copts)
+	}
+	return res, nil
 }
 
 // unionSigs returns the deduped union of two FuncSig slices, keyed on Key().

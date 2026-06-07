@@ -1,28 +1,8 @@
-# calque — design notes & handoff
+# calque — design notes
 
-> Status: **v0.0.1** (2026-06-05). Python MVP works and is validated against
-> `lamina/stope`. This doc captures the full design conversation so a parallel
-> session can pick up with complete context.
-> Written for: someone continuing calque in a separate worktree/session.
->
-> **Session 2 (2026-06-05) progress** — see git log for hashes (history was
-> re-authored to `justin@justinstimatze.com`):
-> - Roadmap #1 **done**: stope's real registry seeded — 30 suspects adjudicated
->   (`stope/.calque/registry.md`): **4 drift · 21 contracted-twin-ok · 5
->   false-alarm**, each with a `predicted:` score (seeds calibration, #2).
-> - Roadmap #4 **done**: installed as a global skill (`~/.claude/skills/calque/`,
->   `/calque`) + the `calque` CLI is on PATH via `pipx install --editable`
->   (its own isolated venv). The tool now runs against any repo from any cwd.
-> - stope wired to *act* on the registry: `stope/CLAUDE.md` Pitfall #1 + the
->   session-start reading list now point at `.calque/registry.md`. Drift fixes
->   themselves are left to a stope session.
-> - Headline finding: `ScriptedGame` is **mostly an adapter, not a
->   reimplementation** — 21/30 flagged methods delegate to the real engine
->   (`self._engine.step(...)`) or a shared `turning.py`/`scheduler` fn, so they
->   can't behaviorally drift. Only 5 pairs genuinely reimplement; 4 of those
->   drifted — and 2 sit in blind spots of stope's hand-written
->   `test_dual_path_parity.py`. That's the recall-tool-beats-handwritten-tests
->   proof.
+> Architecture, rationale, and roadmap for calque, a substrate-general drift
+> nose (Go). Companion docs: `PATTERN_CATALOG.md` (the concrete drift shapes),
+> `RESEARCH_AND_MARKET.md` (prior art + competitive landscape).
 
 ---
 
@@ -34,11 +14,11 @@ reimplements production logic, a client that hardcodes a verb list the server
 also owns, a `v2` path that diverged from `v1`. These are **Type-4 (behavioral)
 clones**: dissimilar in syntax *by construction*, which is exactly why grep, LSP,
 embeddings, and clone-detectors all miss them. calque is the **high-recall GATE**
-(the *recall* stage — "RECALL" is a description, not a sixth hybrid role) of a
-hybrid heuristic→LLM-oracle→registry loop. It indexes the signals
-that stay invariant when a body is rewritten, ranks suspect pairs, and hands a
-short list to an LLM/agent that makes the actual equivalence call. It never
-*proves* equivalence (that's undecidable) — it's a nose, not a judge.
+(the *recall* stage — "RECALL" describes the tuning, not a separate role) of a
+hybrid heuristic → LLM-oracle → registry loop. It indexes the signals that stay
+invariant when a body is rewritten, ranks suspect pairs, and hands a short list
+to an LLM/agent that makes the actual equivalence call. It never *proves*
+equivalence (that's undecidable) — it's a nose, not a judge.
 
 The name: a *calque* is a structural copy carried across languages ("skyscraper"
 → French "gratte-ciel"). The software version is two code paths sharing a contract
@@ -48,18 +28,13 @@ but diverging in surface.
 
 ## 2. The core insight (why this is hard, why indices miss it)
 
-The undecidability is real but irrelevant to the user's need. The user's framing
-(verbatim, worth preserving):
-
-> "it's technically undecidable but really I just need clues for you to
-> automatically go check and have your judgment call on what's too close to
-> equivalent... somehow codebase indices don't seem to capture this kind of thing."
-
-That reframe is the whole architecture. We don't build a *prover*; we build a
-**recall-heavy clue generator** that routes an LLM oracle's attention. The hard
-part (judgment) moves to the part that's good at judgment; the tool only has to be
-*suspicious*, never *right*. A 30%-precision / 95%-recall ranker that yields 15
-pairs to look at beats any sound analyzer here.
+The undecidability is real but irrelevant to the need. You don't want a *prover*;
+you want **clues to automatically go check** — a recall-heavy generator that
+routes an LLM oracle's attention to what's "too close to equivalent." Codebase
+indices don't capture this. The hard part (judgment) moves to the part that's
+good at judgment; the tool only has to be *suspicious*, never *right*. A
+30%-precision / 95%-recall ranker that yields ~15 pairs to look at beats any
+sound analyzer here.
 
 **Why codebase indices structurally can't do it:**
 - grep / ctags / LSP index lexical identity + the call graph — but the two twins
@@ -73,10 +48,9 @@ All index **representation**. Dual-path is a **role collision in behavior-space*
 and representation is the dimension along which the twins diverged. So you must
 index the **contract invariants**, not the prose.
 
-**The divergence-robust signals calque uses** (in `core.py`):
+**The divergence-robust signals calque uses** (`internal/code`):
 - emitted string literals — what the function *says* (surface output)
-- attribute write-targets (`self.world.ruin`, `ctx.pending_confirm`) — what it
-  *mutates* (effect signature)
+- attribute write-targets — what it *mutates* (effect signature)
 - returned dict keys — the shape of what it *hands back*
 - callee names — what downstream it leans on
 - name-stem (role tokens, role-prefixes like `handle_`/`resolve_` stripped) — the
@@ -86,14 +60,14 @@ None care that the bodies look nothing alike. That's the point.
 
 ---
 
-## 3. Architecture — it's a "hybrid loop" (per justinstimatze/hybrid)
+## 3. Architecture — a "hybrid loop"
 
-calque is a concrete instance of the **hybrid-loop** design pattern (the user's
-own framework: `github.com/justinstimatze/hybrid` — "LLM judgment and
-deterministic code in mutually-generative cycles"). Its catalog already names
-calque's shape: a **Knowledge-base auditor** ("substrate is valid source code,
-often Go AST; auditors run deterministic checks against the AST; an LLM proposes
-edits") run as a **dev-time critique loop**.
+calque is a concrete instance of the **hybrid-loop** design pattern
+([`github.com/justinstimatze/hybrid`](https://github.com/justinstimatze/hybrid) —
+"LLM judgment and deterministic code in mutually-generative cycles"). Its catalog
+names calque's shape: a **knowledge-base auditor** (substrate is structured
+source; deterministic checks run against it; an LLM proposes edits) run as a
+**dev-time critique loop**.
 
 Role mapping:
 
@@ -101,880 +75,571 @@ Role mapping:
 |---|---|
 | soft input | the codebase / a diff |
 | LENS (usually LLM) | **deterministic AST extract** — a *code-block lens* (deterministic because the substrate is already structured code) |
-| SUBSTRATE | `.calque/registry.md` (typed pair→verdict records) |
-| GATE | `core.py` — signature overlap → rank suspects |
+| SUBSTRATE | `.calque/registry.md` (typed pair/cluster → verdict records) |
+| GATE | the scorer — signature overlap → rank suspects |
 | REASONER | the agent — adjudicate drift / twin-ok / false-alarm |
 | ACTION | write verdict + collapse-to-single-path |
 
 **Notable variant:** calque is *gate-first with a deterministic lens*. The
-canonical 5-role loop opens with an LLM lens because soft input is fuzzy
-(transcripts). calque's soft input is **code** — already typed — so extraction
-needs no LLM. Recognizable sub-shape: *the auditor whose lens is deterministic
-because the substrate is already structured.*
-
-**Two meta-layers calque v0.0.1 is MISSING** (the framework exposed these — they
-are the v0.1 roadmap):
-- **Calibration** — calque logs verdicts but not *predictions*. Record
-  `(predicted score, actual verdict)` per suspect so we can measure whether the
-  gate's ranking tracks real drift, and tune signal weights from data instead of
-  a guess. The registry already holds the verdict half; add a score column.
-- **Metabolism** — no periodic re-audit. A pair cleared `contracted-twin-ok` can
-  *later* drift (one side gets edited). Need a substrate-wide sweep that
-  re-checks cleared pairs. (`_sync_ruin_cap` in stope is this waiting to happen:
-  today both delegate; tomorrow someone inlines one.)
+canonical 5-role loop opens with an LLM lens because soft input is fuzzy. calque's
+soft input is **code** — already typed — so extraction needs no LLM. (Keep this
+prose consistent with hybrid's vocabulary: RECALL is *not* a role; it is the gate
+tuned for recall.)
 
 ---
 
-## 4. Current implementation (file map)
+## 4. Implementation (file map)
 
 ```
-~/Documents/calque/
-  calque/
-    core.py        # FuncSig extraction (AST) + jaccard scoring + rank(). The IP.
-    __main__.py    # `python -m calque scan --repo --left --right [--out]`
-    __init__.py
-  tests/test_core.py   # 3 tests: stem collapse, planted-twin caught, delegating-pair scores lower
-  SKILL.md         # the agent loop (scan → adjudicate → registry); drives the LLM as oracle
-  README.md        # public-facing
-  registry.template.md   # the `.calque/registry.md` schema
-  examples/stope-engine-vs-testing.md   # saved validation run
-  pyproject.toml   # stdlib-only; `calque` console script; hatchling
-  docs/DESIGN_NOTES.md   # this file
+cmd/calque/        # the CLI — one file per spine leg / axis
+  main.go          # subcommand dispatch + buildVersion()
+  scan.go          # code axis: rank dual-path suspects + N-ary clusters
+  check.go         # the registry-aware gate (new vs known vs stale)
+  vocab_report.go / synonym_report.go / vocab_check.go   # prose axis
+  calib.go         # doctor + mark-fire (calibration)
+  hook.go          # git pre-commit / Stop-hook installer
+  mcp.go           # MCP stdio server (both gates as tools)
+  migrate.go       # one-time registry-format converter
+internal/
+  code/            # the code-axis core: FuncSig extract (go/ast + embedded
+                   #   python3 extractor) + jaccard scoring + N-ary touchpoint
+                   #   clustering (touchpoint.go)
+  corpus/ embed/   # prose-axis corpus walker + ollama embedding client
+  registry/ pairkey/ glob/   # registry parse, set keys, glob matching
+Makefile           # git-tag versioning via -ldflags
 ```
 
-**Scoring** (`core.py`): per-signal jaccard, weighted
-(`strings .30, writes .30, name .22, calls .10, ret .08`), **renormalized over
-available signals** (a pair isn't penalized for neither side emitting strings).
-A noise gate requires a real anchor (name overlap ≥0.34 OR any
-surface/effect/ret overlap) so generic-callee coincidences are dropped. Tiny
-functions (<4 lines) and dunders excluded. Each left fn keeps its single best
-match (dedup so one promiscuous fn doesn't dominate).
+**Scoring** (`internal/code`): per-signal jaccard, weighted (`strings .30,
+writes .30, name .22, calls .10, ret .08`), **renormalized over available
+signals** (a pair isn't penalized for neither side emitting strings). A noise
+gate requires a real anchor (name overlap ≥ 0.34 OR any surface/effect/ret
+overlap) so generic-callee coincidences are dropped. Tiny functions (< 4 lines)
+and dunders excluded. Each left fn keeps its single best match.
 
 **CLI contract:** `--left`/`--right` globs are relative to `--repo`. Only
-left×right pairs are scored (the testing-vs-prod boundary), not within-group.
+left×right pairs are scored (the testing-vs-prod boundary), not within-group. Go
+targets parse via native `go/ast`; Python targets via an embedded `python3` AST
+extractor (one subprocess per scan).
 
 ---
 
-## 5. Validation evidence (stope)
+## 5. Validation evidence
 
-Run: `python -m calque scan --repo <stope> --left "engine*.py" --right "testing.py"`.
-With **zero project knowledge**, it re-surfaced the engine↔testing
-reimplementation family that stope's `CLAUDE.md` calls *"the #1 bug source"*:
+Run `calque scan --repo <repo> --left "engine*.py" --right "testing.py"`. With
+**zero project knowledge**, on a real mid-size Python codebase calque re-surfaced
+the engine↔testing reimplementation family that the project itself called its #1
+bug source — including a row caught purely by **shared write-targets**
+(`world.current_loc`/`world.current_zone`) plus shared calls, and an exact
+name-role match on a capped-value sync that both sides delegate to one helper
+(a `contracted-twin-ok`, the canonical metabolism risk: safe today, could
+inline-drift tomorrow). See `examples/engine-vs-test-harness.md`.
 
-- `#1 1.00` `GameEngine._sync_ruin_cap` ≟ `ScriptedGame._sync_ruin_cap`
-- `#14` `_handle_move` ≟ `move` (caught by shared writes `world.current_loc`/`world.current_zone` + 10 shared calls)
-- `#2` `_load_schedules`, `#3` `_find_physical_object`, plus the action-handler row
-  (`mislead`/`tear`/`warn`/`betray`/`radio`/`dos`/`call` ≟ their `_handle_*`)
+**Key property observed:** pairs that get collapsed to a single path **drop off
+the suspect list** automatically, because the delegating body shrinks. The suspect
+set shrinks as you single-path — exactly the desired behavior; a regression test
+pins it.
 
-**Adjudication done (1 of 18):** `_sync_ruin_cap` → **`contracted-twin-ok`**. Both
-copies are byte-identical and both delegate to `turning.sync_ruin_cap`. Not drift
-— a duplicated thin wrapper. (This is the metabolism risk: safe today, could
-inline-drift tomorrow.)
-
-**Key property observed:** the pairs we collapsed earlier this session in stope
-(#230 `submit_dialogue`, #232 `leave_town`) **dropped off the suspect list**,
-because they now delegate and their bodies shrank. The suspect set shrinks as you
-single-path — exactly the desired behavior. `test_core.py::test_collapsed_pair_scores_lower`
-pins this.
+**The N-ary win.** On the same target, the touchpoint-cluster pass surfaced a
+three-shell cluster (two `step` methods + a `run` loop) sharing private parse/
+canon primitives — a sub-function inlined-block triple that whole-function
+pairwise scoring structurally cannot express (§15). And in live dogfooding on a
+sibling's web/engine boundary, a calque cluster led directly to a real
+player-visible bug: an "examinable details" enumeration computed three different
+ways (dict-filter + lowercase + mutations vs a raw key-set vs a truncated copy),
+so the UI offered a detail the engine refused to resolve. The fix was a
+single-path collapse onto the canonical enumerator, locked by a prod-path test
+asserting the three agree. Cluster → real bug → single-path fix: the loop, end to
+end.
 
 ---
 
-## 6. Prior art / research (2026)
+## 6. Prior art / research
 
-> **Extended in `docs/RESEARCH_AND_MARKET.md` (2026-06-06, primary-sourced):** calque's
-> true lineage is the *inconsistency-bug* line (Engler 2001 → CP-Miner → DejaVu → FICS
-> 2021), not clone detection; plus a primary-source competitive scan (niche unoccupied;
-> Greptile diff-gated, Larridin an exec score), verified market tailwind (DORA, arXiv
-> 304K-commit, SO-2025 "66% almost right"), and the go/no-go verdict.
+> Fully developed in **`RESEARCH_AND_MARKET.md`** (primary-sourced): calque's true
+> lineage is the *inconsistency-bug* line (Engler 2001 → CP-Miner → DejaVu → FICS
+> 2021), not clone detection; a primary-source competitive scan (the niche is
+> unoccupied; Greptile is diff-gated, Larridin is an exec score); verified market
+> tailwind (DORA, the 304K-commit arXiv study, Stack-Overflow-2025's "66% almost
+> right"); and the go/no-go verdict.
+
+Highlights that shape the architecture:
 
 - **The problem is named and measured.** LLMs disproportionately produce Type-4
-  clones (they re-derive behavior vs reuse it), and existing tools miss them:
-  *More Code, Less Reuse* (arXiv 2601.21276); *Detecting Semantic Clones of Unseen
-  Functionality* (arXiv 2510.04143, embeddings approach).
+  clones (they re-derive behavior instead of reusing it), and existing tools miss
+  them (*More Code, Less Reuse*, arXiv 2601.21276; *Detecting Semantic Clones of
+  Unseen Functionality*, arXiv 2510.04143).
 - **Verdict leg (per-language, off-the-shelf):** differential / model-based
-  testing. Python = **Hypothesis** stateful testing (`RuleBasedStateMachine` +
-  reference model — literally "compare optimized impl vs a simplified model").
-  Go = **rapid** (`pgregory.net/rapid`, "aims to bring to Go the power Hypothesis
-  brings to Python", has state-machine testing + shrinking); gopter is the older
-  alt; `go test -fuzz` is coverage fuzzing (different tool). TS = **fast-check**.
-  These confirm a flagged pair; they don't discover. (Full calque-vs-Hypothesis
-  contrast in §12.)
-- **Layered drift detection validated** in a 2026 paper, SysTradeBench (arXiv
-  2604.04812): Layer 1 canonicalized-code hash + Layer 2 trace-edit-distance with
-  thresholds — independently the same Tier-A/Tier-B shape.
-- **Go clone tools won't help:** `dupl` (suffix-tree over ASTs, *ignores values*)
-  catches Type 1–2 only — same blind spot.
-
-### 2026 survey (session 2) — where calque actually sits
-
-A fresh fan-out survey (full source list logged with the session). Bottom line:
-**calque is novel in framing + signal, not architecture.**
-
-- **Nearest neighbor — HyClone** (arXiv 2508.01357, Aug 2025): two-stage Python
-  Type-4 detector, *LLM screens → execution validates*. Same two-leg shape as
-  calque but **inverted** — HyClone spends the LLM on the cheap screen; calque
-  uses cheap *static effect signals* for the screen and reserves LLM + property
-  testing for the verdict. And HyClone is built for *benchmark pair-classification*,
-  not *drift-hunting in a live unlabeled repo*. Cite as closest prior art + the
-  contrast that defines calque.
-- **Verdict-leg backbone — differential fuzzing** (arXiv 2602.15761, Feb 2026):
-  test-free equivalence by input-generation + cross-execution found **19–35% of
-  LLM refactorings non-equivalent, ~21% slipping past existing tests.** This is
-  calque's intended verdict leg, empirically validated, with a great motivating
-  stat ("existing tests miss real drift" = exactly the stope `test_dual_path_parity`
-  blind spots calque found).
-- **LLM is not a sound oracle** — independently confirmed: empirical LLM-clone
-  study (2511.01176), CETBench (2506.04019), the LLM-as-Judge-for-SE survey
-  (2510.24367). Equivalence-judging isn't even a named LLM-judge task category yet.
-  This *validates* demoting the LLM to triage (REASONER) and promoting differential
-  testing to the verdict (ACTION).
-- **Recall-validation datasets to adopt:** GPTCloneBench (Type-4 incl. Python),
-  CETBench transform-pairs. Measure: of known Type-4 pairs, what fraction does
-  calque's effect-signal jaccard rank as suspects? Tune for recall.
+  testing — **Hypothesis** (`RuleBasedStateMachine`) for Python, **rapid** for Go,
+  **fast-check** for TS. These *confirm* a flagged pair; they don't discover it
+  (full contrast in §12).
+- **Differential fuzzing** (arXiv 2602.15761) found ~19–35% of LLM refactorings
+  non-equivalent, ~21% slipping past existing tests — calque's intended verdict
+  leg, empirically validated, and exactly the "existing tests miss real drift"
+  failure mode calque exists to catch.
+- **LLM is not a sound oracle** (CETBench 2506.04019; the LLM-as-Judge survey
+  2510.24367) — which validates demoting the LLM to triage (REASONER) and
+  promoting differential testing to the verdict (ACTION).
 - **The signal is the genuinely original move.** Static *effect/mutation*
   signatures (write-targets, emitted literals, returned keys) as a recall signal
   sit in an empty intersection: effect systems exist (for typing/optimization),
   behavioral-clone detection exists (but goes dynamic) — nobody uses cheap static
-  effect footprints to *match twins*. (NSF 10113743 is the formal "no purely static
-  method detects all behavioral clones" — grounds "a nose, not a judge.")
-- **Commercial near-miss:** SMART TS XL / "Mirror Code" sells the *divergence*
-  narrative across systems but finds duplicates without judging drift and has no
-  open recall→oracle pipeline. API-drift tools (oasdiff etc.) need a *declared*
-  contract; calque's niche is the *undeclared, implicit* contract.
+  effect footprints to *match twins*.
 
-The general "find any two things that should be identical and aren't" is program
-equivalence = undecidable. Everyone converges on **fuzzy discovery + differential
-verdict + an oracle**. The 2026 novelty is that the oracle (LLM) is now cheap and
-good, which inverts the architecture toward recall-index → LLM-judgment. calque's
-unclaimed white space: **undeclared-contract drift-hunting in a live repo, via
-static effect-signatures.**
+calque's unclaimed white space: **undeclared-contract drift-hunting in a live
+repo, via static effect-signatures**, with a persistent adjudicated registry.
 
 ---
 
-## 7. Naming decision
+## 7. Naming
 
-Chose **calque** after collision checks. Killed: `twinscan` (ASML lithography +
-bioinformatics), `mitosis` (Builder.io framework — same conceptual space!),
-`samesame` (multiple existing tools), `lockstep` (fintech SDKs + a language),
-`cleave` (PyPI + cleave.js). `cognate`/`homolog` have free namespaces (backups);
-cognate sits next to `cognee` (an AI-memory Claude plugin). **calque**'s PyPI/npm/
-GitHub namespace is free; metaphor is dead-on (cross-language structural copy).
+Chose **calque** after collision checks. Rejected: `twinscan` (ASML lithography +
+bioinformatics), `mitosis` (Builder.io framework), `samesame` / `lockstep` /
+`cleave` (existing tools/SDKs). The PyPI/npm/GitHub namespaces were free; the
+metaphor is dead-on (a cross-language structural copy).
 
 ---
 
-## 8. Relationship to the user's other projects
+## 8. Relationship to sibling projects
 
-- **`justinstimatze/hybrid`** (public) — the meta-framework calque instantiates.
-  calque should be (a) added to `hybrid/BLOCK_GRAPHS.md` as the "dual-path /
-  behavioral-twin auditor" exemplar under Knowledge-base auditor, and (b) ideally
-  *authored using* the hybrid skill, which auto-triggers on exactly the prompt
-  that started this ("a tool that watches X and flags when a pattern recurs").
-- **`justinstimatze/defn`** (`~/Documents/defn`) — Go code-graph (definitions +
-  call/ref/interface edges in Dolt). It indexes the *reference graph*, so it's
-  structurally blind to dual-path (twins don't call each other) — but it's the
-  ideal **Go-side recall backend**: calque's signals become SQL over defn's graph
-  instead of a fresh `go/ast` parser. Philosophically the same project
-  (externalize code knowledge that dies at context-close), different target.
-- **stope** (`~/Documents/lamina/poc/dense/stope`) — the calibration target and
-  first real customer; already cited in hybrid's catalog. Remaining dual-path work
-  there (tasks #234, plus the ~17 unadjudicated calque suspects) is downstream.
-- **`/home/gas6amus/Documents`** — another of the user's accounts (access granted
-  via setfacl 2026-06-05). Scanned for overlap: **no prior dual-path / code-
-  equivalence tool exists.** `nondual` is a puzzle game (name was a red herring);
-  `loopback` is a closed-loop EEG/HRV→adaptive-music system (another hybrid-loop
-  instance, different domain); `hybrid` is the framework itself. calque is the
-  user's first solution to this problem — not a duplicate.
+- **[hybrid](https://github.com/justinstimatze/hybrid)** — the meta-framework
+  calque instantiates; calque is its "knowledge-base auditor" exemplar.
+- **[defn](https://github.com/justinstimatze/defn)** — a Go code-graph
+  (definitions + call/ref/interface edges). It indexes the *reference graph*, so
+  it's structurally blind to dual-path (twins don't call each other) — but it's an
+  ideal **Go-side recall backend**: calque's signals can become queries over
+  defn's graph instead of a fresh parse. Same philosophy (externalize code
+  knowledge that dies at context-close), different target.
+- A private interactive-fiction engine is calque's **calibration target and first
+  real customer** — the source of the calibration findings cited throughout this doc.
+- The prose axis was consolidated from a sibling prose-criticism project (MIT; see
+  §16).
+
+A survey of the author's projects found **no prior dual-path / code-equivalence
+tool** — calque is the first solution to this problem in the portfolio, not a
+duplicate.
 
 ---
 
-## 9. Roadmap — path to 2026 SOTA
+## 9. Roadmap
 
-> **Current direction (end of session 2): dogfood on stope first.** Decision is to
-> keep calque pointed at stope for a while before generalizing — real usage there
-> tells us which P0 profile work actually matters, instead of building profiles
-> speculatively. **Treat P0 below as planned, not started; do not begin the
-> profile refactor without that signal.** Near-term value = running scans on stope
-> and adjudicating into `stope/.calque/registry.md`.
+The architecture is the consensus 2026 shape (recall → adjudicate → verdict). To
+*be* state-of-the-art, calque must (a) generalize its signal beyond one project's
+conventions, (b) close the loop with a real verdict leg, and (c) prove recall on a
+public benchmark.
 
-Reframed in session 2 around the survey (§6) and the central problem: **calque
-works on stope; making it work on *any* large project is the real challenge**
-(§13). The architecture is SOTA-shaped (recall→adjudicate→verdict, the consensus
-2026 shape); to *be* SOTA, calque must (a) generalize its signal beyond stope's
-conventions, (b) close the loop with a real verdict leg, and (c) prove recall on
-a public benchmark. Prioritized to that end:
-
-**Done (session 2)**
-- ~~Seed stope's registry~~ — 30 suspects adjudicated; loop closed end-to-end
-  (calque found `_check_artifact_flashback`, a real prod bug; stope fixed it).
-- ~~Global skill + CLI~~ — `~/.claude/skills/calque/` + `pipx` editable `calque`.
-- ~~Delegation down-weight~~ — adapters that forward to `self._engine` no longer
-  name-anchor (killed the 21/30 false positives). [commit bc91dca]
-- ~~Missing-twins + reachability gate~~ — coverage-gap sweep, dispatcher-aware
-  gate suppresses verbs driven via `step("x")`. Opt-in; still coarse (§13).
-- ~~Configurability~~ — `--role-prefixes`, `--delegation-roots`, `--dispatchers`
-  let other repos override the stope-shaped defaults.
+**Done**
+- Code axis (Go `go/ast` + embedded `python3`), parity-verified against the
+  original Python implementation's scores.
+- The registry-aware `check` gate; warn-only + `--strict`.
+- **N-ary private-symbol touchpoint clustering** (§15) — the recall upgrade for
+  inlined sub-function seams; validated on the real target.
+- **Calibration** (`doctor` + `mark-fire`): discrimination signal (mean score of
+  useful vs not-useful suspects) + precision@k.
+- **Hook** (`hook install` — git pre-commit / Stop-hook) and **MCP** (`mcp` —
+  both gates over stdio JSON-RPC).
+- Prose axis (`vocab-report` / `synonym-report` / `vocab-check`), consolidated
+  from a sibling project (§16).
+- Git-tag versioning (hindcast pattern); `migrate-registry` for the old format.
 
 **P0 — Generalization (the SOTA-blocker; see §13)**
 1. **Pluggable signal profiles.** Factor extraction behind a `FuncSig`-producer
-   interface; ship profiles beyond stope's *effectful-OOP* one: *functional*
-   (return-shape, arg/param names, raised exceptions), *API/contract* (routes,
-   params, status codes), *data-pipeline* (input/output schema). The ranker
-   (jaccard + dedup + gate) is already domain-agnostic — only the signal set is
-   stope-shaped. Per the survey: there is **no universal behavioral signal**, so
-   profile-per-domain is the correct architecture, not a hack.
-2. **Recall benchmark.** Validate on GPTCloneBench + CETBench (§6): measure what
-   fraction of known Type-4 pairs calque ranks as suspects. This is how SOTA is
-   *claimed*, not asserted. Guards against the "generalization cliff" (per-repo
-   tuning that doesn't transfer).
-3. **Auto-learn the conventions** (stretch): infer role-prefixes, delegation
-   roots, and dispatcher names from a repo's own naming distribution instead of
-   flags. Risky (can strip meaningful tokens) — gate behind measurement from #2.
-3a. **Rare private-symbol touchpoint signal + N-ary recall (from stope #269; see §15).**
-   Highest-leverage code-axis upgrade the evidence points to. Inverted index of private
-   symbols (leading-underscore call/string/write) → functions touching them; a symbol
-   touched by 2..K functions is a shared internal seam (weight by rarity, TF-IDF). Emit
-   **clusters** `{members, shared-symbols}`, not just pairs, and key the registry on a
-   set. This catches sub-function inlined-block duplication across differently-named
-   functions (the #269 triple shell: `step`/`step`/`run` all touch `_parse_action` +
-   `_agent_canon`) that whole-function pairwise Jaccard drowns. Pairs with #6 (audit)
-   and the antibody generator below. **Planned, not started.**
-3b. **Antibody generator (registry → executable guard).** When a cluster is adjudicated,
-   emit stope's hand-written shape (`inspect.getsource`: assert every member routes
-   through the shared primitive, none call the forbidden bare primitive — cf.
-   `test_session_shell_unification.py`). Makes the verdict leg (#4) concrete for the
-   collapse-to-single-path case. **Planned, not started.**
+   interface; ship profiles beyond the current *effectful-OOP* one: *functional*
+   (return-shape, params, raised exceptions), *API/contract* (routes, params,
+   status codes), *data-pipeline* (input/output schema). The ranker is already
+   domain-agnostic — only the signal set is project-shaped. There is **no
+   universal behavioral signal**, so profile-per-domain is the correct
+   architecture, not a hack.
+2. **Recall benchmark.** Validate on GPTCloneBench + CETBench: what fraction of
+   known Type-4 pairs does calque rank as suspects? This is how SOTA is *claimed*,
+   not asserted — and it guards against the per-repo "generalization cliff."
+3. **Antibody generator (registry → executable guard).** When a cluster is
+   adjudicated, emit a structural test (assert every member routes through the
+   shared primitive, none call the forbidden bare primitive). Makes the verdict
+   leg concrete for the collapse-to-single-path case. *Planned.*
 
-**P1 — Second axis: env/config parity (from stope usage; see §14)**
-3.5. **Env-parity sibling check.** A second lens for the *same* meta-bug ("one value
-   defined in N places that drift") in config rather than code: diff each launcher's
-   effective boot env (`make dev`, `roleplay-server`, conftest, …) against a canonical
-   prod profile (`fly.toml [env]`), minus a declared dev-override whitelist; flag any
-   parity-critical flag that differs or is unset. Same recall→adjudicate→registry
-   loop, registry keyed on `(flag, launchers, prod value)`. Different lens (shell/
-   Make/TOML/conftest parsing, not Python AST), so a **sibling check, not a profile**.
-   **Planned, not started** — stope's boot-time parity assertion covers its instance
-   today; build the static cross-launcher check when that proves insufficient.
-
-**P1 — Close the loop (recall is half a tool)**
-4. **Verdict leg.** Wire a Hypothesis `RuleBasedStateMachine` template that drives
-   both sides of a `contracted-twin-ok` pair and asserts equal outputs (stope #234:
-   ScriptedGame vs GameSession). The survey's strongest result (2602.15761) is that
-   *differential fuzzing* is the right oracle — generalize the template to
-   rapid (Go) / fast-check (TS).
-5. **Calibration layer.** `calque calibrate` reports precision@k from the
-   registry's `predicted:` scores vs recorded verdicts; tune `_WEIGHTS` from data,
-   per-profile. (Registry already carries the `predicted:` half.)
-6. **Metabolism layer.** `calque audit` re-checks `contracted-twin-ok` pairs for
-   fresh drift (re-extract; re-flag if a side's signature changed since the
-   verdict). `_sync_ruin_cap` is the canonical risk (both delegate today; an
-   inline tomorrow re-drifts).
+**P1 — Second axes**
+4. **Env/config parity** (§14) — one code path booted with different effective
+   config by different launchers; the same meta-bug in config rather than code.
+   A *sibling check*, not a code profile (it parses shell/Make/TOML/CI, not ASTs).
+5. **Verdict leg.** A `RuleBasedStateMachine`/`rapid`/`fast-check` template that
+   drives both sides of a `contracted-twin-ok` pair and asserts equal outputs.
+6. **Metabolism.** Re-check `contracted-twin-ok` pairs for fresh drift (re-extract;
+   re-flag if a side's signature changed since the verdict).
 
 **P2 — Reach & ergonomics**
-7. **Go + TS extractors.** TS via ts-morph; Go as a query layer over `defn`.
-   Falls out of #1 (profiles) once the producer interface exists.
-8. **Boundary presets.** `--preset harness` (engine*×testing), `--preset
-   client-server`, `--preset v1-v2` so users don't hand-craft globs.
-9. **min-score calibration.** Feedback flagged the engine×testing default could be
-   ~0.25 (post-delegation-downweight, a 0.19–0.21 noise tail appears). Make it
-   boundary-relative rather than a hardcoded constant — but only after #2/#5 give
-   data; don't bake a tuned threshold (generalization-cliff risk).
-10. **Add calque to hybrid's catalog** — under "Knowledge-base auditor" in
-    `hybrid/skills/hybrid-loops/references/BLOCK_GRAPHS.md`, beside `defn`.
-    **Deferred until calque is stabilized + public** (per Justin). Entry drafted.
-
-**TODO — Cross-language dogfood targets (next, per Justin 2026-06-06)**
-11. **Run the LLM-as-nose fuzzy hunt on `undercity` (TypeScript).** Dusty (475
-    TS/TSX + 209 JS/JSX files, last commit 2026-03-21), so likely carries the same
-    meta-bug stope did, but in TS. Apply the §15 live-hunt method: enumerate shells/
-    entry points, find taxonomies defined in N literal places, parallel parsers,
-    serialization twins, magic constants, the env/config tail. Produce a TS-flavored
-    language-design feedback doc (TS levers: discriminated unions + exhaustive `switch`
-    with `never`, **branded/opaque types** for raw-vs-canonical, `as const` + derived
-    union for single-source taxonomies, `satisfies`, eslint custom rules / dependency-
-    cruiser as the import-linter-equivalent antibody). Validates the cross-language
-    claim and feeds the TS extractor (item 7, ts-morph).
-12. **Poke at a Go repo for the same pattern** — `gemot` is big enough (163 `.go`
-    files; `adit` 44, `defn` 33 as backups). Hypothesis (Justin): Go is *slightly* more
-    robust to this (no inheritance → less template-method drift; implicit/structural
-    interface satisfaction). But check its own flavors: pre-generics copy-paste,
-    duplicated `error` handling, struct-tag drift, two impls of one interface, `const`
-    blocks redefined. Goal is *generality* — confirm whether the meta-bug + the
-    private-symbol-touchpoint signal transfer to Go, to make calque broadly capable.
+7. **Go + TS extractors.** TS via ts-morph or tree-sitter; Go as a query layer
+   over defn. Falls out of #1 once the producer interface exists.
+8. **Boundary presets** (`--preset harness|client-server|v1-v2`) so users don't
+   hand-craft globs.
+9. **Cross-language dogfood.** Confirm the meta-bug + the private-symbol-touchpoint
+   signal transfer to TypeScript and Go siblings (TS levers: discriminated unions,
+   branded/opaque types, `as const` taxonomies; Go: pre-generics copy-paste,
+   duplicated error handling, struct-tag drift). Goal is *generality*.
 
 ---
 
-## 10. Open questions / decisions for a parallel session
+## 10. Open questions
 
-- **Registry location.** Per-repo `<repo>/.calque/registry.md` (chosen) vs a
-  central store. Per-repo wins for portability + git-tracked memory; confirm.
-- **Cross-language pairs.** stope's real dual paths include JS-client ↔ Python-
-  server (#233). calque (single-language AST) can't express those. Options: a
-  shared spec/contract file both extractors map onto, or a differential at the
-  API boundary. Out of scope for the AST core; note as a known gap.
+- **Registry location.** Per-repo `<repo>/.calque/registry.md` (chosen) for
+  portability + git-tracked memory, vs a central store. Confirm at scale (§17.5).
+- **Cross-language pairs.** Real dual paths include JS-client ↔ Python-server. A
+  single-language AST nose can't express those; the options are a shared
+  spec/contract both extractors map onto, or a differential at the API boundary.
+  Out of scope for the AST core; a known gap.
 - **Within-repo whole-scan mode.** Currently boundary-only (left×right). A
   whole-repo O(n²) mode needs name-stem prefiltering to be tractable; worth it for
   "find dual paths I didn't know to look for."
-- **Should the LENS ever be an LLM?** For *prose-heavy* substrates (corpus files,
-  config) a deterministic lens underperforms. Not relevant to code, but if calque
-  ever audits non-code substrate, the lens flips back to LLM.
+- **Should the LENS ever be an LLM?** For *prose-heavy* substrates a deterministic
+  lens underperforms — which is exactly why the prose axis (§16) carries embedding
+  recall.
 
 ---
 
 ## 11. How to pick up
 
 ```bash
-cd ~/Documents/calque
-python -m pytest tests/ -q            # 6 green
-calque scan --repo ~/Documents/lamina/poc/dense/stope \
-    --left "engine*.py" --right "testing.py" --out /tmp/calque.md
-# coverage-gap sweep with the reachability gate (see §12):
-#   calque scan --repo <stope> --left "engine*.py" --right "testing.py" \
-#       --missing --missing-corpus "testing.py" "tests/*.py"
-# other-convention repos: --role-prefixes / --delegation-roots / --dispatchers
-# then open /tmp/calque.md and adjudicate, writing verdicts into
-# ~/Documents/lamina/poc/dense/stope/.calque/registry.md (it now exists — grep
-# it first; see registry.template.md for the schema)
+go install github.com/justinstimatze/calque/cmd/calque@latest   # or `make install`
+calque scan  --repo <repo> --left "engine*.py" --right "testing.py"
+calque check --repo <repo> --left "engine*.py" --right "testing.py"   # gate vs registry
+# then adjudicate each suspect and record the verdict in <repo>/.calque/registry.md
+# (see registry.template.md for the schema). Tune the boundary, not the threshold.
 ```
 
-The loop is in `SKILL.md`. The IP is `core.py` (the signals + scoring). Everything
-else is scaffolding. Tune the boundary (`--left/--right`), not the threshold.
+The agent-facing loop is in `SKILL.md`. The core is `internal/code` (the signals +
+scoring). Everything else is the shared spine.
 
 ---
 
-## 12. Session-2 technical additions (2026-06-05)
+## 12. The delegation gate, missing-twins, and calque vs Hypothesis
 
-### Delegation gate (precision fix for the 21/30 adapter problem)
-stope's first run was 21/30 *adapters*, not reimplementations: harness methods
-that just `return self._engine.step(...)` and repackage the result. They're
-**named after** what they wrap, so name-stem matches the real method — a
-guaranteed false-positive anchor. `core.py` now detects forwarding to a wrapped
-impl (`_DELEGATION_ROOTS` = `_engine`/`_impl`/`_inner`/…) and sets `FuncSig.delegates`,
-so a **name match alone can no longer anchor a delegating pair** (it must also
-share real surface/effect). Pure delegators drop off; rich adapters that still
-share emitted strings/calls (like stope's `radio`/`share`) remain — correctly,
-since they own a sliver of glue logic that *can* drift. Pinned by
-`test_pure_delegator_named_after_engine_not_flagged`.
+### Delegation gate (precision)
+The first run on a harness-heavy target was dominated by *adapters*, not
+reimplementations: harness methods that just forward to a wrapped engine and
+repackage the result. They're **named after** what they wrap, so the name-stem
+matches the real method — a guaranteed false-positive anchor. The scorer detects
+forwarding to a wrapped impl (`_engine`/`_impl`/`_inner`/…) and sets a `delegates`
+flag, so a **name match alone can no longer anchor a delegating pair** — it must
+also share real surface/effect. Pure delegators drop off; rich adapters that still
+share emitted strings/calls remain, correctly, since they own glue logic that
+*can* drift.
 
-### Missing-twins lift (recall fix, from maturity_check overlap)
-Asked whether stope's `maturity_check.py` had dual-path logic worth lifting.
-Finding: its `_check_dual_path_drift` (lines 474–531) is a **name-substring grep**
-— for each engine `_handle_X`, check if `X` appears anywhere in `testing.py` +
-`tests/*`. Strictly *weaker* than calque (no word boundaries → `move` matches
-`remove`; no AST on the test side; **hardcoded 6-file engine list that silently
-ignores 7 of the 13 `engine_*.py` mixins**). **Do not lift the grep.** But it
-catches one thing calque's pair-ranker structurally can't: a contract that exists
-on the left with **no twin on the right at all** (never written / deleted) →
-produces zero pairs → invisible to `rank()`. Lifted as `missing_twins()` +
-`--missing`, *generalized*: instead of hardcoding `_handle_`, it **learns which
-role prefixes are twinned on this boundary** (those that produced a real match)
-and reports only gaps within those roles, so engine-internal helpers don't flood.
+### Missing-twins + reachability gate (recall)
+The pair-ranker is structurally blind to a contract that exists on the left with
+**no twin on the right at all** (never written / deleted) → zero pairs → invisible.
+`missing_twins` (`--missing`) covers that: it **learns which role prefixes are
+twinned on this boundary** and reports only gaps within those roles. To avoid
+over-flagging a harness built around one command dispatcher (a verb driven by
+`step("pray")` is fully tested with no `def pray()`), it takes a `--missing-corpus`
+**reachability gate** — the verb vocabulary of *dispatcher-call* string args in a
+usage/test corpus — and suppresses any candidate whose role-stripped stem is
+covered. It remains a **coarse, opt-in recall aid, not a clean report**: the
+residue is engine internals whose role-prefix was twinned by coincidence, which no
+structural signal can rule out (that's domain knowledge).
 
-**Reachability gate (`--missing-corpus`).** "No dedicated twin method" massively
-over-flags any harness built around a single command dispatcher: a verb driven by
-`game.step("pray")` is fully tested with no `def pray()`. So `missing_twins` takes
-`reachable_terms` — the verb vocabulary of *dispatcher-call* string args in a
-usage/test corpus (`extract_command_terms`, scoped to `_DEFAULT_DISPATCHERS` =
-step/do/run/…, configurable via `--dispatchers`). A candidate whose role-stripped
-stem is covered by those terms is suppressed. This is the disciplined form of
-maturity_check's grep: **word-boundary, string-literals-in-dispatcher-calls only,
-used to suppress not flag.** It's deliberately dispatcher-scoped so a verb word in
-an *assertion* or a *fact-name* string (`'count_unstable'`) doesn't create false
-reachability — that scoping is what keeps the genuinely-untested `pray`/`sing`/
-`count` flagged while suppressing `eat`/`pet`/etc.
-
-**Honest precision caveat.** Even gated, stope still shows ~82 (down from 116):
-the reachability gate fixes the *dispatcher-reachable* false positives, but the
-bulk that remain are `_get_*`/`_check_*`/`_resolve_*`/`_maybe_*` **engine
-internals** whose role-prefix was "twinned" by a couple of coincidental matches.
-No structural signal knows those aren't *meant* to have a harness twin — that's
-domain knowledge. So `missing_twins` is a **coarse, opt-in recall aid, not a clean
-report**; the actionable yield on stope is the ~6 player-verb gaps (`pray`, `sing`,
-`count`, `follow`, `inventory`, `wait`). This is a concrete instance of the
-generalization challenge in §13. (Sibling idea not lifted: maturity_check's
-`_check_chokepoint_bypass`, lines 537–643 — a "who may mutate this state"
-allowlist; a future calque precision signal if it ever accepts per-repo config.)
-
-### Configurability (first generalization step)
-The stope-shaped constants are now CLI-overridable (extend the defaults):
-`--role-prefixes`, `--delegation-roots`, `--dispatchers`. This removes the
-*hardcoding* hazard the survey warned about (naming-convention-dependence) but
-not the *signal*-shape assumption (§13) — that needs profiles, not flags.
-
-### calque vs Hypothesis (they're different legs, not competitors)
-This came up early; pinning the distinction. **calque is discovery; Hypothesis is
-verification.** They sit on opposite ends of the same loop.
+### calque vs Hypothesis (different legs, not competitors)
+**calque is discovery; Hypothesis is verification** — opposite ends of the same loop.
 
 | | **calque** | **Hypothesis** (`RuleBasedStateMachine`) |
 |---|---|---|
-| Question | *Which* pairs might be the same contract? | Does *this* known pair actually behave identically? |
-| Method | static AST signal overlap, ranked | runs both, generates inputs, compares impl-vs-model/impl-vs-impl |
-| Input | a whole boundary (`left×right`), zero setup | one pair + a hand-written model/state machine |
-| Output | a ranked suspect list (recall) | a concrete counterexample, or "no counterexample in N tries" |
-| Soundness | unsound both ways (heuristic; over-flags) | a failure is a *real* bug; passing is only probabilistic |
-| Cost | ~instant on the repo | per-pair model authoring + runtime |
+| Question | *Which* pairs might be the same contract? | Does *this* known pair behave identically? |
+| Method | static AST signal overlap, ranked | runs both, generates inputs, compares |
+| Input | a whole boundary, zero setup | one pair + a hand-written model |
+| Output | a ranked suspect list (recall) | a concrete counterexample, or none in N tries |
+| Soundness | unsound (heuristic; over-flags) | a failure is a *real* bug |
 
-The key asymmetry: **Hypothesis cannot *discover* a dual path.** It has no notion
-that `ScriptedGame.move` and `_handle_move` should agree unless *you already
-wrote* the differential test driving both — at which point you already knew. It
-won't tell you the harness drifted; it can only prove/disprove a hypothesis you
-supplied. calque finds the drift you *didn't know to test*. Conversely calque
-never *confirms* equivalence (undecidable; it's a nose, not a judge).
-
-So they **compose** along the hybrid loop: calque = GATE/recall →
-adjudicate = REASONER → for a `contracted-twin-ok` pair, **pin it with a
-Hypothesis `RuleBasedStateMachine` that drives both impls and asserts equal
-outputs** = the ACTION/verdict leg, recorded as `policy: differential-test` in
-the registry. That differential test is exactly roadmap #5 (stope #234:
-ScriptedGame vs GameSession). Analogy: calque is the smoke detector (cheap,
-whole-house, points you to a room); Hypothesis is the lab assay (one sample,
-near-definitive). You want both — and stope's existing `test_dual_path_parity.py`
-is the hand-rolled, non-generative ancestor of that Hypothesis leg.
+The asymmetry: **Hypothesis cannot *discover* a dual path** — it can only
+prove/disprove a hypothesis you already supplied (at which point you already knew).
+calque finds the drift you *didn't know to test*; conversely it never *confirms*
+equivalence. So they **compose**: calque (GATE/recall) → adjudicate (REASONER) →
+pin a `contracted-twin-ok` pair with a differential test (ACTION/verdict leg).
+calque is the smoke detector; Hypothesis is the lab assay. You want both.
 
 ---
 
-## 13. The generalization challenge (honest assessment, session 2)
+## 13. The generalization challenge (honest assessment)
 
-Observed bluntly in session 2: **a lot of calque is specific to stope and its
-effectful-OOP interactive-fiction engine conventions.** Generalizing to *any*
-large project is the central open problem (roadmap P0). Being honest about what's
-specific vs general is the prerequisite.
+**A lot of calque's signal is tuned to one project's effectful-OOP conventions.**
+Generalizing to *any* large project is the central open problem (roadmap P0).
+Being honest about what's specific vs general is the prerequisite.
 
-### What's stope-shaped (the signals encode assumptions)
-The three behavioral signals are not domain-neutral — each assumes a coding style:
-
+### What's project-shaped (the signals encode assumptions)
 | signal | assumes | weak/absent on |
 |---|---|---|
-| **returned dict keys** | functions return `dict` results | objects/dataclasses/tuples/`None` returns |
-| **attribute write-targets** (`self.world.x`) | mutable OOP self-state; mutation = effect | functional / immutable / pure code |
-| **emitted string literals** | functions emit user-facing text (game/IF/CLI) | libs where strings are log lines / dict keys (noisy) |
+| **returned dict keys** | functions return `dict` results | objects/dataclasses/tuples/`None` |
+| **attribute write-targets** | mutable OOP self-state; mutation = effect | functional / immutable / pure code |
+| **emitted string literals** | functions emit user-facing text (game/IF/CLI) | libs where strings are log lines / keys |
 
-And the constants encode stope's naming/architecture (now flag-overridable, but
-the *defaults* are stope): `_ROLE_PREFIXES` (verb_noun handlers), `_DELEGATION_ROOTS`
-(harness-wraps-`self._engine`), `_DEFAULT_DISPATCHERS` (a `step("verb")` command
-loop), and the canonical `engine*×testing` boundary (harness-vs-prod drift). The
-`missing_twins` reachability gate is the sharpest example: it only makes sense
-because stope routes everything through one dispatcher.
+And the default constants encode one project's naming/architecture (role-prefixes,
+delegation roots, dispatchers, the `engine*×testing` boundary) — all now
+flag-overridable, but the *defaults* are project-shaped.
 
 ### What's genuinely general (keep)
-- The **hybrid loop**: recall (gate) → adjudicate (reasoner) → registry
-  (substrate) → verdict (action). This is the consensus 2026 architecture (§6).
-- The **ranker**: per-signal jaccard, weighted + renormalized over available
-  signals, noise-gate, best-match dedup. Nothing in `rank()`/`score_pair` is
-  stope-specific — it scores whatever signals it's handed.
-- The **delegation down-weight** (adapters can't drift), **calibration**,
-  **metabolism**, and the "a nose, not a judge" stance.
+- The **hybrid loop**: recall → adjudicate → registry → verdict. The consensus
+  2026 architecture (§6).
+- The **ranker**: per-signal jaccard, weighted + renormalized, noise-gate,
+  best-match dedup. Nothing in it is project-specific — it scores whatever signals
+  it's handed.
+- The **delegation down-weight**, **calibration**, **metabolism**, and the "a nose,
+  not a judge" stance.
 - Per-repo `.calque/registry.md` as portable, git-tracked substrate.
 
 ### The design path: pluggable signal *profiles*, not more flags
-The survey's load-bearing finding: **there is no universal behavioral signal** —
-behavior is unknowable statically, so any detector must pick *domain-appropriate
-invariants* (NSF 10113743). Therefore the right architecture is:
+Because there is **no universal behavioral signal**, any detector must pick
+*domain-appropriate invariants*. So: keep the ranker; make **extraction** a
+pluggable `FuncSig`-producer profile (`effectful-oop` today; `functional`,
+`api-contract`, `data-pipeline` next). Configurability (`--role-prefixes` etc.)
+was step one — it removes *hardcoding* but not the *signal-shape* assumption.
+Profiles are step two; the recall benchmark (P0 #2) is how you'd *know* a profile
+generalizes rather than just believe it.
 
-> Keep the ranker; make **extraction** a pluggable `FuncSig`-producer profile.
-
-- **`effectful-oop`** (today): emitted strings + attr-writes + ret-dict-keys +
-  callees + name-stem. Fits stope, IF engines, CLIs, stateful services.
-- **`functional`**: return-value shape/type, parameter names, raised exception
-  types, called names. Fits pure/transform-heavy code.
-- **`api-contract`**: routes, HTTP verbs, param names, status codes, payload
-  keys. Fits the client-server drift case (stope #233, JS↔Python) — also the
-  cross-language gap, since both sides map onto the *same* contract vocabulary.
-- **`data-pipeline`**: input/output column/schema names, dtypes.
-
-Configurability (`--role-prefixes` etc.) was step one — it removes *hardcoding*
-but not the *signal-shape* assumption. Profiles are step two. Validation
-(roadmap P0 #2) is how we'd know a profile generalizes rather than just believe
-it — the survey's "generalization cliff" warning is that per-repo intuition does
-*not* transfer; only benchmark recall numbers do.
-
-**Bottom line.** calque is a validated *instance* (stope) of a general *shape*.
-The shape is SOTA-aligned; the instance is one profile. The work to "become 2026
-SOTA for this kind of problem" is precisely: factor the profile boundary, add 2–3
-profiles, and prove recall on GPTCloneBench/CETBench. Until then, calque is
-honestly described as "a dual-path finder tuned for effectful-OOP Python," not "a
-universal one."
+**Bottom line.** calque is a validated *instance* of a general *shape*. The shape
+is SOTA-aligned; the instance is one profile. Becoming "2026 SOTA for this problem"
+is precisely: factor the profile boundary, add 2–3 profiles, and prove recall on
+GPTCloneBench/CETBench.
 
 ---
 
-## 14. The env/config-parity axis (a second axis, from stope usage 2026-06-05)
+## 14. The env/config-parity axis (a second axis)
 
-Real-usage feedback from the stope side (`/tmp/calque_feedback_env_parity.md`,
-folded in here so it's durable) surfaced a dual-path divergence calque's code axis
-**cannot** see — and shouldn't be bent to. Worth recording as a distinct axis.
-
-**What happened.** A live playtest booted the app via `make roleplay-server`, which
-left `STOPE_INPUT_LLM` / `STOPE_NOUN_EMBED` **unset** while prod
-(`deploy/fly.toml [env]`) sets both. So the session exercised a non-prod input path
-without knowing it — at least the 6th time a harness/prod flag divergence has bitten,
-despite a standing rule (`feedback_harness_mirror_prod_flags`).
+Real usage surfaced a dual-path divergence the code axis **cannot** see — and
+shouldn't be bent to. A live run booted an app via one launcher that left two
+LLM/embedding env flags **unset** while production sets both, so the session
+exercised a non-prod input path without knowing it.
 
 **Why calque misses it.** calque finds Type-4 *code* clones — two code paths that
 should converge. This is the dual: **one** code path fed **different config by two
-launchers**. The divergence lives in the *environment a process boots with*, not in
-duplicated code. calque watches code; it has no notion of "these two run targets
-should boot the same effective config."
+launchers**. The divergence lives in the *environment a process boots with*, not
+in duplicated code.
 
-**Same meta-bug, different substrate.** The deeper finding is squarely calque's
-thesis: config has no single source — ~65 scattered `os.environ.get("STOPE_*", default)`
-reads across ~38 flags, each with its own inline default, plus a hand-maintained
-`PROD_PLAYER_FLAGS` Make var mirroring only 3. "Same value defined in N independent
-places that drift" is *exactly* the meta-bug calque kills, just in config not code.
+**Same meta-bug, different substrate.** Config has no single source — dozens of
+scattered `os.environ.get("…", default)` reads, each with its own inline default,
+plus a hand-maintained mirror of a few in a Make var. "Same value defined in N
+independent places that drift" is *exactly* the meta-bug calque kills, in config
+not code.
 
-**Shape of an env-parity check** (sibling to the code axis — same recall→adjudicate→
-registry loop, different lens):
-1. **Inputs / run profiles.** `deploy/fly.toml [env]` as canonical prod, plus every
-   launcher that boots the app (`make dev`, `dev-no-reload`, `roleplay-server`,
-   `panel_driver.sh`, CI/test conftest).
+**Shape of an env-parity check** (sibling to the code axis — same recall →
+adjudicate → registry loop, different lens):
+1. **Run profiles.** A canonical prod profile (e.g. `fly.toml [env]`), plus every
+   launcher that boots the app (`make` targets, dev scripts, CI/test conftest).
 2. **Check.** For each launcher, diff its effective exported env against the prod
-   profile, minus a declared whitelist of intentional dev overrides (e.g.
-   `STOPE_API_DEV`, `STOPE_DB_PATH`). Flag any parity-critical flag that differs or
-   is unset. This is a *static, across-all-launchers, pre-boot* check.
-3. **Registry.** Keyed on `(flag, [launchers that set it], prod value)` — a launcher
-   omitting a parity-critical flag becomes a registered divergence, not a surprise.
+   profile, minus a declared whitelist of intentional dev overrides; flag any
+   parity-critical flag that differs or is unset — a *static, across-all-launchers,
+   pre-boot* check.
+3. **Registry.** Keyed on `(flag, [launchers that set it], prod value)`.
 
-**Relation to the app-level fix.** stope is fixing its instance with a typed config
-layer (`stope/config.py`) + a boot-time parity assertion (server refuses to start if
-effective parity-critical config ≠ the fly.toml prod profile). That boot guard is
-runtime enforcement for one process; a calque env-parity check is strictly broader —
-it catches the gap statically across *all* launchers calque can read, before boot.
+This is a genuinely different lens (parse shell/Make/TOML/conftest, not Python
+AST), so it's a **sibling check, not a profile** of the code extractor. *Planned*
+— build it when an app-level boot-parity guard proves insufficient.
 
-**Scope call (don't over-rotate).** This is a genuinely different lens (parse shell/
-Make/TOML/conftest env exports, not Python AST signatures), so it's a *sibling
-check*, not a profile of the code extractor. It is **planned, not started** (same
-dogfood-first discipline as P0). Recorded here and in the roadmap (§9, P1) so it
-isn't lost; build it only when stope usage shows the boot-guard isn't enough.
+---
 
+## 15. The triple-shell finding — granularity + N-ary recall
 
-## 15. The triple-shell finding — granularity + N-ary recall (from stope #269, 2026-06-06)
+The dominant drift shape observed in real use was a **triple**, not a dual — and
+it shows where whole-function pairwise scoring is blind.
 
-Two days of stope work (2026-06-04→06) were almost entirely one activity: finding
-and collapsing parallel implementations of a single contract. The meta-bug recurred
-in **four substrates** in 48h — talk paths (#228/#230), constructor-vs-legacy
-(#224/#234), harness-vs-prod tests (the migration waves), env/config (#240, §14) —
-and the dominant one was a **triple**, not a dual. This is the most important recall
-evidence calque has gathered since the seed run, because it shows where the current
-nose is blind.
+**The triple session-shell.** Three orchestrations turned a raw input line into a
+dispatched command, each independently inlining the same `[parse → read/clear a
+canon → dispatch]` block: two `step` methods (programmatic + web) and a `run` loop
+(interactive). The third drifted **silently for months** — it parsed directly and
+ignored the canon, dispatching the raw line instead of the canonical command. The
+cure: extract the shared primitives and route all three through them.
 
-**The #269 triple session-shell.** Three orchestrations turned a raw player line into
-a dispatched command, each independently inlining the same
-`[_parse_action → read/clear _agent_canon → dispatch]` block:
-`GameEngine.step` (programmatic), `GameSession.step` (web/prod), and
-`GameEngine.run` (interactive CLI loop). The third drifted **silently for months**:
-`run()` called `_parse_action` directly and ignored `_agent_canon`, so it dispatched
-the model's raw line instead of the #128 constructor's canonical command. Cure:
-extract `_resolve_clause` + `_prepare_command_line`, route all three through them.
+**Why the old nose would miss it** — even though the fingerprint is fully present
+in the signals:
+1. **Whole-function granularity dilutes it.** The duplicated unit is a ~5-line
+   *block*, but the methods are large; the seam's few tokens are swamped, so
+   pairwise jaccard scores below threshold.
+2. **The name signal misleads.** `step` vs `run` share no stem; the thing that
+   *should* pair them — a shared private seam — wasn't a signal at all.
+3. **Pairwise, not N-ary.** Even if two of the three surfaced, the third pairs
+   with neither, so the *triple* is structurally invisible.
 
-**What calque caught vs missed.** It caught the harness-vs-prod boundary
-(`engine*×testing`, the seed run — 4 drifts, those are *name twins*). It would have
-**missed the #269 trio**, even though the fingerprint is fully present in today's
-signals: `self._parse_action(...)` is recorded as call `_parse_action`;
-`getattr(self, "_agent_canon", None)` as string `_agent_canon`;
-`self._agent_canon = None` as write `_agent_canon`. Three concrete reasons it misses:
+**The upgrades this argued for (now implemented):**
+1. **Rare private-symbol touchpoint signal.** An inverted index: each private
+   symbol (leading-underscore / unexported call·write·getattr-string) → the set of
+   functions touching it. A symbol touched by 2..K functions is a *shared internal
+   seam*, weighted by rarity (`1/fanout`, repo-size-independent, private-boosted —
+   touched-by-50 is plumbing, touched-by-2–4 is signal). *Presence*-based, so it
+   survives the dilution that defeats jaccard, and it needs no naming convention.
+2. **N-ary clustering + N-ary registry.** Emit a *cluster* `{members, shared
+   seams}`, not just a pair; key the registry on a **set**. Same shape as the
+   env-parity axis (a set of launchers) — both unify under "a set of sites that
+   should share one seam."
+3. **Emit the antibody.** Once a cluster is adjudicated, generate the structural
+   guard (assert each member routes through the shared primitive, none call the
+   bare one) — registry → executable antibody. *Still planned.*
 
-1. **Whole-function granularity dilutes it.** The duplicated unit is a 5-line *block*,
-   but `step`/`step`/`run` are large methods. The seam's few tokens are swamped, so
-   pairwise Jaccard (`score_pair`) scores below threshold. The signal is real but
-   drowned.
-2. **The name signal misleads.** `step` vs `run` share no stem; name weight (.22) plus
-   everything else is diluted. The thing that *should* pair them — a shared private
-   seam — isn't a signal at all today.
-3. **Pairwise, not N-ary.** calque only emits pairs. Even if `step ≟ step` surfaced,
-   `run()` pairs with neither, so the *triple* is structurally invisible.
-
-**The three upgrades this argues for** (all P0-adjacent — they strengthen the existing
-code axis, they are not a new sibling like §14):
-
-1. **Rare private-symbol touchpoint signal.** Inverted index: each private symbol
-   (leading-underscore call/string/write) → set of functions touching it. A symbol
-   touched by 2..K functions (K small) is a *shared internal seam*; weight by rarity
-   (TF-IDF — touched-by-50 is plumbing/noise, touched-by-2-4 is signal). `_parse_action`
-   is touched by exactly the 3 shells → instant triple, **name- and size-agnostic.**
-   This is *presence*-based, so it survives the dilution that defeats Jaccard, and it
-   needs no naming convention — strictly more robust than the name-stem signal.
-2. **N-ary clustering + N-ary registry.** Emit a *cluster* `{members, shared-rare-symbols}`,
-   not just a pair. The registry currently keys on `left/right`; key it on a **set**.
-   This is the *same shape* as the env-parity axis (a set of launchers) — both unify
-   under "a set of sites that should share one seam."
-3. **Emit the antibody.** stope hand-wrote `tests/test_session_shell_unification.py`:
-   `inspect.getsource` over the three shells, asserting each contains `_resolve_clause`
-   and none contain bare `_parse_action(`. That is literally a manual, instance-specific
-   calque output. Once a cluster is adjudicated, calque should generate exactly that
-   structural guard — making "close the loop" (§9, P1) concrete: registry → executable
-   antibody. stope's own phrase: *detection, not vigilance.*
+**Status: #1 + #2 implemented.** `internal/code/touchpoint.go`
+(`ClusterByTouchpoint`) wires into `scan` (an "N-ary clusters" report) and `check`
+(NEW-CLUSTER / known / STALE-CLUSTER, keyed on the member set via `pairkey.SetKey`;
+the registry parses `- cluster:` lines). `scorePair` is deliberately left untouched
+(folding a seam signal into pairwise scoring would shift the parity-verified
+baseline; deferred to the calibration leg). **Validated on the real target:** the
+pass surfaced the exact three-shell cluster the case demonstrates, and self-dogfood
+caught the N-ary extent of calque's own signal-taxonomy drift (a cluster the
+pairwise registry entry only saw two of). The open follow-up is *ranking* (the
+cluster score sums seam rarities, so bushy multi-seam subsystems outrank the tight
+triple — a calibration tuning question, not a correctness one) and the antibody
+generator.
 
 **General lessons (for the profile/generalization work, §13).**
-- **N is usually >2 and the unit is usually sub-function.** Pairwise named-function
-  similarity sees the easy third (name twins) and misses the expensive part (triples,
-  inlined blocks).
+- **N is usually > 2 and the unit is usually sub-function.** Pairwise named-function
+  similarity sees the easy name-twins and misses the expensive part.
 - **The cheap universal tell of a parallel path is a shared touch of a *private*
-  symbol.** Public touchpoints are noise (everyone calls them); private ones mean two
-  sites do the same internal job. Cross-language, convention-free.
-- **Enumerate the project's "shells"** — every entry point that turns the same input
-  into the same effect (CLI loop, programmatic API, web handler, test harness, cron,
-  launcher env). The audit: do all shells share the core primitive (code) and boot the
-  same effective config (env)? Same question, two substrates.
-- **The fix's closing move is a structural antibody,** generated from the registry, so
-  a collapse can't silently re-divide.
+  symbol.** Public touchpoints are noise; private ones mean two sites do the same
+  internal job. Cross-language, convention-free.
+- **Enumerate the project's "shells"** — every entry point that turns the same
+  input into the same effect (CLI loop, programmatic API, web handler, test
+  harness, launcher env). The audit: do all shells share the core primitive (code)
+  and boot the same effective config (env)? Same question, two substrates.
 
-**Status: upgrades #1 + #2 IMPLEMENTED (2026-06-06).** The private-symbol
-touchpoint signal + N-ary clustering ship in `internal/code/touchpoint.go`
-(`ClusterByTouchpoint`), wired into `scan` (a "N-ary clusters" report section) and
-`check` (NEW-CLUSTER / known / STALE-CLUSTER, keyed on the member SET via
-`pairkey.SetKey`; the registry parses `- cluster:` lines). The pass inverts the
-problem: an index of private seam symbols (leading-underscore / unexported call,
-write, or getattr-string names, minus language builtins) → the functions touching
-each; a symbol touched by 2..K functions is a shared seam, scored by rarity
-(`1/fanout`, repo-size-independent, ×1.6 for private). Output is a *cluster*
-`{members, shared seams}` — the N-ary unit. `scorePair` is deliberately left
-untouched (folding a seam signal into pairwise scoring would shift the
-parity-verified stope baseline; deferred to the calibration leg).
+---
 
-**Validated on the real target.** Run on stope, the pass surfaced **C87 =
-`GameSession.step` + `GameEngine.run` + `GameEngine.step`** as one cluster sharing
-`_resolve_clause` + `_prepare_command_line` + `_execute_one_turn` — the exact #269
-triple-shell, the case whole-function pairwise Jaccard structurally cannot express.
-(stope has since *fixed* #269 by extracting those primitives, so the live cluster
-reads as the fix working — the three shells correctly routing through the shared
-seam; before the fix the same trio would have clustered on `_parse_action` +
-`_agent_canon` = the drift.) Self-dogfood caught the N-ary extent of calque's own
-signal-taxonomy drift (a 4-site cluster the pairwise registry entry only saw 2 of)
-and was adjudicated into `.calque/registry.md`; `check` is self-clean.
+## 16. calque as a substrate-general drift engine — the prose convergence
 
-**Open calibration follow-up (#3 antibody still pending):** the cluster score is a
-sum of seam rarities, so bushy multi-seam subsystem clusters (8 members, ~14 shared
-helpers) outrank the tight triple (C87 ranks ~#87). Both are real recall; the
-*ranking* (sum vs. average rarity, tight-seam boost) is a tuning question for the
-calibration leg (§9 P1 #5), not a correctness one. The antibody generator (#3) is
-still planned, not started.
+**The third substrate: prose.** A sibling project (MIT) — a large
+literary-criticism corpus — fought exactly calque's meta-bug ("one concept
+expressed N ways that drift") in *prose*, where there are **no native guardrails
+at all** (no compiler, types, or tests). It independently **reinvented calque's
+entire loop**: a read-only frequency surface of hyphenated compounds (the recall
+nose), embedding near-synonyms (recall for the [WEAK] vocabulary-drift case), a
+warn-only → strict gate against an allowlist (the registry-aware check), a
+calibration rollup, and a pre-commit hook.
 
-**Live-hunt corroboration (2026-06-06, LLM-as-nose).** Acting as the nose by hand
-(fuzzy-matching the "right spots" rather than running the AST scanner) over stope
-surfaced parallel-path drift the current static nose *and* stope's hand-written #269
-antibody both miss — confirming the §15 thesis with concrete instances:
-- **A taxonomy defined in ≥5 literal sets.** The verb-synonym table
-  (examine/look/talk/…) lives in `input_llm._VERB_CONFIG` (canon) + `affordances._EMBED_VERBS`
-  (the only copy with a lockstep test) + `memory_scene._map_verb` + `reach_scene.ALLOWED_VERBS`
-  + an `engine.py` regex — already drifted (`read`/`listen` exist in only one copy each).
-  Invisible to the AST nose: these are *set/regex literals inside differently-named
-  functions*, not function twins; the tell is the *pattern* ("a literal set of
-  verb-synonyms"), which is an LLM/fuzzy match, not a `FuncSig` signature.
-- **A magic constant straddling both axes.** `0.65` (cosine threshold) is a module
-  constant in 4 files, synced by a *comment*, and only one honors the
-  `STOPE_NOUN_EMBED_THRESHOLD` env override — so the code-duplication axis (§15) and the
-  env-parity axis (§14) meet in one bug. Argues the two axes should share a registry
-  shape: "a value with N definition sites, some code, some env."
-- **A 4th input parser in a different subsystem.** `MemoryScene._parse_input` rolls its
-  own prep-strip with no politeness strip (re-opening #269 brick-3 in the scenes), and
-  the #269 antibody — scoped to three named shells — can't see it. Argues for the
-  registry-driven antibody (a Protocol + registry so a *new* shell is auto-covered)
-  over hard-coded shell lists.
-- **Calibration win:** the `to_dict`/`from_dict` pairs *looked* like drift to a crude
-  scan but adjudication found them clean (disciplined emit-if/get-with-default). The
-  recall→adjudicate split earned its keep — same honesty as the seed run's
-  4-drift/21-ok/5-false-alarm tally.
+So the meta-bug is **substrate-independent**: code (§15), config/env (§14), and
+prose (§16) — three axes of "one value/contract/concept defined in N places that
+drift," each a sibling instantiation of the same recall → registry → check →
+calibrate loop, converged independently. That is strong thesis validation.
 
-Net: an LLM fuzzy-hunt is a viable *nose* for exactly the cases the static heuristic
-can't rank (sub-function, cross-subsystem, data-literal, cross-axis). The build
-implication isn't "drop the static nose" — it's that calque's adjudicate leg could be
-LLM-driven over LLM-surfaced candidates, with the static nose as the cheap first pass.
-Fed back to stope as `reference/calque-language-design-feedback.md` (Python levers:
-parse-once into a typed Command, `NewType` raw-vs-canon, single-source taxonomies as
-data, registry-driven antibody, import-linter contracts). See [[calque-triple-shell-recall]].
+**Consolidation: the two toolchains were themselves an instance of the meta-bug**
+(two implementations of one loop), so they were collapsed to one. **calque is the
+keeper**; the prose project becomes a *consumer*. License: the prose source is MIT,
+calque Apache-2.0 — compatible; MIT attribution is preserved for the lifted
+portions.
 
+**Broad demand for the prose axis.** Several corpora in the portfolio need it (a
+forthcoming pattern/lexicon substrate especially), so the prose/vocab axis is a
+general capability, not a one-off — it must run easily on arbitrary prose repos.
 
-## 16. calque as a substrate-general drift engine — the cupel convergence + consolidation
+**The decision: rewrite calque in Go.** The mature, *calibrated* spine
+(registry/audit/calibrate/hook/embeddings) already existed in the prose project's
+Go; a **single static binary** is the killer requirement (calque must drop into
+many repos + CI + git hooks + agent loops with zero runtime deps, where a Python
+install is friction at scale); multi-language parsing goes through tree-sitter
+regardless of host language, so Python's only real edge (native `ast`) is moot
+beyond Python itself. Cost: port the small Python AST nose to Go (the signals —
+string literals, call-leaf names, assignment targets, name stems, private-symbol
+touchpoints — are shallow/syntactic and map cleanly), and redo the install
+(`go install`/binary) and the `/calque` skill.
 
-**The third substrate: prose.** `cupel` (a sibling project, MIT, `/home/gas6amus/Documents/cupel`)
-is a ~400-`.md` literary-criticism corpus. Over 2026-06-05→06 its agent fought exactly
-calque's meta-bug — "one concept expressed N ways that drift" — in *prose*, where there
-are **no native guardrails at all** (no compiler, types, or tests). It independently
-**reinvented calque's entire loop**, and got further than calque on two axes:
-
-| cupel piece (Go, `cmd/cupel/`) | what it is | calque analog |
-|---|---|---|
-| `vocab-report` | read-only frequency surface of hyphenated compounds | the **recall nose** |
-| `synonym-report` | embedding near-synonyms (local ollama), explicitly "noisy… a SURFACING tool… not a gate" | **recall signal for [WEAK] P2/P9** (calque lacks this) |
-| `vocab-audit` | warn-only→`--strict` gate; flags compounds ≥freq not in allowlist + auto-seeded canon (glossary/cluster slugs) | the missing **registry-aware `calque check`** |
-| `theory/vocab-allowlist.txt` | canonical/known-vocab allowlist | the **registry** (contracted-twin-ok set) |
-| `calib.go` (`mark-fire <id> <verdict>` → hit-rate over `fires.jsonl`) | **calibration** | calque roadmap **P1 #5**, already built |
-| `hook.go` (pre-commit / agent-loop, embedded substrate, event log) | **automation** | calque's agent-build-loop integration |
-| `critic.go` | adjudicator | the **LLM adjudicate leg** |
-
-So the meta-bug is **substrate-independent**: code (§15), config/env (§14), and now prose
-(§16) — three axes of "one value/contract/concept defined in N places that drift." And
-calque + cupel are **sibling instantiations of the same recall→registry→audit→calibrate
-loop**, converged independently. That is strong thesis validation (cf.
-[[hybrid-framework-relationship]] — both instantiate the hybrid loop).
-
-**Direction (Justin, 2026-06-06): consolidate cupel's drift tooling INTO calque** — "dedup
-it so it can be calque." The two toolchains are themselves an instance of the meta-bug
-(two impls of one loop); collapse to one. **calque is the keeper**; cupel becomes a
-*consumer* ("run the enhanced calque back on cupel later"). License: cupel is MIT, calque
-Apache-2.0 — compatible; preserve MIT attribution for any moved/lifted portions.
-
-**Broad demand for the prose axis.** Justin: "a lot of my projects probably need the cupel
-version of calque" — e.g. `/home/gas6amus/Documents/lexicon` ("going to be a nightmare
-later"). So the prose/vocab axis is not a cupel one-off; it's a general capability many
-of the user's corpora need. Whatever we build must run easily on arbitrary prose repos.
-
-**Open architecture decision (consolidation shape).** calque is Python (656 LOC, code-AST
-nose); cupel is mature Go (~6.1k LOC: prose extractor + the registry/audit/calibrate/hook
-spine + embedding synonyms). Justin: "we can move the code if you want." Options:
-(A) **polyglot** — move cupel's Go spine+prose in, keep the Python code-AST extractor, a
-common JSON candidate-record contract between them (preserves mature/calibrated code,
-least rework); (B) **all-Python** — port cupel's Go into calque (single-language, but
-reimplements 6k LOC of working, calibrated code + embeddings/hook; regression risk);
-(C) **all-Go** — make cupel's Go the base, port the AST nose to Go via tree-sitter
-(single-language, keeps the spine; redoes the nose); (D) **federate** — shared
-registry/candidate format now, merge codebases later.
-
-**DECISION (Justin + analysis, 2026-06-06): option (C) — calque is rewritten in Go.**
-Reasoning: (1) the mature, *calibrated* spine (registry/audit/calibrate/hook/embeddings)
-already exists in cupel's Go — moving a bunch of it anyway makes Go the path of least
-rework; (2) **single static binary** is the killer requirement — calque must drop into
-*many* repos + CI + git hooks + agent loops with zero runtime deps (pipx Python is
-friction at that scale); (3) multi-language code parsing goes through **tree-sitter**
-regardless of host language, so Python's only real edge (native `ast` for Python) is moot
-beyond Python itself — and Go's tree-sitter bindings are solid; (4) Justin already
-maintains in Go (gemot/defn/adit/cupel). Cost: port the small (656-LOC) Python AST nose to
-Go + tree-sitter (the signals — string literals, call leaf names, assignment targets, name
-stems, private-symbol touchpoints — are shallow/syntactic and map cleanly to tree-sitter
-queries), and redo the install (pipx → `go install`/binary) + the `/calque` skill. The
-substrate-general spine + prose axis come from cupel; the code axis is the port.
-
-**Architecture implication.** §13's "pluggable signal *profiles*" generalizes to
-**substrate axes** sharing one spine:
-- **recall** (substrate-specific extractor: AST FuncSig for code · compound/embedding
-  surface for prose · launcher env-diff for config) →
-- **registry** (substrate-general: a set of canonical/adjudicated entries; allowlist =
+**Architecture implication.** §13's "pluggable signal profiles" generalizes to
+**substrate axes sharing one spine**:
+- **recall** (substrate-specific extractor: AST FuncSig for code · compound/
+  embedding surface for prose · launcher env-diff for config) →
+- **registry** (substrate-general: a set of adjudicated entries; allowlist =
   registry) →
-- **check** (substrate-general: warn-only→strict gate, flag new/drifted vs registry) →
+- **check** (substrate-general: warn-only → strict gate, flag new/drifted) →
 - **calibrate** (substrate-general: log fires + verdicts → hit-rate → tune signals).
-The recall extractor is the only per-substrate part; registry/check/calibrate/hook are
-shared. This is the unification the env-parity (§14) finding already implied, now with a
-working prototype (cupel) to lift from.
 
-**Go scaffold + versioning (from `hindcast`, the structural model).** Layout:
-`cmd/calque/main.go` + `internal/...` + `Makefile` + `CHANGELOG.md`. **Versioning — adopt
-hindcast's pattern verbatim (it's itself drift-free, on-brand):** the **git tag is the
-single source of truth** — `VERSION := $(shell git describe --tags --always --dirty)`,
-injected via `-ldflags "-X main.version=$(VERSION)"`; `var version = "dev"` with a
-`buildVersion()` that prefers the ldflags value, then `runtime/debug.ReadBuildInfo()` (for
-`go install`), then "dev". **No hand-edited version constant** (nothing to drift). Semver
-tags (`git tag vX.Y.Z`). Carry a `SchemaVersion` const for the registry/data format so it
-can evolve. No dedicated go-template repo found under gas6amus/Documents (checked Templates/,
-personal-cargo-container/, name + minimal-repo search) — use **hindcast as the skeleton +
-cupel as the spine source**. Build sources: spine/prose/calib/hook/embeddings = move from
-cupel (MIT→Apache, keep attribution); code-axis nose = port calque's Python to Go +
-tree-sitter (`go/ast` for Go targets). (lucida lives at `/home/gas6amus/Documents/lucida`,
-not under /home/justin — resolves the earlier "not found".)
+The recall extractor is the only per-substrate part; registry/check/calibrate/hook
+are shared. The Go scaffold + git-tag versioning follow the
+[hindcast](https://github.com/justinstimatze/hindcast) pattern.
 
-## 17. The axis roadmap — how far "meta" the drift goes (2026-06-07)
+## 17. The axis roadmap — how far "meta" the drift goes
 
-The thesis of §16 generalizes further than code+prose. Captured here as the
-durable roadmap (it is a roadmap, not a build queue — most rows are reasoned
-from the invariant, not yet proven on a real substrate; prove one extractor at
-a time, the way code was).
+The thesis of §16 generalizes further than code+prose. This is the durable roadmap
+(a roadmap, not a build queue — most rows are reasoned from the invariant, not yet
+proven on a real substrate; prove one extractor at a time, the way code was).
 
 ### 17.1 The invariant and the axis template
 
 The meta-bug is one shape: **one canonical thing → N expressions → independent
-drift.** An *axis* is just a pair `(canonical unit, recall extractor)` bolted
-onto the shared spine (recall → registry → check/`mcp` → calibrate). The spine
-is substrate-general; **the recall extractor is the only per-substrate part.**
-So "is there more slop like this?" reduces to "what other recall extractors are
-worth writing?" — and adding an axis is "write an extractor"; the registry, the
-gate, the MCP tool, and calibration come free.
+drift.** An *axis* is just a pair `(canonical unit, recall extractor)` bolted onto
+the shared spine (recall → registry → check/`mcp` → calibrate). The spine is
+substrate-general; **the recall extractor is the only per-substrate part.** So "is
+there more slop like this?" reduces to "what other recall extractors are worth
+writing?" — and adding an axis is "write an extractor"; the registry, the gate, the
+MCP tool, and calibration come free.
 
 ### 17.2 The axis map
 
 | Axis | Canonical unit | Drift it catches | Status |
 |---|---|---|---|
-| code | a function's behavior | dual-path twins; N-ary inlined seams | **live** (validated on stope C87) |
+| code | a function's behavior | dual-path twins; N-ary inlined seams | **live** (validated) |
 | prose-vocab | a hyphenated compound | invented noun-stacks | **live** |
 | prose-synonym | a word | people/person/human word drift | **live** (recall-only) |
-| config-env parity | an env var / config key | same key drifts across launchers (Dockerfile/compose/CI/Make) | planned §14 |
+| config-env parity | an env var / config key | same key drifts across launchers | planned §14 |
 | pattern-pattern (catalog) | a *catalog atom* (named pattern/term) | two atoms = the same move under different names | gap — nearest neighbor of synonym (reuses `internal/embed`) |
 | value/constant | a magic value | same threshold/URL/port hardcoded in N places | gap (cheap, deterministic) |
 | schema/shape | a data shape | struct ↔ JSON ↔ OpenAPI ↔ migration ↔ TS diverge | gap (heavier) |
 | interface-doc | a declared flag/route | code says `--bar`, docs say `--foo` | gap |
-| dependency/version | a pinned version | same dep pinned differently across manifests/lockfiles | gap |
+| dependency/version | a pinned version | same dep pinned differently across manifests | gap |
 | narrative | a world-fact / state | see §17.4 | gap (rich; partly reuses §12) |
 
-Suggested sequence after code+prose: **config-env** (already scoped, deterministic,
-hit on stope) → **pattern-pattern/catalog** (smallest delta; we own the
-substrates) → **value/constant** (cheap win). Schema/doc/version are real but
-heavier and lower immediate demand.
+Suggested sequence after code+prose: **config-env** (already scoped, deterministic)
+→ **pattern-pattern/catalog** (smallest delta) → **value/constant** (cheap win).
+Schema/doc/version are real but heavier and lower immediate demand.
 
 ### 17.3 The meta-ladder — pattern, pattern-pattern, pattern-pattern-pattern
 
 The axes stack by level of abstraction:
 
-- **L0 — instance.** A single function, paragraph, config value. Not drift; the
-  raw material.
+- **L0 — instance.** A single function, paragraph, config value. The raw material.
 - **L1 — pattern.** "One contract expressed in N sites that drift." Code twins,
-  vocab compounds, config keys. *This is calque's current floor.*
+  vocab compounds, config keys. *calque's current floor.*
 - **L2 — pattern-pattern (the catalog/lexicon level).** The units are *named
   patterns themselves*; drift is two catalog atoms that are the same underlying
-  move under different names. Substrates: lexicon (~atoms), cupel's engine
+  move under different names. Substrates: a pattern lexicon, a project's engine
   catalog, any glossary. Mechanically this is prose-synonym promoted one level —
-  cluster *entries* (name+description) by embedding instead of *words*. (Note:
-  cupel's `clusters.go` is a renderer, not a detector — this axis is genuinely
-  unbuilt, the way the vocab gate was before consolidation.)
+  cluster *entries* (name+description) by embedding instead of *words*.
 - **L3 — pattern-pattern-pattern (cross-project).** The units are L2 shapes that
-  recur *across the portfolio*. The user's projects independently grow the same
-  architectural pattern-patterns — a recall→registry→gate→calibrate loop, a
-  seed/contract plugin point, git-tag versioning, a catalog→render build step,
-  the MCP stdio framing this very file records lifting from hindcast. Drift at
-  L3 = the same shape reimplemented divergently in N repos. **calque is itself an
-  L3 drift-fix:** the §16 cupel convergence (two projects grew the same drift
+  recur *across the portfolio*. Independent projects grow the same architectural
+  pattern-patterns — a recall→registry→gate→calibrate loop, a seed/contract plugin
+  point, git-tag versioning, a catalog→render build step, an MCP stdio framing.
+  Drift at L3 = the same shape reimplemented divergently in N repos. **calque is
+  itself an L3 drift-fix:** the §16 convergence (two projects grew the same drift
   loop → consolidate into one substrate-general engine) was exactly an L3
-  deduplication. The L3 "registry" is the house-pattern catalog — the global
-  CLAUDE.md house patterns and lexicon partially are it already. An L3 recall
-  extractor would read *across repos* for recurring architectural shapes and
-  flag where they've diverged (e.g. three projects' versioning schemes that
-  should be identical but aren't). This is where the user's projects overlap and
-  is the most leveraged — and least built — level.
+  deduplication. An L3 recall extractor would read *across repos* for recurring
+  architectural shapes and flag where they've diverged (e.g. three projects'
+  versioning schemes that should be identical but aren't). This is where projects
+  overlap and is the most leveraged — and least built — level.
 
-  **L3 already has a named substrate: `hybrid`** (`github.com/justinstimatze/hybrid`,
-  working copy `~/Documents/hybrid`). hybrid is the framework/vocabulary for
-  recurring LLM-and-code shapes (RAG, ReAct, knowledge-base auditor, the canonical
-  5-role lens→substrate→gate→reasoner→action loop); its shape catalog *is* the L3
-  registry, and calque / cupel / defn are cited instances in it (calque is the
+  **L3 already has a named substrate:
+  [hybrid](https://github.com/justinstimatze/hybrid).** hybrid is the framework/
+  vocabulary for recurring LLM-and-code shapes (RAG, ReAct, knowledge-base auditor,
+  the canonical 5-role lens→substrate→gate→reasoner→action loop); its shape catalog
+  *is* the L3 registry, and calque / defn are cited instances in it (calque is the
   "knowledge-base auditor" shape). So L3 is not hypothetical — the registry exists
   by hand; the gap is the *automated* cross-repo recall extractor that flags where
-  two instances of one hybrid shape have drifted apart. (Keep calque's prose
-  consistent with hybrid's canonical vocabulary: RECALL is *not* a role — it is
-  the gate tuned for recall.)
+  two instances of one hybrid shape have drifted apart.
 
 The ladder is the same invariant at each rung; only the canonical unit changes
 (instance → contract → named pattern → architectural shape).
 
-### 17.4 Narrative as a substrate (stope) — drift beyond code/vocab/config
+### 17.4 Narrative as a substrate — drift beyond code/vocab/config
 
-A sprawling high-agency narrative (characters, plot, player choice) has drift
-axes of its own. Several map directly onto machinery calque already has:
+A sprawling high-agency narrative (characters, plot, player choice) has drift axes
+of its own. Several map directly onto machinery calque already has:
 
 - **Continuity / canon-fact drift.** A character's established fact (backstory,
-  what they know, relationship state) asserted in multiple scenes that
-  contradict. The prose axis lifted from *word* to *entity-fact*: a character
-  bible vs the actual prose.
+  what they know, relationship state) asserted in multiple scenes that contradict.
+  The prose axis lifted from *word* to *entity-fact*: a character bible vs the
+  actual prose.
 - **State-vs-narrative drift (the high-agency special).** The game *state*
-  (flags/variables: has-key, NPC-dead, faction-hostile) vs the *narrative text*
-  shown. Branch explosion lets a path describe a world inconsistent with the
-  state machine (text greets a guard the state says you killed). This is the
-  purest instance of the invariant for games — one world, two representations
-  (engine state + prose), drifting — and is unique to interactive fiction.
-- **Voice / register drift per character.** Speech style drifts across a long
-  script — prose-synonym scoped per-speaker.
-- **Rule / affordance drift.** A game rule ("you can always rest at a campfire")
-  stated/implemented across code + config + tutorial text that diverge — the
-  config-parity axis applied to game rules.
+  (flags/variables) vs the *narrative text* shown. Branch explosion lets a path
+  describe a world inconsistent with the state machine (text greets a guard the
+  state says you killed). The purest instance of the invariant for games — one
+  world, two representations (engine state + prose) drifting — and unique to
+  interactive fiction.
+- **Voice / register drift per character** — prose-synonym scoped per-speaker.
+- **Rule / affordance drift** — a game rule stated/implemented across code + config
+  + tutorial text that diverge (the config-parity axis applied to game rules).
 - **Dangling setup/payoff (Chekhov drift).** A foreshadowed event that never
-  resolves, or a payoff with no setup — a *left with no right*. This is calque's
+  resolves, or a payoff with no setup — a *left with no right*: calque's
   **missing-twins** recall (§12) pointed at narrative.
-- **Orphan / unreachable scene.** High agency strands branches; dead narrative
-  content is dead code. Maps to the **reachability/coverage-gap gate** (§12).
+- **Orphan / unreachable scene.** Dead narrative content is dead code — the
+  **reachability/coverage-gap gate** (§12).
 
 The genuinely-new narrative extractors are the first two (canon-fact and
 state-vs-narrative); the rest reuse existing calque signals with a narrative
@@ -982,9 +647,9 @@ extractor in front.
 
 ### 17.5 Scaling the registry
 
-The human-readable `.calque/registry.md` is right for dogfood-scale repos but
-will not scale to large projects — appending and re-parsing a growing markdown
-file is O(n) per check and gets unwieldy to hand-edit. Roadmap: move the
-*storage* to a structured/indexed store (SQLite) while keeping a human-readable
-projection for review and git history. Not urgent — defer until a real consumer
-hits the wall; the markdown format stays the source of truth until then.
+The human-readable `.calque/registry.md` is right for dogfood-scale repos but will
+not scale to large projects — appending and re-parsing a growing markdown file is
+O(n) per check and gets unwieldy to hand-edit. Roadmap: move the *storage* to a
+structured/indexed store (SQLite) while keeping a human-readable projection for
+review and git history. Not urgent — defer until a real consumer hits the wall;
+the markdown stays the source of truth until then.

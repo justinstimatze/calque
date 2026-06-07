@@ -6,7 +6,7 @@ strings,writes,ret_keys,calls,delegates} — the same interchange the go/ast
 extractor produces. Extraction only: the Go side computes the name stem and
 scores, so the signal logic lives in one place per concern.
 
-Reused from the original Python calque (legacy/core.py) — Python's own ast is the
+Reused from the original Python calque — Python's own ast is the
 robust way to parse modern Python (match, walrus, type params), which is why the
 Go binary shells out here for .py targets rather than embedding a parser.
 """

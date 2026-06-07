@@ -124,7 +124,7 @@ func (b *goBody) recordTarget(e ast.Expr) {
 
 // attrPath returns the dotted attribute suffix of a selector chain, dropping the
 // root identifier: p.field.sub -> "field.sub", x.y -> "y". Empty if the base of
-// the chain is not a plain identifier (mirrors legacy/core.py _attr_path).
+// the chain is not a plain identifier (mirrors the original _attr_path).
 func attrPath(e ast.Expr) string {
 	var parts []string
 	cur := e

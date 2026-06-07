@@ -11,7 +11,7 @@ import (
 
 // extractors maps a file extension to a BATCH extractor (all paths of that ext
 // in one call). go/ast runs in-process; python3 runs once per scan as a
-// subprocess (so a stope scan spawns one interpreter, not one per file).
+// subprocess (so a large scan spawns one interpreter, not one per file).
 var extractors = map[string]func(paths []string, root string) ([]*FuncSig, error){
 	".go": extractGoBatch,
 	".py": extractPyBatch,

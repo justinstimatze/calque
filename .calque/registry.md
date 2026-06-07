@@ -35,7 +35,7 @@ the `weights` map, the `sig` + `avail` maps in `scorePair`, and the `switch` in
 `Reason`. The Python version had this (PATTERN_CATALOG P2/P3); the port reproduced
 it. Registered as known so `check` doesn't re-flag it. **Fix:** make signals
 table-driven (`[]signalDef{key,weight,sim,avail,render}`) so a new signal is one
-entry. [TODO]
+entry.
 
 ## runSynonymReport ≟ runVocabReport — CONTRACTED-TWIN-OK (latent; watch)
 - pair: cmd/calque/synonym_report.go::runSynonymReport | cmd/calque/vocab_report.go::runVocabReport
@@ -134,7 +134,7 @@ to a helper if it grows; pinned for now.
 ## Run — 2026-06-06 (N-ary touchpoint clustering added; self-dogfood of the new pass)
 
 Added the private-symbol touchpoint signal + N-ary clustering (DESIGN_NOTES §15,
-the #269 triple-shell gap). Running the new feature on calque itself surfaced one
+the triple-shell gap). Running the new feature on calque itself surfaced one
 real N-ary drift, the intentional cluster-mirrors-pair API parallels, and the
 usual key/set name-token coincidences. Adjudicated below; `check` is clean again.
 

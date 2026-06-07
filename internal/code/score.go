@@ -9,7 +9,7 @@ import (
 )
 
 // weights: surface (strings) + effect (writes) + role (name) carry the most —
-// they survive a full rewrite; calls/ret corroborate. (legacy/core.py _WEIGHTS.)
+// they survive a full rewrite; calls/ret corroborate.
 var weights = map[string]float64{
 	"strings": 0.30, "writes": 0.30, "name": 0.22, "calls": 0.10, "ret": 0.08,
 }

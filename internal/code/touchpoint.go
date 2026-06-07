@@ -4,8 +4,8 @@ package code
 //
 // Pairwise scoring (score.go) compares whole-function signatures, so it sees the
 // easy "name twins" but misses the expensive case: a small shared block inlined
-// into several large, differently-named functions. stope's #269 triple-shell is
-// the canonical miss — GameEngine.step / GameSession.step / GameEngine.run each
+// into several large, differently-named functions. The canonical miss is a
+// triple-shell input path — three entry methods (two `step`s and a `run`) each
 // inlined `[_parse_action -> read/clear _agent_canon -> dispatch]`; the few seam
 // tokens are swamped in big bodies, and the names share no stem, so pairwise
 // Jaccard scores them below threshold and, being pairwise, can't express a trio

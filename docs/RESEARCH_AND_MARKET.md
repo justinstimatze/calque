@@ -4,7 +4,7 @@ Extends DESIGN_NOTES §6 (which covers GPTCloneBench, CETBench, behavioral/Type-
 clones, HyClone, differential fuzzing). This doc adds: (1) calque's true intellectual
 lineage; (2) a primary-source competitive scan; (3) verified market evidence; (4) the
 go/no-go verdict. All claims below are from primary sources (product docs, papers,
-funding pages) gathered via a 4-agent dig; Kagi was 401 so WebSearch/WebFetch were used.
+funding pages).
 
 ---
 
@@ -111,7 +111,7 @@ registry + build-loop), not "we can spot a twin."
 
 ---
 
-## 4. Go/no-go verdict (reframed: Justin does NOT want to sell this)
+## 4. Go/no-go verdict
 
 The competitive question isn't "can we beat Greptile" — it's **"is there a tool to adopt
 instead of building?"** Answer: **no.** The only close thing (Greptile) is closed-source,

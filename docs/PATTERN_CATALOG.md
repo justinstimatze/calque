@@ -15,32 +15,33 @@ Status legend: **[CAUGHT]** current AST nose ranks it · **[WEAK]** partial sign
 needs the LLM/semantic nose · **[MISS]** current nose blind, upgrade identified ·
 **[SIBLING]** different lens (env / cross-language).
 
-Instances cited are from `lamina/poc/dense/stope` (Python), 2026-06-04→06, unless noted.
+Instances are drawn from real codebases — primarily a mid-size Python project under
+active development — generalized here, unless a public sibling is named.
 
 ---
 
 ## P1 — N-ary inlined shell duplication  [MISS → DESIGN_NOTES §15, roadmap 3a/3b]
 **Shape.** ≥2 entry points ("shells") each *inline* the same multi-step sequence; N is
 often >2 and the unit is a statement block, not a named function.
-**Seen.** #269: `GameEngine.step` / `GameSession.step` / `GameEngine.run` each inlined
-`[_parse_action → read/clear _agent_canon → dispatch]`; `run()` drifted silently for
-months (dropped the constructor canon).
+**Seen.** Three entry points (`step` on two adjacent classes, plus `run`) each inlined
+`[parse → read/clear a shared canon → dispatch]`; `run()` drifted silently for months
+(dropped the constructor-canon step).
 **Why generated.** Each shell written at a different time; inlining the sequence is
 locally complete — finding and routing through a shared primitive requires global
 knowledge the generator doesn't hold.
-**Tell.** A shared touch of *rare private symbols* (`_parse_action`, `_agent_canon`)
+**Tell.** A shared touch of *rare private symbols* (e.g. a private parse/canon helper)
 across differently-named functions. Presence-based, name-agnostic, N-ary.
-**Fix.** Extract the primitive (`_resolve_clause`), route all shells through it; pin
-with a registry-driven structural antibody.
+**Fix.** Extract the primitive, route all shells through it; pin with a registry-driven
+structural antibody.
 **Catchability.** Whole-function pairwise Jaccard drowns the block and the name signal
 misleads → needs the private-symbol-touchpoint signal + N-ary clustering.
 
 ## P2 — Taxonomy / vocabulary in N literal sets  [WEAK]
 **Shape.** One conceptual set restated as inline literals in many places.
-**Seen.** The "examine/look/talk" verb-synonym set in ≥5 spots: `input_llm._VERB_CONFIG`
-(canon) + `affordances._EMBED_VERBS` (only copy with a lockstep test) +
-`memory_scene._map_verb` + `reach_scene.ALLOWED_VERBS` + an `engine.py` regex. Already
-drifted (`read`/`listen` each in one copy only).
+**Seen.** A verb-synonym set ("examine/look/talk") restated in ≥5 spots: a canonical verb
+config + an embedding copy (the only one with a lockstep test) + a scene verb-map + an
+allowed-verbs list + an engine-side regex. Already drifted (two synonyms present in one
+copy only).
 **Why generated.** An inline literal set is locally legible; importing the canon needs
 knowing it exists and where.
 **Tell.** Same/overlapping string-literal cluster across files, or — more reliably — a
@@ -52,10 +53,9 @@ common); this is where the LLM nose earns its keep.
 
 ## P3 — Magic constant redefined in N modules  [SIBLING + WEAK]  (cross-axis)
 **Shape.** One tuning value as a module constant in several files, synced by a *comment*.
-**Seen.** `0.65` cosine threshold in `heard_set` / `affordances` / `noun_grounding` /
-`noun_disambiguation`; only `noun_grounding` honors `STOPE_NOUN_EMBED_THRESHOLD`, so the
-env override silently moves 1 of 4 sites — the code-duplication axis (P1/P2) meeting the
-env-parity axis (P8) in one bug.
+**Seen.** A `0.65` cosine threshold as a module constant in four modules; only one honors
+the corresponding env override, so the override silently moves 1 of 4 sites — the
+code-duplication axis (P1/P2) meeting the env-parity axis (P8) in one bug.
 **Why generated.** Needed the number locally; re-typed it.
 **Tell.** Identical numeric literal bound to similarly-named constants across files;
 cross-referenced with env reads of the "same" knob.
@@ -66,9 +66,9 @@ should share a registry shape: "a value with N definition sites, some code, some
 ## P4 — Parallel parser in an un-enumerated subsystem  [MISS]
 **Shape.** A subsystem rolls its own mini version of a core primitive the main antibody
 doesn't know to check.
-**Seen.** `MemoryScene._parse_input` — own preposition strip, own verb map, *no
-politeness strip* (re-opening #269 brick-3 inside the scenes). The #269 antibody is
-scoped to three named shells, so it can't see a fourth.
+**Seen.** A subsystem's own `_parse_input` — own preposition strip, own verb map, *no
+politeness strip* (re-opening the P1 bug inside a subsystem). The original antibody was
+scoped to three named shells, so it couldn't see a fourth.
 **Why generated.** A subsystem feels self-contained; the model builds it complete in
 itself rather than reaching back to the shared normalizer.
 **Tell.** A function whose body shape matches a core primitive (split + strip + map
@@ -81,9 +81,9 @@ antibody is the generalizing fix.
 ## P5 — Serialization twin (write/read halves)  [CAUGHT-able, audit-leg]
 **Shape.** `to_dict`/`from_dict` (or save/load, encode/decode) — two halves that must
 agree on a field set, edited independently.
-**Seen.** Many pairs in stope; **adjudicated clean here** (disciplined emit-if-non-
-default / read-with-default) — a calibration win: recall surfaced them, adjudication
-cleared them. Latent twin nonetheless (a new field must touch both halves by hand).
+**Seen.** Many such pairs in the surveyed code; **adjudicated clean** (disciplined
+emit-if-non-default / read-with-default) — a calibration win: recall surfaced them,
+adjudication cleared them. Latent twin nonetheless (a new field must touch both halves by hand).
 **Why generated.** Both halves written at creation; later field additions touch one.
 **Tell.** Paired functions sharing a field-name set; drift = asymmetric key set.
 **Fix.** Dataclass + `asdict` / single field source; or a round-trip property test.
@@ -91,9 +91,9 @@ cleared them. Latent twin nonetheless (a new field must touch both halves by han
 
 ## P6 — Harness vs prod path (test double reimplements prod)  [CAUGHT]
 **Shape.** A test/harness reimplements prod logic instead of driving it; the two drift.
-**Seen.** `ScriptedGame` vs the real engine — the calque seed-run boundary
-(`engine*×testing`), where calque found **4 real drifts**; plus the 323-test migration
-back onto the prod path.
+**Seen.** A test harness vs the real engine — the canonical `engine* × testing` boundary,
+where calque found **4 real drifts**; plus a large test-suite migration back onto the
+prod path.
 **Why generated.** Faking behavior in the harness is easier than wiring the real engine.
 **Fix.** Harness *delegates* to prod (adapter, not reimpl) + a differential test.
 **Catchability.** calque's home turf — name-stem + shared-calls + shared-strings.
@@ -105,24 +105,24 @@ back onto the prod path.
 
 ## P8 — Env / config parity (one path, N launcher configs)  [SIBLING → §14]
 **Shape.** One code path booted with different effective config by different launchers.
-**Seen.** `make roleplay-server` left `STOPE_INPUT_LLM`/`STOPE_NOUN_EMBED` unset vs prod
-`fly.toml`. ~65 scattered `os.environ.get` across ~38 flags.
-**Fix.** Typed single-source config + boot parity guard (stope #240); static
-cross-launcher diff (calque sibling check, planned).
+**Seen.** One launcher left two LLM/embedding env flags unset versus the production
+config. Dozens of scattered `os.environ.get` reads across many flags.
+**Fix.** Typed single-source config + a boot-parity guard; static cross-launcher diff
+(calque sibling check, planned).
 **Catchability.** Different lens (parse shell/Make/TOML/conftest, not Python AST).
 
 ## P9 — Value computed two ways across subsystems  [WEAK]
 **Shape.** A derived value computed by independent functions in different subsystems.
-**Seen.** `engine_explore._exit_label_for` vs `scene_state._connection_exit_label` —
-both answer "what do we call the exit A→B."
+**Seen.** Two functions in different modules both answering "what do we call the exit
+A→B" — independently derived, with no shared helper.
 **Tell.** Functions sharing an arg signature + output concept across modules.
 **Fix.** Shared helper or a differential.
 **Catchability.** Partial via name + return-shape; medium.
 
 ## P10 — Client/server contract split (cross-language)  [SIBLING, open]
 **Shape.** A classification/rule duplicated in a JS/TS client and a Python server.
-**Seen.** #233 web `TALK_MODE_PASSTHROUGH_VERBS` (since retired → single path; the fix
-held — a negative result worth recording).
+**Seen.** A web client's verb-passthrough list duplicated server-side (since retired →
+single path; the fix held — a negative result worth recording).
 **Fix.** Shared spec/contract both sides map onto, or a cross-language differential.
 **Catchability.** Not by a single-language AST nose (DESIGN_NOTES §10 open question).
 
@@ -138,59 +138,61 @@ held — a negative result worth recording).
 - **[SIBLING]** (P8, P10) are separate axes/lenses (env parity; cross-language spec).
 
 This catalog is **language-agnostic by design** — the next step is to confirm each shape
-on `undercity` (TS) and `gemot` (Go) and note which transfer, which are language-specific,
+on TypeScript and Go siblings and note which transfer, which are language-specific,
 and which a language's type system already neutralizes (roadmap items 11–12). Extend this
 file as new shapes are found.
 
 ---
 
-## Cross-repo evidence — 6-repo LLM-as-nose survey (2026-06-06)
+## Cross-repo evidence — a multi-repo LLM-as-nose survey
 
-Surveyed 6 of Justin's non-fork repos (Python/Go/TS) with LLM fuzzy-hunts using this
-catalog as the checklist. The meta-bug is present in **every repo, every language.**
+Surveyed several sibling repos (Python/Go/TS) with LLM fuzzy-hunts using this catalog as
+the checklist. The meta-bug appeared in **every repo, every language.** Public siblings
+are named with links; private ones are described by language and domain only.
 
 **Confirmed LIVE drift (copies already disagree) — including real bugs, not just tidiness:**
-- **publicrecord** (TS, regulatory data — correctness IS the product): `sanitizeCaseNumber`
-  canonicalizes an *identity key* 3 different ways across adapters (`[^a-z0-9]+` vs
-  `[^a-z0-9-]` vs `[^a-z0-9.-]`) → same case → different IDs → silent dedup misses (P7).
-  `normalizeDate` in 5 adapters (P4) — *not* live-broken (each parser matches its own
-  source: US `MM/DD`, EU `DD/MM`+`DD.MM`) but a latent landmine: 5 copies, no range
-  validation, next copy-paste grabs the wrong variant. No shared `src/ingest/utils.ts`.
-- **effigy** (Py): `compression_ratio` computed with **reversed operands** —
-  `metrics.py` (`json/effigy`) vs `discovery.py` (`baseline/dossier`) — two same-named
-  metrics measuring inverse things; cross-referencing them corrupts analytics (P7).
-- **undercity** (TS): `MAX_OBJECTIVE_LENGTH` = 500 (`pm-schemas.ts`) vs 2000
-  (`server.ts`) — validation vs handler disagree (P3). `.undercity` state-dir literal in
-  19+ files (P3, latent).
-- **gemot** (Go): retry budget 3/5/10 across files (P3); `GEMOT_API_SECRET` resolution
-  drifts across 8 scripts — diplomacy has a legacy-var + `.env` fallback others lack (P8).
-- **defn** (Go): `DEFN_BRANCH` checkout inlined 3× (P1/P8); `Kind` taxonomy in 4 places
-  (P2); `DEFN_PORT` "3307" default twice (P3).
-- **adit** (Go, *itself a code-health scanner*): session-JSONL parse loop inlined 3× with
-  already-differing filters (P1); `json.MarshalIndent` boilerplate ×7 (P1, latent); two
-  different complexity taxonomies — `nesting.go` (36 node kinds) vs `branching.go` (subset)
-  (P2). **The tool has the disease it diagnoses.**
+- **A TS regulatory-data project** (correctness *is* the product): an identity-key
+  canonicalizer was implemented 3 different ways across adapters (varying the allowed
+  character class) → the same input produced different IDs → silent dedup misses (P7). A
+  date parser was copy-pasted into several adapters (P4) — not live-broken (each matched
+  its own source format) but a latent landmine: many copies, no range validation, and the
+  next paste grabs the wrong variant. No shared ingest utility.
+- **[effigy](https://github.com/justinstimatze/effigy)** (Py): a `compression_ratio`
+  metric computed with **reversed operands** in two modules — two same-named metrics
+  measuring inverse things; cross-referencing them corrupts analytics (P7).
+- **A TS agent tool**: an objective-length limit defined as two different values in the
+  schema vs the handler (P3); a state-dir path literal repeated across ~20 files (P3, latent).
+- **[gemot](https://github.com/justinstimatze/gemot)** (Go): a retry budget restated as
+  several different values across files (P3); an API-secret resolution that drifts across
+  scripts — one has a legacy-var + `.env` fallback the others lack (P8).
+- **[defn](https://github.com/justinstimatze/defn)** (Go): a branch-checkout sequence
+  inlined several times (P1/P8); a `Kind` taxonomy restated in multiple places (P2); a
+  default port literal duplicated (P3).
+- **[adit-code](https://github.com/justinstimatze/adit-code)** (Go, *itself a code-health
+  scanner*): a session-JSONL parse loop inlined several times with already-differing
+  filters (P1); serialization boilerplate repeated many times (P1, latent); two divergent
+  complexity taxonomies in adjacent files (P2). **The tool has the disease it diagnoses.**
 - **calque** (Py, self-scan — see `.calque/registry.md`): its own signal taxonomy
-  `{strings,writes,name,calls,ret}` hand-written in 4 places (`_WEIGHTS` + `sig` + `avail`
-  + `reason`) — calque's *own* P2/P3 bug, caught by its own nose.
+  `{strings,writes,name,calls,ret}` was hand-written in 4 places (`_WEIGHTS` + `sig` +
+  `avail` + `reason`) — calque's *own* P2/P3 bug, caught by its own nose.
 
 **Six findings the survey proves:**
 1. **P3 (magic constants) and P8 (env/config scatter) dominate every repo, every
    language.** They are the literal connective tissue between the code axis (§15) and the
    env-parity axis (§14) → strong evidence for ONE registry keyed on "a value with N
    definition sites, code *or* env."
-2. **Go is robust but narrowly** (gemot + defn): kills *signature* drift (compile-time
-   `var _ Interface = (*T)(nil)`) but does nothing for config-scatter, inlined
-   orchestration, or *behavioral* drift between two impls. Slop sources are
+2. **Go is robust but narrowly** (the Go repos): the compiler kills *signature* drift
+   (compile-time `var _ Interface = (*T)(nil)`) but does nothing for config-scatter,
+   inlined orchestration, or *behavioral* drift between two impls. Slop sources are
    inheritance-independent.
-3. **The unit of memory is the group, not the pair** — empirically: 5× `normalizeDate`,
-   8× `GEMOT_API_SECRET`, 5× verb-sets (stope), 4× `0.65` (stope), 19× `.undercity`.
-   N-ary registry validated in the wild.
-4. **adit-irony + calque-self-bug:** code-tools (a health scanner; calque itself) carry
+3. **The unit of memory is the group, not the pair** — empirically, the same value or set
+   recurred at many sites at once (date parsers, API-secret resolution, verb-sets,
+   thresholds, state-dir literals). N-ary registry validated in the wild.
+4. **Tool-irony + calque-self-bug:** code-tools (a health scanner; calque itself) carry
    the bug they detect. It is *invisible from inside* — the strongest argument for an
    external standing nose.
-5. **Real LIVE data-corrupting drifts exist** (publicrecord IDs/dates, effigy metrics,
-   undercity limits) — this is a bug class, not a neatness preference.
-6. **Calibration earned its keep:** crude scans false-flagged clean serialization pairs
-   (stope `to_dict`/`from_dict`, dos/phone); adjudication cleared them. Recall surfaces,
-   adjudicate decides — the core loop, repeatedly validated.
+5. **Real LIVE data-corrupting drifts exist** (identity-key/date drift, inverted metrics,
+   disagreeing limits) — this is a bug class, not a neatness preference.
+6. **Calibration earned its keep:** crude scans false-flagged clean serialization pairs;
+   adjudication cleared them. Recall surfaces, adjudicate decides — the core loop,
+   repeatedly validated.

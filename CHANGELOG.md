@@ -32,13 +32,13 @@ source and validated on a real Python codebase.
   real content but parses to zero entries (almost always a format/path mismatch),
   `check` now prints `⚠ registry … has content but parsed 0 entries …` instead of
   silently treating the whole repo as new. Detects the Python-era format and names
-  `migrate-registry`. Closes the silent-cry-wolf failure mode that surfaced on
-  stope (a 30-entry registry read as 0 → 26k false "new"). Pinned by
+  `migrate-registry`. Closes the silent-cry-wolf failure mode seen in practice
+  (a 30-entry registry read as 0 → 26k false "new"). Pinned by
   `cmd/calque/check_test.go`.
 - **`migrate-registry`** — one-time converter for Python-era registries. The
   Python calque wrote `## id — verdict` + `- left:`/`- right:` blocks; the Go
   parser keys on `- pair: <left> | <right>`, so an un-migrated registry parses to
-  ZERO entries and `check` falsely flags the whole repo as new (hit on stope: a
+  ZERO entries and `check` falsely flags the whole repo as new (hit in practice: a
   30-entry registry read as 0 known → 26k "new"). Conservative: preserves all
   human prose, skips ``` fences (the registry's own template), inserts the
   `- pair:` line, and normalizes verdict (`contracted-twin-ok (collapsed) — was
@@ -110,8 +110,8 @@ source and validated on a real Python codebase.
   Pinned by `cmd/calque/hook_test.go`.
 - **Code axis: N-ary touchpoint clustering** (`internal/code/touchpoint.go`) — the
   recall upgrade for the case pairwise scoring structurally misses: a small shared
-  block inlined into several large, differently-named functions (stope's #269
-  triple-shell). Inverts the problem — an index of *private seam symbols*
+  block inlined into several large, differently-named functions (the triple-shell
+  input-path case). Inverts the problem — an index of *private seam symbols*
   (leading-underscore / unexported call·write·getattr-string names, minus language
   builtins) → the functions touching each; a symbol touched by 2..K functions is a
   shared internal seam, scored by rarity (`1/fanout`, repo-size-independent,
@@ -119,8 +119,8 @@ source and validated on a real Python codebase.
   pairwise nose cannot express. Wired into `scan` (report section) and `check`
   (NEW-CLUSTER / known / STALE-CLUSTER); the registry parses `- cluster:` lines,
   keyed on the member SET (`pairkey.SetKey`). `scorePair` left untouched to
-  preserve the parity-verified stope baseline. **Validated:** surfaced the exact
-  #269 trio (`GameSession.step`/`GameEngine.run`/`GameEngine.step`) on stope; the
+  preserve the parity-verified baseline. **Validated:** surfaced the exact
+  three-shell input-path cluster on the calibration target; the
   self-scan caught the N-ary extent of calque's own taxonomy drift (DESIGN_NOTES
   §15). Pinned by `internal/code/touchpoint_test.go`.
 - **Spine: `check`** — the registry-aware gate (the keystone for ongoing/hookable
@@ -139,12 +139,12 @@ source and validated on a real Python codebase.
   language-agnostic scorer (FuncSig + jaccard + delegation gate + **unordered-pair
   dedup**, fixing the Python era's symmetric-output self-bug) and a `go/ast`
   extractor (no deps). Default is a self-scan (all source × all source). Python
-  targets (the stope use case) land next via a `python3`-subprocess extractor.
+  targets (the primary use case) land next via a `python3`-subprocess extractor.
   Self-scan caught a live dup during implementation (`relTo`/`RelPath`) — fixed.
 - **Code axis: Python targets** via an embedded `python3` AST extractor
-  (`internal/code/extract.py`, reused from `legacy/core.py`) run as one
-  subprocess per scan; extraction is batched per language. Verified on stope
-  (10,673 funcs / 718 files): the Go scorer reproduces the original Python
+  (`internal/code/extract.py`, ported from the original Python) run as one
+  subprocess per scan; extraction is batched per language. Verified on a real
+  codebase (10,673 funcs / 718 files): the Go scorer reproduces the original Python
   calque's seed-run scores exactly on unchanged functions (1.00/0.79/0.52/0.45).
   (The legacy Python nose no longer even runs on Python 3.14 — a point for the port.)
 - **Prose axis: `vocab-report`** (ported + generalized from cupel) — read-only

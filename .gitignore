@@ -19,3 +19,6 @@ __pycache__/
 .codex/
 .mcp.json
 CLAUDE.md
+
+# Claude Code local runtime state (scheduled-task locks, etc.)
+.claude/

@@ -6,7 +6,7 @@ import (
 )
 
 // bigBody returns n unique filler tokens prefixed with p, to pad a FuncSig so a
-// shared seam is diluted in pairwise Jaccard (the #269 dilution, §15).
+// shared seam is diluted in pairwise Jaccard (the dilution case, §15).
 func bigBody(p string, n int) []string {
 	out := make([]string, n)
 	for i := 0; i < n; i++ {
@@ -31,14 +31,14 @@ func makeShell(typ, method string) *FuncSig {
 	return f
 }
 
-// The headline §15 case: GameEngine.step / GameSession.step / GameEngine.run each
-// inline [_parse_action -> _agent_canon]. Pairwise Jaccard drowns the seam and
-// can't express a trio; the touchpoint pass must surface all three as one cluster.
+// The headline §15 case: three shells (two `step`s + a `run`) each inline
+// [_parse_action -> _agent_canon]. Pairwise Jaccard drowns the seam and can't
+// express a trio; the touchpoint pass must surface all three as one cluster.
 func TestTripleShellClustered(t *testing.T) {
 	shells := []*FuncSig{
-		makeShell("GameEngine", "step"),
-		makeShell("GameSession", "stepWeb"),
-		makeShell("GameEngine", "run"),
+		makeShell("Engine", "step"),
+		makeShell("Session", "stepWeb"),
+		makeShell("Engine", "run"),
 	}
 
 	// Pairwise must MISS it (that's the gap this pass closes).

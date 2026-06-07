@@ -10,7 +10,7 @@
 // attribute write-targets (what it MUTATES), returned keys (what it HANDS BACK),
 // called leaf names (what it leans on), and the name stem (its ROLE).
 //
-// Ported from the original Python calque (legacy/core.py). The extraction half
+// Ported from the original Python calque. The extraction half
 // is per-language (go/ast here; an embedded python3 script for Python); this
 // file is the shared types + scoring substrate.
 package code
@@ -99,7 +99,7 @@ func intersect(a, b set) []string {
 	return out
 }
 
-// --- name → role stem (legacy/core.py _norm_tokens / _stem_tokens / _role_prefix) ---
+// --- name → role stem (_norm_tokens / _stem_tokens / _role_prefix) ---
 
 // rolePrefixes are stripped when normalizing a name to its role stem, so
 // _handle_leave_town and leave_town collapse to the same contract stem.

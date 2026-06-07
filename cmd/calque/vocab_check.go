@@ -30,6 +30,7 @@ func runVocabCheck(args []string) {
 	fs := flag.NewFlagSet("vocab-check", flag.ContinueOnError)
 	root := fs.String("dir", ".", "repo root to walk for prose")
 	ext := fs.String("ext", "", "comma-separated prose extensions (default: md,markdown,mdx,txt,rst)")
+	exclude := fs.String("exclude", "", "comma-separated path glob(s) to skip (e.g. refs/**,theory/working/**)")
 	allowlistPath := fs.String("allowlist", ".calque/vocab-allowlist.txt", "allow-list file (one slug per line; # comments) — the prose registry")
 	threshold := fs.Int("min", 5, "minimum frequency to flag a missing compound")
 	maxLocs := fs.Int("locs", 2, "max example file:line cites per flagged compound")
@@ -40,7 +41,7 @@ func runVocabCheck(args []string) {
 		return
 	}
 
-	sorted, nFiles, err := tallyCompounds(*root, corpus.ParseExts(*ext), *maxLocs)
+	sorted, nFiles, err := tallyCompounds(*root, corpus.ParseExts(*ext), splitCSV(*exclude), *maxLocs)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque vocab-check: walking %s: %v\n", *root, err)
 		os.Exit(1)

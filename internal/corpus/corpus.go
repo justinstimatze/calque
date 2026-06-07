@@ -16,6 +16,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/justinstimatze/calque/internal/glob"
 )
 
 // DefaultProseExts are the file extensions treated as prose by default.
@@ -38,27 +40,31 @@ var skipDirs = map[string]bool{
 // Walk returns the prose files under root whose extension (lowercased) is in
 // exts, in deterministic (sorted) order. It skips VCS/dependency/build dirs and
 // any hidden directory (name starting with "."), but never skips root itself.
-// Unreadable entries are tolerated rather than aborting the walk.
-//
-// (Not yet .gitignore-aware — a repo's own ignored scratch dirs are not
-// excluded beyond the skip list above. TODO when it bites.)
-func Walk(root string, exts []string) ([]string, error) {
+// exclude is a list of path globs (matched against the repo-relative path, e.g.
+// "refs/**", "theory/working/**") whose matches are dropped — the prose analog of
+// the code axis's --exclude. Unreadable entries are tolerated.
+func Walk(root string, exts, exclude []string) ([]string, error) {
 	if len(exts) == 0 {
 		exts = DefaultProseExts
 	}
+	exRe := glob.Compile(exclude)
 	var out []string
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil // tolerate unreadable entries
 		}
+		rel := RelPath(root, p)
 		if d.IsDir() {
 			if p == root {
 				return nil
 			}
 			name := d.Name()
-			if skipDirs[name] || strings.HasPrefix(name, ".") {
+			if skipDirs[name] || strings.HasPrefix(name, ".") || glob.MatchAny(exRe, rel) {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+		if glob.MatchAny(exRe, rel) {
 			return nil
 		}
 		low := strings.ToLower(p)

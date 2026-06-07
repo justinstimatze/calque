@@ -66,6 +66,7 @@ func runSynonymReport(args []string) {
 	fs := flag.NewFlagSet("synonym-report", flag.ContinueOnError)
 	root := fs.String("dir", ".", "repo root to walk for prose")
 	ext := fs.String("ext", "", "comma-separated prose extensions (default: md,markdown,mdx,txt,rst)")
+	exclude := fs.String("exclude", "", "comma-separated path glob(s) to skip (e.g. refs/**,theory/working/**)")
 	minCount := fs.Int("min", 8, "minimum frequency for a word to be a candidate")
 	threshold := fs.Float64("threshold", 0.78, "cosine similarity floor for surfacing a pair")
 	maxWords := fs.Int("max-words", 1500, "hard cap on candidate vocabulary (highest-freq win)")
@@ -76,7 +77,7 @@ func runSynonymReport(args []string) {
 		return
 	}
 
-	files, err := corpus.Walk(*root, corpus.ParseExts(*ext))
+	files, err := corpus.Walk(*root, corpus.ParseExts(*ext), splitCSV(*exclude))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque synonym-report: walking %s: %v\n", *root, err)
 		os.Exit(1)

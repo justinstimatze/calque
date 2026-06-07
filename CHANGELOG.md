@@ -28,6 +28,12 @@ All notable changes to calque. The version string itself comes from the git tag
   Validated on cupel (551 files): 2438 violations → `--bootstrap` → clean.
   Ported from cupel `cmd/cupel/vocab_audit.go` (MIT, attribution preserved). Pinned
   by `cmd/calque/vocab_check_test.go`.
+- **`--exclude` on the prose axis** (vocab-report/synonym-report/vocab-check) —
+  path globs skipped during the corpus walk (e.g. `refs/**,theory/working/**`),
+  the prose analog of the code axis's `--exclude`. The glob→regexp matcher is now
+  single-sourced in `internal/glob` (was duplicated in `internal/code`; the dedup
+  calque flagged on itself). Lets a consumer scope the gate to authored prose —
+  e.g. cupel excludes its reference corpus, taking its gate from 357 → 4 warnings.
 - **Spine: `doctor` + `mark-fire`** — the calibration leg (was stubbed). A "fire"
   is a suspect the gate surfaces; `doctor` does a live scan, joins each suspect to
   a calibration label (registry verdicts double as labels — drift→useful,

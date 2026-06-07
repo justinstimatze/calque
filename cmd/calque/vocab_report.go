@@ -41,8 +41,8 @@ type vocabHit struct {
 // the prose recall surface (vocab-report) and the prose gate (vocab-check) — the
 // single-sourced walk→tally the registry flagged as due once a third prose
 // command appeared.
-func tallyCompounds(root string, exts []string, maxLocs int) ([]*vocabHit, int, error) {
-	files, err := corpus.Walk(root, exts)
+func tallyCompounds(root string, exts, exclude []string, maxLocs int) ([]*vocabHit, int, error) {
+	files, err := corpus.Walk(root, exts, exclude)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -86,6 +86,7 @@ func runVocabReport(args []string) {
 	fs := flag.NewFlagSet("vocab-report", flag.ContinueOnError)
 	root := fs.String("dir", ".", "repo root to walk for prose")
 	ext := fs.String("ext", "", "comma-separated prose extensions (default: md,markdown,mdx,txt,rst)")
+	exclude := fs.String("exclude", "", "comma-separated path glob(s) to skip (e.g. refs/**,theory/working/**)")
 	minCount := fs.Int("min", 3, "minimum frequency to show")
 	maxCount := fs.Int("max", 0, "maximum frequency to show (0 = no upper bound)")
 	maxLocs := fs.Int("locs", 3, "max example file:line cites per term")
@@ -95,7 +96,7 @@ func runVocabReport(args []string) {
 		return
 	}
 
-	sorted, nFiles, err := tallyCompounds(*root, corpus.ParseExts(*ext), *maxLocs)
+	sorted, nFiles, err := tallyCompounds(*root, corpus.ParseExts(*ext), splitCSV(*exclude), *maxLocs)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque vocab-report: walking %s: %v\n", *root, err)
 		os.Exit(1)

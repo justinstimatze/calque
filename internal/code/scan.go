@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
-	"regexp"
 	"strings"
+
+	"github.com/justinstimatze/calque/internal/glob"
 )
 
 // extractors maps a file extension to a BATCH extractor (all paths of that ext
@@ -42,24 +43,8 @@ type ScanStats struct {
 // extractor exists, exclude it via --left/--right if needed.
 func Extract(repo string, exclude []string) ([]*FuncSig, ScanStats, error) {
 	st := ScanStats{SkippedExts: map[string]int{}}
-	var exRe []*regexp.Regexp
-	for _, g := range exclude {
-		g = strings.TrimSpace(g)
-		if g == "" {
-			continue
-		}
-		if re, err := globToRegexp(g); err == nil {
-			exRe = append(exRe, re)
-		}
-	}
-	excluded := func(rel string) bool {
-		for _, re := range exRe {
-			if re.MatchString(rel) {
-				return true
-			}
-		}
-		return false
-	}
+	exRe := glob.Compile(exclude)
+	excluded := func(rel string) bool { return glob.MatchAny(exRe, rel) }
 
 	byExt := map[string][]string{}
 	err := filepath.WalkDir(repo, func(p string, d fs.DirEntry, err error) error {
@@ -113,63 +98,17 @@ func Filter(sigs []*FuncSig, globsCSV string) []*FuncSig {
 	if globsCSV == "" {
 		return sigs
 	}
-	var res []*regexp.Regexp
-	for _, g := range strings.Split(globsCSV, ",") {
-		g = strings.TrimSpace(g)
-		if g == "" {
-			continue
-		}
-		if re, err := globToRegexp(g); err == nil {
-			res = append(res, re)
-		}
-	}
+	res := glob.Compile(strings.Split(globsCSV, ","))
 	if len(res) == 0 {
 		return sigs
 	}
 	var out []*FuncSig
 	for _, f := range sigs {
-		for _, re := range res {
-			if re.MatchString(f.File) {
-				out = append(out, f)
-				break
-			}
+		if glob.MatchAny(res, f.File) {
+			out = append(out, f)
 		}
 	}
 	return out
-}
-
-// globToRegexp compiles a path glob into an anchored regexp. `**/` matches zero
-// or more leading directories; `**` matches across separators; `*` and `?` do
-// not cross `/`.
-func globToRegexp(g string) (*regexp.Regexp, error) {
-	var b strings.Builder
-	b.WriteString("^")
-	for i := 0; i < len(g); i++ {
-		c := g[i]
-		switch c {
-		case '*':
-			if i+1 < len(g) && g[i+1] == '*' {
-				i++ // consume the second '*'
-				if i+1 < len(g) && g[i+1] == '/' {
-					i++ // consume the '/'
-					b.WriteString("(?:.*/)?")
-				} else {
-					b.WriteString(".*")
-				}
-			} else {
-				b.WriteString("[^/]*")
-			}
-		case '?':
-			b.WriteString("[^/]")
-		case '.', '+', '(', ')', '|', '^', '$', '{', '}', '[', ']', '\\':
-			b.WriteByte('\\')
-			b.WriteByte(c)
-		default:
-			b.WriteByte(c)
-		}
-	}
-	b.WriteString("$")
-	return regexp.Compile(b.String())
 }
 
 // SupportedExts returns the extensions calque can currently extract (for help/UX).

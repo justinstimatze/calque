@@ -225,10 +225,15 @@ registered runSynonymReport≟runVocabReport note predicted "once a third prose
 command appears." The remaining overlaps are the intended prose-axis family and
 the prose-gate-mirrors-code-gate parallel.
 
-## Prose command family (report/check/synonym share the tally+walk) — contracted-twin-ok
-- cluster: cmd/calque/synonym_report.go::runSynonymReport | cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/vocab_report.go::runVocabReport
+## Prose command family + shared flags (tally/walk/--exclude) — contracted-twin-ok
+
+The three prose commands share `tallyCompounds`/`locs`; the `--exclude` flag (added
+for prose scoping, mirroring the code axis) links them to `addBoundaryFlags` too.
+Single-sourced infra (the walk is one `tallyCompounds`; the glob match is one
+`internal/glob`). Intended, not drift.
+- cluster: cmd/calque/scan.go::addBoundaryFlags | cmd/calque/synonym_report.go::runSynonymReport | cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/vocab_report.go::runVocabReport
 - verdict: contracted-twin-ok
-- reviewed: 2026-06-06
+- reviewed: 2026-06-07
 - pair: cmd/calque/synonym_report.go::runSynonymReport | cmd/calque/vocab_report.go::tallyCompounds
 - verdict: contracted-twin-ok
 - reviewed: 2026-06-06

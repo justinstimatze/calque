@@ -18,9 +18,12 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/justinstimatze/calque/internal/corpus"
@@ -32,6 +35,7 @@ func runVocabCheck(args []string) {
 	ext := fs.String("ext", "", "comma-separated prose extensions (default: md,markdown,mdx,txt,rst)")
 	exclude := fs.String("exclude", "", "comma-separated path glob(s) to skip (e.g. refs/**,theory/working/**)")
 	allowlistPath := fs.String("allowlist", ".calque/vocab-allowlist.txt", "allow-list file (one slug per line; # comments) — the prose registry")
+	seedCmd := fs.String("seed-cmd", "", "shell command whose stdout is merged into the allow-list (the seeder contract: one slug per line, # comments) — e.g. a project's own catalog→slug command. Run with cwd=--dir.")
 	threshold := fs.Int("min", 5, "minimum frequency to flag a missing compound")
 	maxLocs := fs.Int("locs", 2, "max example file:line cites per flagged compound")
 	strict := fs.Bool("strict", false, "exit 1 on violations (default warn-only)")
@@ -65,6 +69,19 @@ func runVocabCheck(args []string) {
 	}
 
 	allow := loadAllowlist(joinRepo(*root, *allowlistPath))
+	// A seed command (the seeder contract) lets a project feed its own
+	// catalog→slug logic in without calque knowing the catalog shape — the clean
+	// plugin point. Best-effort: a seed failure warns but doesn't block the gate
+	// (the file allow-list still applies), so a broken seeder can't wedge a hook.
+	if *seedCmd != "" {
+		if seeded, err := runSeedCmd(*seedCmd, *root); err != nil {
+			fmt.Fprintf(os.Stderr, "calque vocab-check: seed-cmd failed (%v) — continuing with file allow-list only\n", err)
+		} else {
+			for k := range seeded {
+				allow[k] = true
+			}
+		}
+	}
 	violations := compoundViolations(sorted, allow, *threshold)
 
 	if len(violations) == 0 {
@@ -108,16 +125,12 @@ func compoundViolations(sorted []*vocabHit, allow map[string]bool, threshold int
 	return out
 }
 
-// loadAllowlist reads the prose registry: one slug per line, # comments + blanks
-// ignored. A missing file is empty (no compound is known yet) — not an error.
-func loadAllowlist(path string) map[string]bool {
+// parseAllowlist reads the slug list (one slug per line, # comments + blanks
+// ignored) — the seeder contract, shared by the file allow-list and seed-cmd
+// stdout.
+func parseAllowlist(r io.Reader) map[string]bool {
 	out := map[string]bool{}
-	fh, err := os.Open(path)
-	if err != nil {
-		return out
-	}
-	defer fh.Close()
-	sc := bufio.NewScanner(fh)
+	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -126,4 +139,28 @@ func loadAllowlist(path string) map[string]bool {
 		out[line] = true
 	}
 	return out
+}
+
+// loadAllowlist reads the prose registry file. A missing file is empty (no
+// compound is known yet) — not an error.
+func loadAllowlist(path string) map[string]bool {
+	fh, err := os.Open(path)
+	if err != nil {
+		return map[string]bool{}
+	}
+	defer fh.Close()
+	return parseAllowlist(fh)
+}
+
+// runSeedCmd runs the seed command (cwd=dir) and parses its stdout as a slug
+// list — the plugin point that lets a project supply a bespoke catalog→allow-list
+// seeder (e.g. `cupel vocab-seed`) without calque knowing the catalog shape.
+func runSeedCmd(seedCmd, dir string) (map[string]bool, error) {
+	cmd := exec.Command("sh", "-c", seedCmd)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	return parseAllowlist(bytes.NewReader(out)), nil
 }

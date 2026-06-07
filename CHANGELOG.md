@@ -28,6 +28,15 @@ All notable changes to calque. The version string itself comes from the git tag
   Validated on cupel (551 files): 2438 violations → `--bootstrap` → clean.
   Ported from cupel `cmd/cupel/vocab_audit.go` (MIT, attribution preserved). Pinned
   by `cmd/calque/vocab_check_test.go`.
+- **`vocab-check --seed-cmd`** — the seeder plugin point. Runs a project's own
+  command (cwd = `--dir`) and merges its stdout into the allow-list under the
+  *seeder contract* (one slug per line, `#` comments). Lets a project feed bespoke
+  catalog→slug logic in without calque knowing the catalog shape — e.g.
+  `calque vocab-check --seed-cmd 'cupel vocab-seed'` collapses cupel's
+  seed-then-check two-step into one atomic call. Best-effort: a seed failure warns
+  but doesn't wedge the gate (the file allow-list still applies). The answer to
+  "how do future projects write their own seed easily" — they print slugs to
+  stdout; calque does the rest.
 - **`--exclude` on the prose axis** (vocab-report/synonym-report/vocab-check) —
   path globs skipped during the corpus walk (e.g. `refs/**,theory/working/**`),
   the prose analog of the code axis's `--exclude`. The glob→regexp matcher is now

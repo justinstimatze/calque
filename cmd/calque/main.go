@@ -78,7 +78,8 @@ Usage:
   calque vocab-report    prose axis: frequency surface of hyphenated compounds
   calque synonym-report  prose axis: embedding near-synonyms (single words)
   calque vocab-check     prose gate: flag compounds (freq ≥ min) not in the
-                         allow-list (.calque/vocab-allowlist.txt); --strict, --bootstrap
+                         allow-list (.calque/vocab-allowlist.txt); --strict,
+                         --bootstrap, --seed-cmd '<proj seeder>', --exclude
   calque check           spine: registry-aware gate — flag new/drifted vs the
                          registry  (warn-only; --strict to exit 1)
   calque hook            spine: wire check into a git pre-commit / Stop hook

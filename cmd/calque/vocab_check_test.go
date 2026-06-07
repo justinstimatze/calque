@@ -53,3 +53,24 @@ func TestLoadAllowlistMissing(t *testing.T) {
 		t.Errorf("missing allow-list should be empty, got %d", len(allow))
 	}
 }
+
+// runSeedCmd runs a seeder command and parses its stdout as a slug list (the
+// seeder contract — the plugin point for bespoke catalog→allow-list seeders).
+func TestRunSeedCmd(t *testing.T) {
+	got, err := runSeedCmd("printf '# header\\nalpha-beta\\n\\ngamma-delta\\n'", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got["alpha-beta"] || !got["gamma-delta"] {
+		t.Errorf("seed-cmd output not parsed: %v", got)
+	}
+	if got["# header"] || got[""] {
+		t.Error("comments/blanks must not be admitted from seed-cmd")
+	}
+}
+
+func TestRunSeedCmdError(t *testing.T) {
+	if _, err := runSeedCmd("exit 3", t.TempDir()); err == nil {
+		t.Error("a failing seed command must return an error (caller continues with file allow-list)")
+	}
+}

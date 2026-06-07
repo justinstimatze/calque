@@ -36,94 +36,119 @@ func runCheck(args []string) {
 		return
 	}
 
-	copts := clusterOptsFrom(*minLines, *clusterMinMembers, *clusterMaxFanout, 1<<30)
-	r, err := codeAxis(*repo, *left, *right, *exclude, *minScore, *minLines, 1<<30, copts, true)
+	f, err := computeCheck(*repo, *left, *right, *exclude, *minScore, *minLines, *clusterMinMembers, *clusterMaxFanout, *regPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque check: %v\n", err)
 		os.Exit(1)
 	}
-	all := r.All
-	reg, err := registry.Load(joinRepo(*repo, *regPath))
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "calque check: reading registry: %v\n", err)
-		os.Exit(1)
+
+	fmt.Print(renderCheck(f, *regPath))
+
+	if !*noFireLog && (len(f.Fresh) > 0 || len(f.FreshC) > 0) {
+		logFires(*repo, f.Fresh, f.FreshC)
 	}
 
-	var fresh []code.Suspicion
-	known := 0
+	if *strict && (len(f.Fresh) > 0 || len(f.FreshC) > 0) {
+		os.Exit(1)
+	}
+}
+
+// checkFindings is the pure result of the code-axis gate: the new/known split
+// over pairs and N-ary clusters plus stale (dangling) registry entries. Isolated
+// from printing + os.Exit so both the CLI and the MCP server share one core.
+type checkFindings struct {
+	Fresh  []code.Suspicion
+	Known  int
+	FreshC []code.Cluster
+	KnownC int
+	Stale  []registry.Entry
+	StaleC []registry.ClusterEntry
+}
+
+// computeCheck runs the scan, diffs against the registry, and returns the
+// new/known/stale split — the shared core behind `calque check` (CLI) and the
+// calque_check MCP tool. No side effects (no print, no fire-log, no exit).
+func computeCheck(repo, left, right, exclude string, minScore float64, minLines, clusterMinMembers, clusterMaxFanout int, regPath string) (checkFindings, error) {
+	copts := clusterOptsFrom(minLines, clusterMinMembers, clusterMaxFanout, 1<<30)
+	r, err := codeAxis(repo, left, right, exclude, minScore, minLines, 1<<30, copts, true)
+	if err != nil {
+		return checkFindings{}, err
+	}
+	reg, err := registry.Load(joinRepo(repo, regPath))
+	if err != nil {
+		return checkFindings{}, fmt.Errorf("reading registry: %w", err)
+	}
+
+	var f checkFindings
 	for _, s := range r.Pairs {
 		if reg.Has(s.Left.Key(), s.Right.Key()) {
-			known++
+			f.Known++
 			continue
 		}
-		fresh = append(fresh, s)
+		f.Fresh = append(f.Fresh, s)
 	}
 
 	// N-ary clusters (the touchpoint pass): same new/known split, keyed on the
 	// member SET (§15).
-	var freshC []code.Cluster
-	knownC := 0
 	for _, c := range r.Clusters {
 		if reg.HasCluster(c.MemberKeys()) {
-			knownC++
+			f.KnownC++
 			continue
 		}
-		freshC = append(freshC, c)
+		f.FreshC = append(f.FreshC, c)
 	}
 
 	// Liveness reconciliation: registry entries whose referenced code is gone.
-	live := make(map[string]bool, len(all))
-	for _, f := range all {
-		live[f.Key()] = true
+	live := make(map[string]bool, len(r.All))
+	for _, fn := range r.All {
+		live[fn.Key()] = true
 	}
-	var stale []registry.Entry
 	for _, e := range reg.Entries {
 		if !live[e.Key1] || !live[e.Key2] {
-			stale = append(stale, e)
+			f.Stale = append(f.Stale, e)
 		}
 	}
-	var staleC []registry.ClusterEntry
 	for _, e := range reg.Clusters {
 		for _, k := range e.Keys {
 			if !live[k] {
-				staleC = append(staleC, e)
+				f.StaleC = append(f.StaleC, e)
 				break
 			}
 		}
 	}
+	return f, nil
+}
 
-	fmt.Printf("calque check: pairs %d new · %d known | clusters %d new · %d known | %d stale registry entr%s\n",
-		len(fresh), known, len(freshC), knownC, len(stale)+len(staleC), plural(len(stale)+len(staleC), "y", "ies"))
+// renderCheck formats the gate findings as the human/agent-readable report
+// shared by the CLI and the MCP tool.
+func renderCheck(f checkFindings, regPath string) string {
+	var b strings.Builder
+	nStale := len(f.Stale) + len(f.StaleC)
+	fmt.Fprintf(&b, "calque check: pairs %d new · %d known | clusters %d new · %d known | %d stale registry entr%s\n",
+		len(f.Fresh), f.Known, len(f.FreshC), f.KnownC, nStale, plural(nStale, "y", "ies"))
 
-	for _, s := range fresh {
-		fmt.Printf("\nNEW  %.2f  [%s]  `%s` (%s:%d)  ≟  `%s` (%s:%d)\n     %s\n",
+	for _, s := range f.Fresh {
+		fmt.Fprintf(&b, "\nNEW  %.2f  [%s]  `%s` (%s:%d)  ≟  `%s` (%s:%d)\n     %s\n",
 			s.Score, pairID(s), s.Left.Qualname, s.Left.File, s.Left.Line,
 			s.Right.Qualname, s.Right.File, s.Right.Line, s.Reason())
-		fmt.Printf("     adjudicate in %s — add:  - pair: %s | %s\n", *regPath, s.Left.Key(), s.Right.Key())
+		fmt.Fprintf(&b, "     adjudicate in %s — add:  - pair: %s | %s\n", regPath, s.Left.Key(), s.Right.Key())
 	}
-	for _, c := range freshC {
-		fmt.Printf("\nNEW-CLUSTER  %.2f  [%s]  (%d members)  %s\n", c.Score, clusterID(c), len(c.Members), c.Reason())
+	for _, c := range f.FreshC {
+		fmt.Fprintf(&b, "\nNEW-CLUSTER  %.2f  [%s]  (%d members)  %s\n", c.Score, clusterID(c), len(c.Members), c.Reason())
 		for _, m := range c.Members {
-			fmt.Printf("     `%s` (%s:%d)\n", m.Qualname, m.File, m.Line)
+			fmt.Fprintf(&b, "     `%s` (%s:%d)\n", m.Qualname, m.File, m.Line)
 		}
-		fmt.Printf("     adjudicate in %s — add:  - cluster: %s\n", *regPath, strings.Join(c.MemberKeys(), " | "))
+		fmt.Fprintf(&b, "     adjudicate in %s — add:  - cluster: %s\n", regPath, strings.Join(c.MemberKeys(), " | "))
 	}
-
-	if !*noFireLog && (len(fresh) > 0 || len(freshC) > 0) {
-		logFires(*repo, fresh, freshC)
-	}
-	for _, e := range stale {
-		fmt.Printf("\nSTALE  `%s` ≟ `%s` — referenced code no longer exists; prune or re-home (was: %s%s)\n",
+	for _, e := range f.Stale {
+		fmt.Fprintf(&b, "\nSTALE  `%s` ≟ `%s` — referenced code no longer exists; prune or re-home (was: %s%s)\n",
 			e.Key1, e.Key2, e.Verdict, reviewedSuffix(e))
 	}
-	for _, e := range staleC {
-		fmt.Printf("\nSTALE-CLUSTER  {%s} — a referenced member no longer exists; prune or re-home (was: %s)\n",
+	for _, e := range f.StaleC {
+		fmt.Fprintf(&b, "\nSTALE-CLUSTER  {%s} — a referenced member no longer exists; prune or re-home (was: %s)\n",
 			strings.Join(e.Keys, ", "), e.Verdict)
 	}
-
-	if *strict && (len(fresh) > 0 || len(freshC) > 0) {
-		os.Exit(1)
-	}
+	return b.String()
 }
 
 func plural(n int, one, many string) string {

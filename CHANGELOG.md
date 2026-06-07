@@ -15,6 +15,19 @@ All notable changes to calque. The version string itself comes from the git tag
   axis is ported from the original Python nose.
 
 ### Added
+- **Spine: `mcp`** — serve the gates over MCP (stdio JSON-RPC 2.0) so an agent
+  editing code or prose can ask "did my change introduce new drift?" inline,
+  without shelling out, and get the same report the CLI prints. Two tools — the
+  two gates: `calque_check` (code axis: scan + registry diff → new/known/stale)
+  and `calque_vocab_check` (prose axis: compounds vs the allow-list, with
+  `seed_cmd` support). Read-only (no fire log, no exit). To keep CLI and MCP from
+  drifting, each gate now splits into a pure core (`computeCheck`/`renderCheck`,
+  `computeVocabCheck`/`renderVocabCheck`) shared by both paths — the dogfood loop
+  flagged the resulting parallelism and it was adjudicated contracted-twin-ok.
+  The JSON-RPC framing is lifted from the sibling Go project hindcast
+  (`cmd/hindcast/cmd_mcp.go`), a zero-dependency stdlib implementation, so calque
+  stays dependency-free. Answers "calque as MCP or CLI" — now both. Pinned by
+  `cmd/calque/mcp_test.go`.
 - **Prose gate: `vocab-check`** — the prose-axis analog of `check` (the last piece
   blocking cupel from retiring its own `vocab-audit`). Flags hyphenated compounds
   at freq ≥ threshold not in an allow-list (`.calque/vocab-allowlist.txt` — the

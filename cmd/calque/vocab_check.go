@@ -68,19 +68,9 @@ func runVocabCheck(args []string) {
 		return
 	}
 
-	allow := loadAllowlist(joinRepo(*root, *allowlistPath))
-	// A seed command (the seeder contract) lets a project feed its own
-	// catalog→slug logic in without calque knowing the catalog shape — the clean
-	// plugin point. Best-effort: a seed failure warns but doesn't block the gate
-	// (the file allow-list still applies), so a broken seeder can't wedge a hook.
-	if *seedCmd != "" {
-		if seeded, err := runSeedCmd(*seedCmd, *root); err != nil {
-			fmt.Fprintf(os.Stderr, "calque vocab-check: seed-cmd failed (%v) — continuing with file allow-list only\n", err)
-		} else {
-			for k := range seeded {
-				allow[k] = true
-			}
-		}
+	allow, warn := buildVocabAllowlist(joinRepo(*root, *allowlistPath), *seedCmd, *root)
+	if warn != "" {
+		fmt.Fprintf(os.Stderr, "calque vocab-check: %s\n", warn)
 	}
 	violations := compoundViolations(sorted, allow, *threshold)
 
@@ -110,6 +100,78 @@ func runVocabCheck(args []string) {
 	if *strict {
 		os.Exit(1)
 	}
+}
+
+// buildVocabAllowlist loads the file allow-list and, if a seed command is given,
+// merges its stdout in under the seeder contract. Best-effort: a seed failure
+// returns a non-empty warning string but still yields the file allow-list, so a
+// broken seeder can't wedge the gate. Shared by the CLI and the MCP tool.
+func buildVocabAllowlist(allowlistPath, seedCmd, dir string) (map[string]bool, string) {
+	allow := loadAllowlist(allowlistPath)
+	if seedCmd == "" {
+		return allow, ""
+	}
+	seeded, err := runSeedCmd(seedCmd, dir)
+	if err != nil {
+		return allow, fmt.Sprintf("seed-cmd failed (%v) — continuing with file allow-list only", err)
+	}
+	for k := range seeded {
+		allow[k] = true
+	}
+	return allow, ""
+}
+
+// vocabFindings is the pure result of the prose gate, isolated from print +
+// os.Exit so the CLI and the MCP server share one core.
+type vocabFindings struct {
+	Violations []*vocabHit
+	NFiles     int
+	NAllow     int
+	Threshold  int
+	Warn       string
+}
+
+// computeVocabCheck runs the compound walk, builds the allow-list (file +
+// optional seed command), and returns the violations — the shared core behind
+// `calque vocab-check` (CLI) and the calque_vocab_check MCP tool.
+func computeVocabCheck(root, ext, exclude, allowlistPath, seedCmd string, threshold, maxLocs int) (vocabFindings, error) {
+	sorted, nFiles, err := tallyCompounds(root, corpus.ParseExts(ext), splitCSV(exclude), maxLocs)
+	if err != nil {
+		return vocabFindings{}, err
+	}
+	allow, warn := buildVocabAllowlist(joinRepo(root, allowlistPath), seedCmd, root)
+	return vocabFindings{
+		Violations: compoundViolations(sorted, allow, threshold),
+		NFiles:     nFiles,
+		NAllow:     len(allow),
+		Threshold:  threshold,
+		Warn:       warn,
+	}, nil
+}
+
+// renderVocabCheck formats the prose-gate findings as the human/agent-readable
+// report shared by the CLI and the MCP tool.
+func renderVocabCheck(f vocabFindings, allowlistPath string) string {
+	var b strings.Builder
+	if f.Warn != "" {
+		fmt.Fprintf(&b, "calque vocab-check: %s\n", f.Warn)
+	}
+	if len(f.Violations) == 0 {
+		fmt.Fprintf(&b, "calque vocab-check: clean across %d file(s) — %d allow-listed compound(s); threshold freq >= %d\n",
+			f.NFiles, f.NAllow, f.Threshold)
+		return b.String()
+	}
+	fmt.Fprintf(&b, "calque vocab-check: %d warning(s) — compounds at freq >= %d not in the allow-list:\n",
+		len(f.Violations), f.Threshold)
+	for _, h := range f.Violations {
+		fmt.Fprintf(&b, "%5d  %s\n", h.Count, h.Term)
+		for _, l := range h.Locations {
+			fmt.Fprintf(&b, "       %s:%d\n", l.Path, l.Line)
+		}
+	}
+	fmt.Fprintf(&b, "\nFix: (a) promote to %s (add the slug on its own line); (b) rewrite so freq drops below %d; or (c) consolidate the synonyms (see `vocab-report --stems`).\n",
+		allowlistPath, f.Threshold)
+	return b.String()
 }
 
 // compoundViolations returns the compounds at or above threshold that are not in

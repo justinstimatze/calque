@@ -263,3 +263,133 @@ the hook's command string; doctor's run/print split). Coincidental name tokens.
 - pair: cmd/calque/calib.go::runDoctor | cmd/calque/check.go::runCheck
 - verdict: contracted-twin-ok
 - reviewed: 2026-06-06
+
+## MCP server + compute/render extraction (2026-06-07) — contracted-twin-ok
+
+The `mcp` command shares the gates' cores with the CLI by design: each gate now
+splits into compute*/render* (pure core) + run* (CLI wrapper) + mcp* (MCP
+wrapper) so the CLI and MCP path CANNOT drift. The parallelism below is the §16
+unification made literal, not duplication to collapse.
+
+- pair: cmd/calque/check.go::runCheck | cmd/calque/check.go::computeCheck
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/check.go::renderCheck | cmd/calque/check.go::runCheck
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/vocab_check.go::computeVocabCheck | cmd/calque/vocab_check.go::runVocabCheck
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/vocab_check.go::renderVocabCheck
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/vocab_check.go::renderVocabCheck | cmd/calque/vocab_check.go::computeVocabCheck
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/vocab_check.go::renderVocabCheck | cmd/calque/check.go::renderCheck
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/mcp.go::checkToolDefinition | cmd/calque/mcp.go::vocabCheckToolDefinition
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/mcp.go::mcpVocabCheck | cmd/calque/mcp.go::mcpCheck
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/mcp.go::handleMCP | cmd/calque/mcp.go::runMCP
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/mcp.go::vocabCheckToolDefinition | cmd/calque/vocab_check.go::runVocabCheck
+- verdict: false-alarm
+- reviewed: 2026-06-07
+
+## Tests mirror their subject (2026-06-07) — contracted-twin-ok
+
+A test function structurally echoes the function under test; that is the test
+doing its job, not drift. Sibling test cases sharing test scaffolding are
+coincidental-token false-alarms.
+
+- pair: cmd/calque/calib_test.go::TestVerdictLabel | cmd/calque/calib.go::verdictLabel
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/hook.go::buildCheckCmd | cmd/calque/hook_test.go::TestBuildCheckCmd
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/hook_test.go::TestShellQuote | cmd/calque/hook.go::shellQuote
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/vocab_check_test.go::TestLoadAllowlist | cmd/calque/vocab_check.go::loadAllowlist
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/vocab_check_test.go::TestCompoundViolations | cmd/calque/vocab_check.go::compoundViolations
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/hook.go::preCommitScript | cmd/calque/hook_test.go::TestPreCommitScriptGracefulWhenMissing
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/vocab_check_test.go::TestRunSeedCmd | cmd/calque/vocab_check_test.go::TestRunSeedCmdError
+- verdict: false-alarm
+- reviewed: 2026-06-07
+- pair: cmd/calque/vocab_check_test.go::TestLoadAllowlistMissing | cmd/calque/vocab_check_test.go::TestLoadAllowlist
+- verdict: false-alarm
+- reviewed: 2026-06-07
+- pair: cmd/calque/calib_test.go::TestVerdictLabel | cmd/calque/calib_test.go::TestFireTagRoundTrip
+- verdict: false-alarm
+- reviewed: 2026-06-07
+- pair: internal/code/touchpoint_test.go::TestTripleShellClustered | internal/code/touchpoint_test.go::makeShell
+- verdict: false-alarm
+- reviewed: 2026-06-07
+
+## N-ary clusters from the MCP/extraction pass (2026-06-07)
+
+Shared-helper reuse (single-sourced `codeAxis`/`tallyCompounds`/id helpers) and
+shared schema/flag/verdict vocabulary — intended reuse, not inlined-seam drift.
+Test-fixture and version-string clusters are coincidental-token false-alarms.
+
+- cluster: cmd/calque/mcp.go::checkToolDefinition | cmd/calque/mcp.go::vocabCheckToolDefinition | cmd/calque/scan.go::addBoundaryFlags | cmd/calque/synonym_report.go::runSynonymReport | cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/vocab_report.go::runVocabReport
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- cluster: cmd/calque/mcp.go::checkToolDefinition | cmd/calque/mcp.go::handleMCP | cmd/calque/mcp.go::vocabCheckToolDefinition | internal/code/extract.py::_extract | internal/code/score.go::Suspicion.Reason | internal/code/score.go::scorePair
+- verdict: false-alarm
+- reviewed: 2026-06-07
+- cluster: internal/code/touchpoint_test.go::TestPublicSymbolNotSeam | internal/code/touchpoint_test.go::TestTripleShellClustered | internal/code/touchpoint_test.go::makeShell
+- verdict: false-alarm
+- reviewed: 2026-06-07
+- cluster: cmd/calque/hook.go::buildCheckCmd | cmd/calque/hook.go::installPreCommit | cmd/calque/main.go::main | cmd/calque/mcp.go::handleMCP
+- verdict: false-alarm
+- reviewed: 2026-06-07
+- cluster: cmd/calque/scan.go::codeAxis | cmd/calque/synonym_report.go::runSynonymReport | cmd/calque/vocab_check.go::computeVocabCheck | cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/vocab_report.go::runVocabReport
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- cluster: cmd/calque/calib.go::printDoctor | cmd/calque/calib.go::verdictLabel | cmd/calque/calib_test.go::TestFireTagRoundTrip | cmd/calque/calib_test.go::TestVerdictLabel
+- verdict: false-alarm
+- reviewed: 2026-06-07
+- cluster: cmd/calque/calib.go::logFires | cmd/calque/calib.go::runDoctor | cmd/calque/calib_test.go::TestFireIDStable
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- cluster: cmd/calque/calib.go::logFires | cmd/calque/calib.go::runDoctor | cmd/calque/check.go::renderCheck
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- cluster: cmd/calque/calib.go::runDoctor | cmd/calque/check.go::computeCheck | cmd/calque/scan.go::runScan
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+
+## mcp_test.go scaffolding (2026-06-07) — false-alarm
+
+Sibling MCP test cases and clusters sharing protocol/version tokens
+(serverInfo, version, calque_check) — test scaffolding, not code drift.
+
+- pair: cmd/calque/mcp_test.go::TestMCPToolsList | cmd/calque/mcp_test.go::TestMCPInitialize
+- verdict: false-alarm
+- reviewed: 2026-06-07
+- pair: cmd/calque/mcp_test.go::TestMCPInitialize | cmd/calque/mcp_test.go::TestMCPUnknownTool
+- verdict: false-alarm
+- reviewed: 2026-06-07
+- pair: cmd/calque/mcp_test.go::TestMCPUnknownTool | cmd/calque/mcp_test.go::TestMCPToolsList
+- verdict: false-alarm
+- reviewed: 2026-06-07
+- cluster: cmd/calque/hook.go::buildCheckCmd | cmd/calque/hook.go::installPreCommit | cmd/calque/main.go::main | cmd/calque/mcp.go::handleMCP | cmd/calque/mcp_test.go::TestMCPInitialize
+- verdict: false-alarm
+- reviewed: 2026-06-07
+- cluster: cmd/calque/mcp.go::checkToolDefinition | cmd/calque/mcp.go::handleMCP | cmd/calque/mcp_test.go::TestMCPToolsList
+- verdict: false-alarm
+- reviewed: 2026-06-07

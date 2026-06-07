@@ -86,6 +86,8 @@ Usage:
                          (calque hook install — auto-installs pre-commit)
   calque doctor          spine: calibration rollup (fire-rate, hit-rate)
   calque mark-fire <id> <verdict>   spine: tag a finding  useful|mixed|not-useful
+  calque mcp             spine: serve the gates over MCP (stdio JSON-RPC) —
+                         tools calque_check + calque_vocab_check for inline use
   calque version         print the version (git tag is the source of truth)
 
 Registry: .calque/registry.md (git-tracked memory of adjudicated pairs/groups).
@@ -114,6 +116,8 @@ func main() {
 		runDoctor(os.Args[2:])
 	case "mark-fire":
 		runMarkFire(os.Args[2:])
+	case "mcp":
+		runMCP(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println("calque", buildVersion())
 	case "-h", "--help", "help":

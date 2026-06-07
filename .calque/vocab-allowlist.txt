@@ -15,3 +15,6 @@ false-alarm
 hand-written
 private-symbol
 substrate-general
+single-sourced
+allow-list
+contracted-twin-ok

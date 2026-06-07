@@ -1,0 +1,24 @@
+# Python — only internal/code/extract.py remains (the embedded AST extractor,
+# run as a subprocess); these guard its incidental artifacts.
+__pycache__/
+*.pyc
+
+# Go
+/calque
+*.test
+
+# calque's own memory: track the adjudicated registry + prose allow-list,
+# ignore calibration logs (fires.jsonl / fire-tags.jsonl)
+.calque/*
+!.calque/registry.md
+!.calque/vocab-allowlist.txt
+
+# defn — regenerated per-clone by `defn init` (.mcp.json bakes in absolute local
+# paths; CLAUDE.md is auto-generated). Not committed.
+.defn/
+.codex/
+.mcp.json
+CLAUDE.md
+
+# Claude Code local runtime state (scheduled-task locks, etc.)
+.claude/

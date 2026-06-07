@@ -1,0 +1,45 @@
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestRegistryParseWarning(t *testing.T) {
+	dir := t.TempDir()
+
+	// A registry that parsed entries → no warning (the happy path).
+	if w := registryParseWarning(filepath.Join(dir, "anything.md"), 3, 0); w != "" {
+		t.Errorf("parsed entries should not warn, got %q", w)
+	}
+
+	// A missing file is legitimately empty → no warning.
+	if w := registryParseWarning(filepath.Join(dir, "missing.md"), 0, 0); w != "" {
+		t.Errorf("missing registry should not warn, got %q", w)
+	}
+
+	// A registry with only comments/blanks → no warning (nothing to parse yet).
+	empty := filepath.Join(dir, "empty.md")
+	os.WriteFile(empty, []byte("# header\n\n> note\n"), 0o644)
+	if w := registryParseWarning(empty, 0, 0); w != "" {
+		t.Errorf("comment-only registry should not warn, got %q", w)
+	}
+
+	// Old Python-era format with content but 0 parsed → warn + name migrate-registry.
+	old := filepath.Join(dir, "old.md")
+	os.WriteFile(old, []byte("## p — drift\n- left:  a.py::A\n- right: b.py::B\n"), 0o644)
+	w := registryParseWarning(old, 0, 0)
+	if w == "" || !strings.Contains(w, "migrate-registry") {
+		t.Errorf("old-format registry should warn and suggest migrate-registry, got %q", w)
+	}
+
+	// Unrecognized non-empty content but 0 parsed → generic format warning.
+	junk := filepath.Join(dir, "junk.md")
+	os.WriteFile(junk, []byte("some prose with no entries at all\n"), 0o644)
+	w = registryParseWarning(junk, 0, 0)
+	if w == "" || strings.Contains(w, "migrate-registry") {
+		t.Errorf("non-old junk should warn generically (not migrate), got %q", w)
+	}
+}

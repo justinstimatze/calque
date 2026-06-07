@@ -141,3 +141,56 @@ This catalog is **language-agnostic by design** — the next step is to confirm 
 on `undercity` (TS) and `gemot` (Go) and note which transfer, which are language-specific,
 and which a language's type system already neutralizes (roadmap items 11–12). Extend this
 file as new shapes are found.
+
+---
+
+## Cross-repo evidence — 6-repo LLM-as-nose survey (2026-06-06)
+
+Surveyed 6 of Justin's non-fork repos (Python/Go/TS) with LLM fuzzy-hunts using this
+catalog as the checklist. The meta-bug is present in **every repo, every language.**
+
+**Confirmed LIVE drift (copies already disagree) — including real bugs, not just tidiness:**
+- **publicrecord** (TS, regulatory data — correctness IS the product): `sanitizeCaseNumber`
+  canonicalizes an *identity key* 3 different ways across adapters (`[^a-z0-9]+` vs
+  `[^a-z0-9-]` vs `[^a-z0-9.-]`) → same case → different IDs → silent dedup misses (P7).
+  `normalizeDate` in 5 adapters (P4) — *not* live-broken (each parser matches its own
+  source: US `MM/DD`, EU `DD/MM`+`DD.MM`) but a latent landmine: 5 copies, no range
+  validation, next copy-paste grabs the wrong variant. No shared `src/ingest/utils.ts`.
+- **effigy** (Py): `compression_ratio` computed with **reversed operands** —
+  `metrics.py` (`json/effigy`) vs `discovery.py` (`baseline/dossier`) — two same-named
+  metrics measuring inverse things; cross-referencing them corrupts analytics (P7).
+- **undercity** (TS): `MAX_OBJECTIVE_LENGTH` = 500 (`pm-schemas.ts`) vs 2000
+  (`server.ts`) — validation vs handler disagree (P3). `.undercity` state-dir literal in
+  19+ files (P3, latent).
+- **gemot** (Go): retry budget 3/5/10 across files (P3); `GEMOT_API_SECRET` resolution
+  drifts across 8 scripts — diplomacy has a legacy-var + `.env` fallback others lack (P8).
+- **defn** (Go): `DEFN_BRANCH` checkout inlined 3× (P1/P8); `Kind` taxonomy in 4 places
+  (P2); `DEFN_PORT` "3307" default twice (P3).
+- **adit** (Go, *itself a code-health scanner*): session-JSONL parse loop inlined 3× with
+  already-differing filters (P1); `json.MarshalIndent` boilerplate ×7 (P1, latent); two
+  different complexity taxonomies — `nesting.go` (36 node kinds) vs `branching.go` (subset)
+  (P2). **The tool has the disease it diagnoses.**
+- **calque** (Py, self-scan — see `.calque/registry.md`): its own signal taxonomy
+  `{strings,writes,name,calls,ret}` hand-written in 4 places (`_WEIGHTS` + `sig` + `avail`
+  + `reason`) — calque's *own* P2/P3 bug, caught by its own nose.
+
+**Six findings the survey proves:**
+1. **P3 (magic constants) and P8 (env/config scatter) dominate every repo, every
+   language.** They are the literal connective tissue between the code axis (§15) and the
+   env-parity axis (§14) → strong evidence for ONE registry keyed on "a value with N
+   definition sites, code *or* env."
+2. **Go is robust but narrowly** (gemot + defn): kills *signature* drift (compile-time
+   `var _ Interface = (*T)(nil)`) but does nothing for config-scatter, inlined
+   orchestration, or *behavioral* drift between two impls. Slop sources are
+   inheritance-independent.
+3. **The unit of memory is the group, not the pair** — empirically: 5× `normalizeDate`,
+   8× `GEMOT_API_SECRET`, 5× verb-sets (stope), 4× `0.65` (stope), 19× `.undercity`.
+   N-ary registry validated in the wild.
+4. **adit-irony + calque-self-bug:** code-tools (a health scanner; calque itself) carry
+   the bug they detect. It is *invisible from inside* — the strongest argument for an
+   external standing nose.
+5. **Real LIVE data-corrupting drifts exist** (publicrecord IDs/dates, effigy metrics,
+   undercity limits) — this is a bug class, not a neatness preference.
+6. **Calibration earned its keep:** crude scans false-flagged clean serialization pairs
+   (stope `to_dict`/`from_dict`, dos/phone); adjudication cleared them. Recall surfaces,
+   adjudicate decides — the core loop, repeatedly validated.

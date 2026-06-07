@@ -63,6 +63,7 @@ type checkFindings struct {
 	KnownC int
 	Stale  []registry.Entry
 	StaleC []registry.ClusterEntry
+	Warn   string // non-empty when the registry exists but parsed to zero entries
 }
 
 // computeCheck runs the scan, diffs against the registry, and returns the
@@ -80,6 +81,7 @@ func computeCheck(repo, left, right, exclude string, minScore float64, minLines,
 	}
 
 	var f checkFindings
+	f.Warn = registryParseWarning(joinRepo(repo, regPath), len(reg.Entries), len(reg.Clusters))
 	for _, s := range r.Pairs {
 		if reg.Has(s.Left.Key(), s.Right.Key()) {
 			f.Known++
@@ -119,10 +121,45 @@ func computeCheck(repo, left, right, exclude string, minScore float64, minLines,
 	return f, nil
 }
 
+// registryParseWarning returns a warning when a registry file exists and has
+// real content but parsed to zero entries — almost always a format/path
+// mismatch (e.g. a Python-era registry the Go parser can't read), the failure
+// mode that otherwise makes `check` silently treat the whole repo as new.
+func registryParseWarning(path string, entries, clusters int) string {
+	if entries > 0 || clusters > 0 {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "" // a missing registry is legitimately empty, not a warning
+	}
+	hasContent, oldFormat := false, false
+	for _, line := range strings.Split(string(data), "\n") {
+		t := strings.TrimSpace(line)
+		if t == "" || strings.HasPrefix(t, "#") || strings.HasPrefix(t, ">") {
+			continue
+		}
+		hasContent = true
+		if strings.HasPrefix(t, "- left:") || strings.HasPrefix(t, "- right:") {
+			oldFormat = true
+		}
+	}
+	if !hasContent {
+		return ""
+	}
+	if oldFormat {
+		return fmt.Sprintf("registry %s has content but parsed 0 entries — looks like the Python-era format; run `calque migrate-registry --in %s --write`", path, path)
+	}
+	return fmt.Sprintf("registry %s has content but parsed 0 entries — wrong format or path? entries are `- pair: a | b` / `- cluster: a | b | …` lines", path)
+}
+
 // renderCheck formats the gate findings as the human/agent-readable report
 // shared by the CLI and the MCP tool.
 func renderCheck(f checkFindings, regPath string) string {
 	var b strings.Builder
+	if f.Warn != "" {
+		fmt.Fprintf(&b, "⚠ %s\n\n", f.Warn)
+	}
 	nStale := len(f.Stale) + len(f.StaleC)
 	fmt.Fprintf(&b, "calque check: pairs %d new · %d known | clusters %d new · %d known | %d stale registry entr%s\n",
 		len(f.Fresh), f.Known, len(f.FreshC), f.KnownC, nStale, plural(nStale, "y", "ies"))

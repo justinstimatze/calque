@@ -15,6 +15,13 @@ All notable changes to calque. The version string itself comes from the git tag
   axis is ported from the original Python nose.
 
 ### Added
+- **`check` warns on a zero-parse registry** — if a registry file exists and has
+  real content but parses to zero entries (almost always a format/path mismatch),
+  `check` now prints `⚠ registry … has content but parsed 0 entries …` instead of
+  silently treating the whole repo as new. Detects the Python-era format and names
+  `migrate-registry`. Closes the silent-cry-wolf failure mode that surfaced on
+  stope (a 30-entry registry read as 0 → 26k false "new"). Pinned by
+  `cmd/calque/check_test.go`.
 - **`migrate-registry`** — one-time converter for Python-era registries. The
   Python calque wrote `## id — verdict` + `- left:`/`- right:` blocks; the Go
   parser keys on `- pair: <left> | <right>`, so an un-migrated registry parses to

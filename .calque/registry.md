@@ -415,3 +415,16 @@ overlaps are coincidental name tokens with unrelated purposes.
 - pair: cmd/calque/calib_test.go::TestVerdictLabel | cmd/calque/migrate.go::normalizeVerdict
 - verdict: false-alarm
 - reviewed: 2026-06-07
+
+## registry zero-parse warning (2026-06-07)
+
+registryParseWarning and migrateRegistry both key on the old-format markers
+(`- left:`/`- right:`) — they share that grammar knowledge by design and should
+stay in step. Test mirrors its subject.
+
+- pair: cmd/calque/check.go::registryParseWarning | cmd/calque/check_test.go::TestRegistryParseWarning
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07
+- pair: cmd/calque/check.go::registryParseWarning | cmd/calque/migrate.go::migrateRegistry
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-07

@@ -1,6 +1,14 @@
+# Python (legacy; being removed as the Go rewrite reaches parity)
 .venv/
 __pycache__/
 *.pyc
-.calque/
 dist/
 *.egg-info/
+
+# Go
+/calque
+*.test
+
+# calque's own registry: track the adjudicated registry, ignore calibration logs
+.calque/*
+!.calque/registry.md

@@ -694,3 +694,37 @@ code axis, they are not a new sibling like §14):
 **Status: planned, not started** — same dogfood-first discipline. Recorded so the
 next build pass starts from this evidence. The private-symbol-touchpoint signal (#1)
 is the single highest-leverage code-axis upgrade the evidence points to.
+
+**Live-hunt corroboration (2026-06-06, LLM-as-nose).** Acting as the nose by hand
+(fuzzy-matching the "right spots" rather than running the AST scanner) over stope
+surfaced parallel-path drift the current static nose *and* stope's hand-written #269
+antibody both miss — confirming the §15 thesis with concrete instances:
+- **A taxonomy defined in ≥5 literal sets.** The verb-synonym table
+  (examine/look/talk/…) lives in `input_llm._VERB_CONFIG` (canon) + `affordances._EMBED_VERBS`
+  (the only copy with a lockstep test) + `memory_scene._map_verb` + `reach_scene.ALLOWED_VERBS`
+  + an `engine.py` regex — already drifted (`read`/`listen` exist in only one copy each).
+  Invisible to the AST nose: these are *set/regex literals inside differently-named
+  functions*, not function twins; the tell is the *pattern* ("a literal set of
+  verb-synonyms"), which is an LLM/fuzzy match, not a `FuncSig` signature.
+- **A magic constant straddling both axes.** `0.65` (cosine threshold) is a module
+  constant in 4 files, synced by a *comment*, and only one honors the
+  `STOPE_NOUN_EMBED_THRESHOLD` env override — so the code-duplication axis (§15) and the
+  env-parity axis (§14) meet in one bug. Argues the two axes should share a registry
+  shape: "a value with N definition sites, some code, some env."
+- **A 4th input parser in a different subsystem.** `MemoryScene._parse_input` rolls its
+  own prep-strip with no politeness strip (re-opening #269 brick-3 in the scenes), and
+  the #269 antibody — scoped to three named shells — can't see it. Argues for the
+  registry-driven antibody (a Protocol + registry so a *new* shell is auto-covered)
+  over hard-coded shell lists.
+- **Calibration win:** the `to_dict`/`from_dict` pairs *looked* like drift to a crude
+  scan but adjudication found them clean (disciplined emit-if/get-with-default). The
+  recall→adjudicate split earned its keep — same honesty as the seed run's
+  4-drift/21-ok/5-false-alarm tally.
+
+Net: an LLM fuzzy-hunt is a viable *nose* for exactly the cases the static heuristic
+can't rank (sub-function, cross-subsystem, data-literal, cross-axis). The build
+implication isn't "drop the static nose" — it's that calque's adjudicate leg could be
+LLM-driven over LLM-surfaced candidates, with the static nose as the cheap first pass.
+Fed back to stope as `reference/calque-language-design-feedback.md` (Python levers:
+parse-once into a typed Command, `NewType` raw-vs-canon, single-source taxonomies as
+data, registry-driven antibody, import-linter contracts). See [[calque-triple-shell-recall]].

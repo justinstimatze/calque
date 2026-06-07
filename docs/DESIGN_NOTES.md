@@ -376,6 +376,25 @@ a public benchmark. Prioritized to that end:
     `hybrid/skills/hybrid-loops/references/BLOCK_GRAPHS.md`, beside `defn`.
     **Deferred until calque is stabilized + public** (per Justin). Entry drafted.
 
+**TODO — Cross-language dogfood targets (next, per Justin 2026-06-06)**
+11. **Run the LLM-as-nose fuzzy hunt on `undercity` (TypeScript).** Dusty (475
+    TS/TSX + 209 JS/JSX files, last commit 2026-03-21), so likely carries the same
+    meta-bug stope did, but in TS. Apply the §15 live-hunt method: enumerate shells/
+    entry points, find taxonomies defined in N literal places, parallel parsers,
+    serialization twins, magic constants, the env/config tail. Produce a TS-flavored
+    language-design feedback doc (TS levers: discriminated unions + exhaustive `switch`
+    with `never`, **branded/opaque types** for raw-vs-canonical, `as const` + derived
+    union for single-source taxonomies, `satisfies`, eslint custom rules / dependency-
+    cruiser as the import-linter-equivalent antibody). Validates the cross-language
+    claim and feeds the TS extractor (item 7, ts-morph).
+12. **Poke at a Go repo for the same pattern** — `gemot` is big enough (163 `.go`
+    files; `adit` 44, `defn` 33 as backups). Hypothesis (Justin): Go is *slightly* more
+    robust to this (no inheritance → less template-method drift; implicit/structural
+    interface satisfaction). But check its own flavors: pre-generics copy-paste,
+    duplicated `error` handling, struct-tag drift, two impls of one interface, `const`
+    blocks redefined. Goal is *generality* — confirm whether the meta-bug + the
+    private-symbol-touchpoint signal transfer to Go, to make calque broadly capable.
+
 ---
 
 ## 10. Open questions / decisions for a parallel session

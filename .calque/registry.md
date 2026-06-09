@@ -516,3 +516,23 @@ stays clean. (Test fixtures live in `**/*_test.go`, excluded by the canonical ga
 - cluster: cmd/calque/calib.go::runDoctor | cmd/calque/check.go::computeCheck | cmd/calque/propose.go::runProposeRoles | cmd/calque/scan.go::runScan
 - verdict: false-alarm
 - reviewed: 2026-06-09
+
+---
+
+## Run — 2026-06-09 (blocking index added; task #16)
+
+The blocking index (`internal/code/block.go`) added a `FuncSig.tokens` method that
+gathers a function's tokens across its index channels. Its name stem ("tokens")
+coincides with the name-normalization helpers `stemTokens` / `normTokens`, so the
+name signal alone fires — but the bodies are unrelated (one walks a `FuncSig`'s
+channel sets; the others split a *name* string into role tokens). Name-stem
+coincidence, not a dual path. Both false-alarm. (Slice 1 of #16 is output-identical
+to the pre-blocking `Rank` — see `TestRankBlockingEquivalence` — so it introduces no
+new *pairs*; only the new `tokens` method itself is new surface.)
+
+- pair: internal/code/block.go::FuncSig.tokens | internal/code/funcsig.go::stemTokens
+- verdict: false-alarm
+- reviewed: 2026-06-09
+- pair: internal/code/block.go::FuncSig.tokens | internal/code/funcsig.go::normTokens
+- verdict: false-alarm
+- reviewed: 2026-06-09

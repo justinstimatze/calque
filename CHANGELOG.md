@@ -40,6 +40,23 @@ All notable changes to calque. The version string itself comes from the git tag
   closes the failure mode where a later agent "fixes" drift by re-syncing the doomed path,
   maintaining the dual path instead of collapsing it. Pinned by `cmd/calque/check_test.go`
   (`TestUnresolvedDrift`) + `internal/registry/registry_test.go` (`TestLoadEntryCollapseFields`).
+- **Blocking index for the pairwise scan (task #16, slice 1)** — `code.Rank` no longer
+  visits the full L×R product. A new inverted index (`internal/code/block.go`) over the
+  four channels `scorePair` can anchor on (name-stem, strings, writes, ret) generates
+  only the candidate pairs that could possibly survive the gate, then scores those. This
+  is **output-identical** to the old double loop — proven by `TestRankBlockingEquivalence`
+  (naive vs blocked, fixtures anchored independently per channel + calque's own corpus) —
+  while scoring ~3% of pairs on calque's source (96 of 3249). The boundary-blind
+  whole-repo scan it makes tractable was already the default (empty `--left/--right` →
+  all×all); this is the scaling half.
+
+### Fixed
+- **Non-reproducible suspicion score.** `scorePair` summed its weighted signals by
+  ranging a Go map; because float addition is non-associative and map iteration is
+  randomized, a pair sitting near the `min-score` threshold could be included on one run
+  and dropped on the next. Scores are now summed in a fixed channel order
+  (`channelOrder`), making the gate deterministic — a code-health tool must not carry the
+  irreproducibility it exists to flag. Surfaced by the blocking-index equality test.
 
 ## [0.1.0] - 2026-06-07
 

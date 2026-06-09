@@ -370,9 +370,18 @@ public benchmark.
   single-language AST nose can't express those; the options are a shared
   spec/contract both extractors map onto, or a differential at the API boundary.
   Out of scope for the AST core; a known gap.
-- **Within-repo whole-scan mode.** Currently boundary-only (left×right). A
-  whole-repo O(n²) mode needs name-stem prefiltering to be tractable; worth it for
-  "find dual paths nobody knew to look for." *Concrete evidence (a private sibling, §18):* the
+- **Within-repo whole-scan mode.** The boundary-blind default already ships (an empty
+  `--left/--right` scans all×all); task #16 slice 1 made it *tractable* — `code.Rank` now
+  blocks via an inverted index over the four anchor channels (`internal/code/block.go`)
+  instead of the O(n²) double loop, **output-identical** (proven by
+  `TestRankBlockingEquivalence`) while scoring ~3% of pairs on calque's own source. The
+  index degrades gracefully to O(n²) only on a token shared by nearly every function
+  (kept exact on purpose — pruning would drop genuinely-anchored pairs). *Still open
+  (slice 2, measurement-gated):* the **no-shared-footprint class** — pairs that share no
+  anchor-channel token at all, so blocking correctly never generates them and the gate
+  never saw them. That needs a separate, lossy discovery signal (name-stem / call-target /
+  return-shape), kept only if it earns its precision against the adjudicated registry
+  (§13). *Concrete evidence (a private sibling, §18):* the
   two-replay-backend bug lived in test-infra×test-infra — a boundary nobody thinks
   to name — so the cluster pass never saw it. You cannot pick the boundary you
   didn't know existed; boundary-blind scanning is the recall fix. *Field-confirmed

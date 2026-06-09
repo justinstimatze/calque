@@ -14,6 +14,11 @@ var weights = map[string]float64{
 	"strings": 0.30, "writes": 0.30, "name": 0.22, "calls": 0.10, "ret": 0.08,
 }
 
+// channelOrder fixes the order scorePair sums the weighted signals in. It exists
+// so the score is reproducible: ranging a map and accumulating non-associative
+// float adds otherwise yields run-dependent scores near the threshold.
+var channelOrder = []string{"strings", "writes", "name", "calls", "ret"}
+
 // Suspicion is one ranked suspect pair.
 type Suspicion struct {
 	Left, Right *FuncSig
@@ -89,9 +94,13 @@ func scorePair(a, b *FuncSig) (Suspicion, bool) {
 		"calls":   len(a.sCall) > 0 || len(b.sCall) > 0,
 		"ret":     len(a.sRet) > 0 || len(b.sRet) > 0,
 	}
+	// Sum in a FIXED channel order, not by ranging `avail` (a map): float addition
+	// is non-associative, so map-iteration order made a near-threshold score flip
+	// across minScore between runs — a non-reproducible gate, exactly the kind of
+	// bug calque exists to catch. Determinism here is correctness, not polish.
 	var wsum, score float64
-	for k, ok := range avail {
-		if ok {
+	for _, k := range channelOrder {
+		if avail[k] {
 			wsum += weights[k]
 			score += weights[k] * sig[k]
 		}
@@ -139,15 +148,15 @@ func Rank(left, right []*FuncSig, minLines int, minScore float64, top int) []Sus
 	}
 	L, R := keep(left), keep(right)
 
+	// Block first: candidatePairs yields only pairs sharing an anchor-channel
+	// token, which is a superset of every pair scorePair can accept — so this is
+	// output-identical to the naive L×R double loop, just far fewer scorePair
+	// calls. anchorChannels MUST track scorePair's hasAnchor gate (see block.go).
 	var out []Suspicion
-	for _, a := range L {
-		for _, b := range R {
-			if a.Key() == b.Key() {
-				continue
-			}
-			if s, ok := scorePair(a, b); ok && s.Score >= minScore {
-				out = append(out, s)
-			}
+	for _, p := range candidatePairs(L, R, anchorChannels) {
+		a, b := p[0], p[1]
+		if s, ok := scorePair(a, b); ok && s.Score >= minScore {
+			out = append(out, s)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Score > out[j].Score })

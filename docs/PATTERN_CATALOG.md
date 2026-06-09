@@ -66,9 +66,9 @@ should share a registry shape: "a value with N definition sites, some code, some
 ## P4 — Parallel parser in an un-enumerated subsystem  [MISS]
 **Shape.** A subsystem rolls its own mini version of a core primitive the main antibody
 doesn't know to check.
-**Seen.** A subsystem's own `_parse_input` — own preposition strip, own verb map, *no
+**Seen.** A subsystem's own raw-input parser — own preposition strip, own verb map, *no
 politeness strip* (re-opening the P1 bug inside a subsystem). The original antibody was
-scoped to three named shells, so it couldn't see a fourth.
+scoped to a few named shells, so it couldn't see a new one.
 **Why generated.** A subsystem feels self-contained; the model builds it complete in
 itself rather than reaching back to the shared normalizer.
 **Tell.** A function whose body shape matches a core primitive (split + strip + map

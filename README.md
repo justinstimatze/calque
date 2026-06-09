@@ -177,9 +177,13 @@ calque migrate-registry --in .calque/registry.md --write   # .bak backup first
 ## Status
 
 The spine is complete and dogfooded (calque scans its own source and stays
-clean) — code + prose axes, registry gate, git/MCP hooks, calibration. Further
-axes (config/env, catalog, narrative) and a TypeScript extractor are roadmapped
-in `docs/DESIGN_NOTES.md` §16–17. Apache-2.0; the prose axis, calibration, and
+clean) — code + prose axes, registry gate, git/MCP hooks, calibration. The next
+thing to build is a **role-cardinality** check — "this role should have one
+implementation; flag whenever it has two or more" (the multi-path case, N
+unbounded) — which catches the dual paths that pairwise similarity can't (see
+`docs/DESIGN_NOTES.md` §18). Further axes
+(config/env, catalog, narrative) and a TypeScript extractor are roadmapped in
+`docs/DESIGN_NOTES.md` §16–18. Apache-2.0; the prose axis, calibration, and
 hook are consolidated from the sibling project `cupel` (MIT, attribution
 preserved) — which now consumes calque back: cupel retired its own vocabulary
 tooling and runs `calque vocab-check` as its pre-commit prose gate.

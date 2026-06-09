@@ -6,7 +6,7 @@ package code
 // easy "name twins" but misses the expensive case: a small shared block inlined
 // into several large, differently-named functions. The canonical miss is a
 // triple-shell input path — three entry methods (two `step`s and a `run`) each
-// inlined `[_parse_action -> read/clear _agent_canon -> dispatch]`; the few seam
+// inlined `[_parse_cmd -> read/clear _canon_cache -> dispatch]`; the few seam
 // tokens are swamped in big bodies, and the names share no stem, so pairwise
 // Jaccard scores them below threshold and, being pairwise, can't express a trio
 // at all.
@@ -30,7 +30,7 @@ import (
 
 // SeamSymbol is one private symbol shared across a cluster's members.
 type SeamSymbol struct {
-	Name   string  // the seam, e.g. "_parse_action"
+	Name   string  // the seam, e.g. "_parse_cmd"
 	Fanout int     // how many in-scope functions touch it (2..MaxFanout)
 	Rarity float64 // 1/Fanout, optionally private-boosted — higher = rarer = stronger
 }

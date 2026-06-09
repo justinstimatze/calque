@@ -16,23 +16,23 @@ func bigBody(p string, n int) []string {
 }
 
 // makeShell builds a large method that, beneath its unique bulk, inlines the
-// same private seam: a `_parse_action` call and an `_agent_canon` read+write.
+// same private seam: a `_parse_cmd` call and an `_canon_cache` read+write.
 func makeShell(typ, method string) *FuncSig {
 	f := &FuncSig{
 		File:     typ + ".go",
 		Qualname: typ + "." + method,
 		Name:     method,
 		NLines:   40,
-		Calls:    append([]string{"_parse_action"}, bigBody(method+"c", 12)...),
-		Strings:  append([]string{"_agent_canon"}, bigBody(method+"s", 12)...),
-		Writes:   append([]string{"_agent_canon"}, bigBody(method+"w", 12)...),
+		Calls:    append([]string{"_parse_cmd"}, bigBody(method+"c", 12)...),
+		Strings:  append([]string{"_canon_cache"}, bigBody(method+"s", 12)...),
+		Writes:   append([]string{"_canon_cache"}, bigBody(method+"w", 12)...),
 	}
 	f.Prepare()
 	return f
 }
 
 // The headline §15 case: three shells (two `step`s + a `run`) each inline
-// [_parse_action -> _agent_canon]. Pairwise Jaccard drowns the seam and can't
+// [_parse_cmd -> _canon_cache]. Pairwise Jaccard drowns the seam and can't
 // express a trio; the touchpoint pass must surface all three as one cluster.
 func TestTripleShellClustered(t *testing.T) {
 	shells := []*FuncSig{
@@ -58,8 +58,8 @@ func TestTripleShellClustered(t *testing.T) {
 	for _, s := range c.Shared {
 		seams[s.Name] = true
 	}
-	if !seams["_parse_action"] || !seams["_agent_canon"] {
-		t.Fatalf("expected shared seams _parse_action and _agent_canon, got %v", seams)
+	if !seams["_parse_cmd"] || !seams["_canon_cache"] {
+		t.Fatalf("expected shared seams _parse_cmd and _canon_cache, got %v", seams)
 	}
 }
 
@@ -88,7 +88,7 @@ func TestPublicSymbolNotSeam(t *testing.T) {
 	if isSeam("Printf") || isSeam("Step") {
 		t.Fatal("exported symbols must not be treated as private seams")
 	}
-	if !isSeam("_parse_action") || !isSeam("parseAction") {
+	if !isSeam("_parse_cmd") || !isSeam("parseCmd") {
 		t.Fatal("leading-underscore and lower-first identifiers must be seams")
 	}
 	if isSeam("__init__") || isSeam("i") {

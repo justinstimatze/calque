@@ -48,6 +48,29 @@ unlabeled repo; (2) the rarity-weighted private-symbol-touchpoint signal (unclai
 
 ## 2. Competitive landscape (primary-sourced)
 
+> **⚠ Correction (2026-06-08) — the "UNOCCUPIED" verdict below is STALE.** This section
+> is the 2026-06-06 primary-sourced snapshot, kept as a record. Between then and going
+> public the category was *named* and *occupied*: "**architecture drift**" / "**fitness
+> functions**" is now established industry vocabulary with institutional backing
+> (Thoughtworks Technology Radar lists *Architecture drift reduction with LLMs* as a
+> technique), and a wave of tools moved in — most directly **`sauremilk/drift`** (MIT):
+> AST-level near-duplicate detection ("mutant duplicates" / "pattern fragmentation"), 24
+> cross-file signals, undeclared-dup discovery + declared boundaries, a feedback/
+> calibration loop reweighted on git outcomes, and a CI gate — i.e. close to calque's
+> whole spine, code-side, with a more mature calibration loop and partial TypeScript.
+> Also in-category: CodeAnt AI, `@aiready/pattern-detect`, similarity-ts, CloneDR.
+>
+> **What still holds** (the defensible ground — see DESIGN_NOTES §6 for the full
+> correction): calque is **not first-to-category** and must stop implying it. Its edge
+> is (1) **Type-4-by-construction** — the drift wave indexes *structural* AST similarity
+> (Type 1–3) and is blind to syntactically-dissimilar twins (a stub vs the real path;
+> two different-API backends), which is calque's effect-footprint slice; (2)
+> **role-cardinality / declare-and-gate** (DESIGN_NOTES §18) — a targeted search found
+> *no* tool asserting "this role has one canonical implementation"; genuinely
+> unoccupied, and field-validated; (3) **substrate-generality** (code + prose + planned
+> axes; the competitors are code-only). This is a *positioning* correction, not a thesis
+> change. The original 2026-06-06 analysis follows, unedited.
+
 **Bottom line: the specific niche — recall-first discovery of N-ary behavioral (Type-4)
 twins across a whole repo, with a persistent registry tracking drift over time — is
 essentially UNOCCUPIED commercially.** But the surrounding territory is filling fast.
@@ -120,9 +143,13 @@ registry + build-loop), not "we can spot a twin."
 ## 4. Go/no-go verdict
 
 The competitive question isn't "can we beat Greptile" — it's **"is there a tool to adopt
-instead of building?"** Answer: **no.** The only close thing (Greptile) is closed-source,
-diff-gated, per-seat SaaS that doesn't do standing whole-repo N-ary twin discovery with a
-registry. Nothing off-the-shelf does what the 6-repo survey just proved is needed.
+instead of building?"** Answer (2026-06-06): no. *Updated 2026-06-08:* `sauremilk/drift`
+(MIT) now covers much of the similarity-based code axis off-the-shelf, so the honest
+answer is **"partly"** — for AST-near-duplicate / pattern-fragmentation detection there
+is now a real OSS tool to adopt or learn from. What still has no off-the-shelf option is
+calque's distinctive bet: Type-4-by-construction recall (effect footprints, not AST
+shape) and the **role-cardinality declare-and-gate** axis (§2 correction; DESIGN_NOTES
+§18). Build *that*, and treat `drift` as prior art for the similarity axis.
 
 **GO — build for own-dogfooding + open-source (Apache-2.0), keep it sharp.** Do *not*
 turn it into an AI-review product (crowded, well-funded, and not for sale anyway). Build

@@ -921,6 +921,22 @@ Cardinality is not free magic: *something* must declare role *R* and what counts
    the target count**, not a bare `count == 1`.
 2. **Cluster-proposed** (higher-magic): the existing clustering proposes role
    candidates and their current cardinality; the author confirms the expected count.
+   **SHIPPED — `calque propose-roles` (task #15).** It feeds each N-ary private-seam
+   cluster through a predicate synthesizer (the cluster's strongest shared seam →
+   `calls:`/`emits:` term) and **self-verifies** the synthesized predicate by running
+   it back through the matcher (§18 option-1 machinery), emitting paste-ready `- role:`
+   blocks with `expected: 1` + a frozen `- baseline:` and a verify line showing whether
+   the predicate re-selects the cluster exactly. It is a *generator, not a gate* — prints
+   to stdout, writes nothing, never exits non-zero — and dedups against already-declared
+   roles and adjudicated `- cluster:` verdicts so settled ground isn't re-proposed. This
+   removes the option-1 authoring friction (you no longer have to know the seam to write
+   the predicate); the human still adjudicates which candidates are real.
+   *Prior art / honest scoping:* the discover-then-propose-a-declaration loop itself is
+   **not** novel — `sauremilk/drift` already pairs undeclared-dup discovery with declared
+   boundaries (§6), and DejaVu/FICS are the academic "recall-then-classify" precedent
+   (`RESEARCH_AND_MARKET.md` §1). What is unoccupied is the *cardinality* gate the
+   proposal targets — declaring a role's expected implementation count and enforcing
+   singularity — not the act of proposing a declaration from a cluster.
 
 Neither auto-finds the bugs with zero input — but both convert a convention the
 author keeps forgetting into a code-enforced invariant, which is the whole win. The

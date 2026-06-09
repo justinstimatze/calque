@@ -22,3 +22,6 @@ CLAUDE.md
 
 # Claude Code local runtime state (scheduled-task locks, etc.)
 .claude/
+
+# plancheck debug artifact
+.plancheck-debug.json

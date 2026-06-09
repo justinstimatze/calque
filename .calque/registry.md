@@ -479,3 +479,34 @@ JSON-schema field strings; command runners share flag-name strings). None is rea
 - cluster: cmd/calque/cardinality.go::runCardinality | cmd/calque/scan.go::codeAxis | cmd/calque/synonym_report.go::runSynonymReport | cmd/calque/vocab_check.go::computeVocabCheck | cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/vocab_report.go::runVocabReport
 - verdict: false-alarm
 - reviewed: 2026-06-09
+
+---
+
+## Run — 2026-06-09 (propose-roles added; self-scan churn)
+
+Adding `cmd/calque/propose.go` (the cluster→role-candidate proposer, task #15) added a
+new command runner that joins the same parallel-orchestrator and shared-utility patterns
+the prior runs already adjudicated: another `compute*`/`render*`/`run*` triplet (the pure
+core / render / orchestrator split — by design, not drift), and `runProposeRoles` joining
+the shared-`splitCSV` / shared-`clusterOptsFrom` / shared-flag-string clusters every
+command runner sits in. None is real drift — all false-alarm, recorded so the self-check
+stays clean. (Test fixtures live in `**/*_test.go`, excluded by the canonical gate.)
+
+- pair: cmd/calque/cardinality.go::runCardinality | cmd/calque/propose.go::runProposeRoles
+- verdict: false-alarm
+- reviewed: 2026-06-09
+- pair: cmd/calque/propose.go::computeProposals | cmd/calque/propose.go::renderProposals
+- verdict: false-alarm
+- reviewed: 2026-06-09
+- pair: cmd/calque/cardinality.go::renderCardinality | cmd/calque/propose.go::renderProposals
+- verdict: false-alarm
+- reviewed: 2026-06-09
+- cluster: cmd/calque/cardinality.go::runCardinality | cmd/calque/mcp.go::checkToolDefinition | cmd/calque/mcp.go::vocabCheckToolDefinition | cmd/calque/propose.go::runProposeRoles | cmd/calque/scan.go::addBoundaryFlags | cmd/calque/synonym_report.go::runSynonymReport | cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/vocab_report.go::runVocabReport
+- verdict: false-alarm
+- reviewed: 2026-06-09
+- cluster: cmd/calque/cardinality.go::runCardinality | cmd/calque/propose.go::runProposeRoles | cmd/calque/scan.go::codeAxis | cmd/calque/synonym_report.go::runSynonymReport | cmd/calque/vocab_check.go::computeVocabCheck | cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/vocab_report.go::runVocabReport
+- verdict: false-alarm
+- reviewed: 2026-06-09
+- cluster: cmd/calque/calib.go::runDoctor | cmd/calque/check.go::computeCheck | cmd/calque/propose.go::runProposeRoles | cmd/calque/scan.go::runScan
+- verdict: false-alarm
+- reviewed: 2026-06-09

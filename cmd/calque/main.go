@@ -85,6 +85,9 @@ Usage:
   calque cardinality     role axis: declare "role R has N implementations", flag
                          when more exist — the multi-path case pairwise misses
                          (declare in the registry; --strict to exit 1)
+  calque propose-roles   role axis: synthesize paste-ready role candidates
+                         from N-ary private-seam clusters (assists cardinality;
+                         generator only — prints, never gates or writes)
   calque hook            spine: wire check into a git pre-commit / Stop hook
                          (calque hook install — auto-installs pre-commit)
   calque doctor          spine: calibration rollup (fire-rate, hit-rate)
@@ -117,6 +120,8 @@ func main() {
 		runCheck(os.Args[2:])
 	case "cardinality":
 		runCardinality(os.Args[2:])
+	case "propose-roles":
+		runProposeRoles(os.Args[2:])
 	case "hook":
 		runHook(os.Args[2:])
 	case "doctor":

@@ -19,6 +19,18 @@ All notable changes to calque. The version string itself comes from the git tag
     ≥1 is flagged `VACUOUS` (a stale/typo'd declaration), so the gate cannot pass
     silently while checking nothing. A `- expected: 0` ban that matches nothing stays
     correct.
+- **`calque propose-roles`** — turns the N-ary private-seam cluster pass into a
+  role-candidate proposer (DESIGN_NOTES §18.5 option 2), removing the hand-authoring
+  friction of the cardinality MVP. For each suspect cluster it synthesizes a predicate
+  from the cluster's strongest shared seam (`calls:`/`emits:`), **self-verifies** it by
+  running it back through the matcher (reporting whether it re-selects the cluster
+  exactly, too broadly, or too narrowly), and emits a paste-ready `- role:` block with
+  `expected: 1` + a frozen `- baseline:`. A generator, not a gate: prints to stdout,
+  writes nothing, never exits non-zero — so it cannot disturb a repo's `check --strict`
+  state. Dedups against already-declared roles and adjudicated `- cluster:` verdicts.
+  The discover-then-declare loop is adjacent prior art (drift's declared boundaries;
+  DejaVu/FICS recall-then-classify); the *cardinality* gate it targets is the unoccupied
+  part. Dogfooded on calque's own source. Pinned by `cmd/calque/propose_test.go`.
 
 ## [0.1.0] - 2026-06-07
 

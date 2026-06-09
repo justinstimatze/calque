@@ -224,6 +224,54 @@ Highlights that shape the architecture:
 > the sharpest competitor and, as a fellow open-source (MIT) project, prior art worth
 > learning from and crediting; that study is queued.
 
+### 6.1 `drift` teardown (2026-06-09, primary-source-verified)
+
+The queued study, done — every claim below checked against the live repo, not
+recalled. **Repo path resolved:** the canonical, current repo is
+**`github.com/sauremilk/drift`** (README tagline "24 signals · deterministic, no
+LLM"; PyPI `drift-analyzer`; CLI `drift`; Python 3.11+). `mick-gsk/drift` serves the
+*same* `docs-site/` content (a prior handle/transfer, not a divergent fork) — cite
+`sauremilk/drift`. License **MIT**, confirmed.
+
+**Verified specifics (the 2026-06-08 block above held up; these sharpen it):**
+
+| Claim (as written 06-08) | Primary-source verdict (06-09) |
+|---|---|
+| "24 cross-file signals" | ✅ tagline "24 signals"; named: PFS (pattern-fragmentation), MDS (mutant-duplicate), AVS (architecture-violation), BAT (bypass-accumulation), TPD (test-polarity-deficit), +19. (Deep-dive doc says "25" once — a benign internal inconsistency; 24 is the headline + the TS denominator.) |
+| "feedback/calibration loop reweighted on git outcomes" | ✅ **and more mature than implied**: "precision-weighted linear interpolation across three evidence sources — explicit `drift feedback mark`, git-outcome correlation, and GitHub issue/PR-label correlation"; "observed signal precision gradually overrides default weights." CLI: `drift feedback` / `calibrate` / `precision`. |
+| "partial TypeScript" | ✅ **17/24 signals** on TS via tree-sitter (`pip install 'drift-analyzer[typescript]'`); Python is primary. |
+| "declared boundaries" | ✅ but it's **layer/import boundaries only** (`drift.yaml`, architecture-violation rules) — **NOT cardinality.** Confirmed: "no mention of specifying that a function/role must have precisely one or multiple implementations." calque's role-cardinality axis stays unoccupied *even against the sharpest competitor.* |
+
+**Two learnings worth acting on:**
+
+1. **The differentiator is now algorithmically precise, not hand-wavy.** drift's
+   duplicate detection is **AST-structural with no data-flow/effect analysis**
+   (verbatim: "Drift's duplicate detection is AST-level, not text-level"; no write-set
+   / return-value / side-effect signal anywhere in the pipeline). MDS = bucket by LOC
+   ±10% → Jaccard ≥ 0.80 on **3-grams of AST node types, normalizing away identifiers
+   and literals**. That construction is *provably blind* to calque's slice: a stub vs
+   the real path lands in a different LOC bucket with a disjoint n-gram multiset
+   (Jaccard ≪ 0.80); two different-API backends share no AST shape. calque's
+   effect-footprint anchors (strings/writes/ret/name-stem — `internal/code/score.go`)
+   match on *what the code does*, which survives exactly the rewrites that move a pair
+   below drift's 0.80. They are complementary axes, not rivals — and the gap is a
+   theorem about drift's normalization, not a marketing line.
+2. **The calibration steal (actionable, and §13-legal).** drift reweights signal
+   precision from **adjudicated git outcomes + issue/PR labels**, not from a self-scan.
+   calque's `weights` map is hand-tuned and static (strings .30 / writes .30 / name
+   .22 / calls .10 / ret .08); `doctor` only *reports* precision@k against registry
+   verdicts — it never feeds them back. The §13 prohibition is on tuning to *self-scan
+   noise*; reweighting from **adjudicated registry labels** (drift = useful,
+   false-alarm = not-useful — the labels `doctor` already joins) is the principled,
+   §13-clean path to non-static weights. This is the one place drift is genuinely
+   ahead, and the upgrade is well-scoped: `doctor` already computes the join; the
+   missing piece is emitting a calibrated weight vector the gate can load. Queued as a
+   calibration-leg task, NOT this session's work.
+
+Net unchanged: positioning miss, not thesis miss. The teardown *strengthens* the
+three differentiators by grounding #1 in drift's own algorithm and confirming #2 is
+unoccupied against the strongest in-category tool.
+
 ---
 
 ## 7. Naming

@@ -48,17 +48,24 @@ unlabeled repo; (2) the rarity-weighted private-symbol-touchpoint signal (unclai
 
 ## 2. Competitive landscape (primary-sourced)
 
-> **⚠ Correction (2026-06-08) — the "UNOCCUPIED" verdict below is STALE.** This section
-> is the 2026-06-06 primary-sourced snapshot, kept as a record. Between then and going
-> public the category was *named* and *occupied*: "**architecture drift**" / "**fitness
-> functions**" is now established industry vocabulary with institutional backing
-> (Thoughtworks Technology Radar lists *Architecture drift reduction with LLMs* as a
-> technique), and a wave of tools moved in — most directly **`sauremilk/drift`** (MIT):
-> AST-level near-duplicate detection ("mutant duplicates" / "pattern fragmentation"), 24
-> cross-file signals, undeclared-dup discovery + declared boundaries, a feedback/
-> calibration loop reweighted on git outcomes, and a CI gate — i.e. close to calque's
-> whole spine, code-side, with a more mature calibration loop and partial TypeScript.
-> Also in-category: CodeAnt AI, `@aiready/pattern-detect`, similarity-ts, CloneDR.
+> **⚠ Correction (2026-06-08; primary-source-verified 2026-06-09) — the "UNOCCUPIED"
+> verdict below is STALE.** This section is the 2026-06-06 primary-sourced snapshot,
+> kept as a record. Between then and going public the category was *named* and
+> *occupied*: "**architecture drift**" / "**fitness functions**" is now established
+> industry vocabulary with institutional backing (Thoughtworks Technology Radar lists
+> *Architecture drift reduction with LLMs* as a technique), and a wave of tools moved
+> in — most directly **`sauremilk/drift`** (MIT, canonical repo `github.com/sauremilk/
+> drift`; `mick-gsk/drift` is the same content under a prior handle, not a fork):
+> AST-level near-duplicate detection ("mutant duplicates" / "pattern fragmentation"),
+> **24 signals** (PFS/MDS/AVS/BAT/TPD + 19), undeclared-dup discovery + **layer/import
+> boundary** declarations, an adaptive calibration loop (precision-weighted
+> interpolation over explicit feedback + **git-outcome** + issue/PR-label correlation),
+> and a CI gate — i.e. close to calque's whole spine, code-side, with a more mature
+> calibration loop and **partial TypeScript (17/24 signals via tree-sitter)**. Its
+> duplicate detection is **AST-structural with no data-flow/effect analysis** (verified
+> verbatim), which is precisely the seam calque's effect-footprint recall occupies — see
+> the full primary-source teardown in **DESIGN_NOTES §6.1**. Also in-category: CodeAnt
+> AI, `@aiready/pattern-detect`, similarity-ts, CloneDR.
 >
 > **What still holds** (the defensible ground — see DESIGN_NOTES §6 for the full
 > correction): calque is **not first-to-category** and must stop implying it. Its edge
@@ -143,13 +150,20 @@ registry + build-loop), not "we can spot a twin."
 ## 4. Go/no-go verdict
 
 The competitive question isn't "can we beat Greptile" — it's **"is there a tool to adopt
-instead of building?"** Answer (2026-06-06): no. *Updated 2026-06-08:* `sauremilk/drift`
-(MIT) now covers much of the similarity-based code axis off-the-shelf, so the honest
-answer is **"partly"** — for AST-near-duplicate / pattern-fragmentation detection there
-is now a real OSS tool to adopt or learn from. What still has no off-the-shelf option is
-calque's distinctive bet: Type-4-by-construction recall (effect footprints, not AST
-shape) and the **role-cardinality declare-and-gate** axis (§2 correction; DESIGN_NOTES
-§18). Build *that*, and treat `drift` as prior art for the similarity axis.
+instead of building?"** Answer (2026-06-06): no. *Updated 2026-06-08; verified
+2026-06-09:* `sauremilk/drift` (MIT) now covers much of the similarity-based code axis
+off-the-shelf, so the honest answer is **"partly"** — for AST-near-duplicate /
+pattern-fragmentation detection there is now a real OSS tool to adopt or learn from.
+Primary-source teardown (DESIGN_NOTES §6.1) confirms what still has no off-the-shelf
+option is calque's distinctive bet: Type-4-by-construction recall (effect footprints,
+not AST shape — drift is AST-structural with *no* data-flow/effect signal, so its 0.80
+Jaccard gate is provably blind to the stub-vs-real and two-backend cases) and the
+**role-cardinality declare-and-gate** axis (drift declares layer/import boundaries, never
+implementation cardinality — confirmed). Build *that*, and treat `drift` as prior art for
+the similarity axis. **One thing worth stealing:** drift reweights signal precision from
+*adjudicated git outcomes*, not a self-scan — the §13-clean path to making calque's
+hand-tuned static weights adaptive (`doctor` already computes the label join; it just
+doesn't feed it back). Queued as a calibration-leg upgrade.
 
 **GO — build for own-dogfooding + open-source (Apache-2.0), keep it sharp.** Do *not*
 turn it into an AI-review product (crowded, well-funded, and not for sale anyway). Build

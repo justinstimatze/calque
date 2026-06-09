@@ -58,6 +58,18 @@ All notable changes to calque. The version string itself comes from the git tag
   (`channelOrder`), making the gate deterministic — a code-health tool must not carry the
   irreproducibility it exists to flag. Surfaced by the blocking-index equality test.
 
+### Docs
+- **Primary-source teardown of `sauremilk/drift`** (the sharpest in-category competitor)
+  in DESIGN_NOTES §6.1, with RESEARCH_AND_MARKET §2/§4 stamped verified. Resolves the
+  repo-path question (canonical `sauremilk/drift`; `mick-gsk/drift` is the same content
+  under a prior handle), confirms the 2026-06-08 correction held, and sharpens it: drift
+  is **AST-structural with no data-flow/effect signal** (so its 0.80-Jaccard gate is
+  provably blind to calque's effect-footprint slice), declares **layer boundaries not
+  implementation cardinality** (calque's cardinality axis stays unoccupied), supports
+  **17/24 signals on TypeScript**, and reweights from **adjudicated git outcomes** — the
+  §13-clean path to making calque's static weights adaptive, queued as a calibration-leg
+  upgrade.
+
 ## [0.1.0] - 2026-06-07
 
 First tagged release. The Go rewrite is complete: a substrate-general drift nose

@@ -381,7 +381,14 @@ public benchmark.
   anchor-channel token at all, so blocking correctly never generates them and the gate
   never saw them. That needs a separate, lossy discovery signal (name-stem / call-target /
   return-shape), kept only if it earns its precision against the adjudicated registry
-  (§13). *Concrete evidence (a private sibling, §18):* the
+  (§13). *Slice-2 measurement ran (2026-06-09) and stopped at the precondition:* a registry
+  records only what the gate already surfaced (every entry has shared footprint by
+  construction), and the stope seed is likewise gate-found pairs — so the labeled
+  no-footprint set is n≈1 (the external two-backend anecdote), too thin to discriminate
+  three candidate signals without fitting to noise. Deferred, not abandoned: `channelSet`
+  in `internal/code/block.go` is already parameterized to drive a looser-channel discovery
+  pass the day a labeled corpus of this class exists. Forcing a signal against n≈1 would be
+  the exact self-scan-tuning §13 prohibits. *Concrete evidence (a private sibling, §18):* the
   two-replay-backend bug lived in test-infra×test-infra — a boundary nobody thinks
   to name — so the cluster pass never saw it. You cannot pick the boundary you
   didn't know existed; boundary-blind scanning is the recall fix. *Field-confirmed

@@ -312,9 +312,11 @@ public benchmark.
 
    Also derived from that sibling's field evidence (§18.7), to build alongside the
    cardinality MVP:
-   - **Non-vacuity calibration in `doctor`** — mutation-verify that a role/cardinality
-     detector flags a known member when its allow-list is emptied, so a clean gate
-     cannot be vacuously green.
+   - **Non-vacuity.** *Gate-level guard SHIPPED:* `cardinality` flags a role whose
+     predicate matches zero implementers while expecting ≥1 (`VACUOUS`) — a stale or
+     typo'd declaration can no longer pass silently as a green gate. The deeper
+     `doctor` mutation-verification (does the detector flag a known member when its
+     allow-list is emptied) remains as a follow-on.
    - **Collapse-direction in the registry schema** — first-class `canonical-path` and
      `do-not-resync` fields on a `drift` verdict, so a later agent collapses the
      doomed path instead of re-syncing it (maintaining the dual path). The delegation

@@ -32,10 +32,21 @@ type roleResult struct {
 	BadPredicate error
 }
 
+// Vacuous reports a declared role whose predicate matched NO implementers despite
+// expecting at least one — a stale declaration (renamed/deleted implementation) or a
+// typo'd predicate. Without this guard such a role passes silently (0 > Expected is
+// false), so the gate would be *vacuously green*: the worst failure for a gate, because
+// the invariant looks enforced while checking nothing. A role with `- expected: 0` (a
+// deliberate ban) that matches nothing is correct, not vacuous.
+func (rr roleResult) Vacuous() bool {
+	return rr.BadPredicate == nil && rr.Role.Expected >= 1 && len(rr.Impls) == 0
+}
+
 // Violation reports whether the role's declared cardinality is broken: a malformed
-// predicate, more implementers than Expected, or any implementer past a frozen baseline.
+// predicate, a vacuous (zero-match) declaration, more implementers than Expected, or
+// any implementer past a frozen baseline.
 func (rr roleResult) Violation() bool {
-	return rr.BadPredicate != nil || len(rr.Impls) > rr.Role.Expected || len(rr.Novel) > 0
+	return rr.BadPredicate != nil || rr.Vacuous() || len(rr.Impls) > rr.Role.Expected || len(rr.Novel) > 0
 }
 
 // computeCardinality evaluates every declared role against the extracted signatures.
@@ -126,10 +137,16 @@ func renderCardinality(roles []registry.RoleEntry, res []roleResult, st code.Sca
 			continue
 		}
 		status := "ok ✓"
-		if rr.Violation() {
+		switch {
+		case rr.Vacuous():
+			status = "VACUOUS"
+		case rr.Violation():
 			status = "VIOLATION"
 		}
 		fmt.Fprintf(&b, "## %s — %s (expected %d, found %d)\n", rr.Role.Name, status, rr.Role.Expected, len(rr.Impls))
+		if rr.Vacuous() {
+			b.WriteString("  predicate matched 0 implementers — stale declaration (renamed/deleted) or a typo'd predicate?\n")
+		}
 		novel := make(map[string]bool, len(rr.Novel))
 		for _, k := range rr.Novel {
 			novel[k] = true
@@ -152,8 +169,9 @@ func renderCardinality(roles []registry.RoleEntry, res []roleResult, st code.Sca
 	if n := countViolations(res); n == 0 {
 		b.WriteString("all declared roles within their cardinality. ✓\n")
 	} else {
-		fmt.Fprintf(&b, "%d role(s) over their declared cardinality — collapse the extra implementations to a single\n", n)
-		b.WriteString("path, then (if a second path is genuinely required) raise `- expected:` or record a `- baseline:`.\n")
+		fmt.Fprintf(&b, "%d role(s) violate their declared cardinality. Over-count → collapse the extra\n", n)
+		b.WriteString("implementations to a single path (or raise `- expected:` / record a `- baseline:` if a\n")
+		b.WriteString("second path is genuinely required). Vacuous → fix or remove the stale declaration.\n")
 	}
 	return b.String()
 }

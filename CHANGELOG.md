@@ -15,6 +15,10 @@ All notable changes to calque. The version string itself comes from the git tag
   or any implementer past a frozen baseline (the ratchet). `--strict` exits 1. Catches
   the dual paths pairwise similarity misses by construction (no shared footprint) and
   recurrence. Dogfooded on calque's own source.
+  - **Vacuity guard**: a role whose predicate matches zero implementers while expecting
+    ≥1 is flagged `VACUOUS` (a stale/typo'd declaration), so the gate cannot pass
+    silently while checking nothing. A `- expected: 0` ban that matches nothing stays
+    correct.
 
 ## [0.1.0] - 2026-06-07
 

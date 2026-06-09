@@ -52,4 +52,18 @@ func TestComputeCardinality(t *testing.T) {
 	if !res[0].Violation() || res[0].BadPredicate == nil {
 		t.Fatalf("a bad predicate must be reported as a violation")
 	}
+
+	// Vacuous: a valid predicate that matches nothing while expecting >= 1 must NOT
+	// pass silently (the vacuously-green failure mode).
+	res = computeCardinality(sigs, []registry.RoleEntry{{Name: "ghost", Predicate: "name:/NoSuchThing/", Expected: 1}})
+	if !res[0].Vacuous() || !res[0].Violation() {
+		t.Fatalf("a zero-match role with expected>=1 must be vacuous + a violation")
+	}
+
+	// A deliberate ban (expected 0) that matches nothing is correct, not vacuous.
+	res = computeCardinality(sigs, []registry.RoleEntry{{Name: "banned", Predicate: "name:/NoSuchThing/", Expected: 0}})
+	if res[0].Vacuous() || res[0].Violation() {
+		t.Fatalf("expected:0 with zero matches must be clean (the ban holds), got vacuous=%v violation=%v",
+			res[0].Vacuous(), res[0].Violation())
+	}
 }

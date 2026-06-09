@@ -277,8 +277,16 @@ public benchmark.
   from a sibling project (§16).
 - Git-tag versioning (hindcast pattern); `migrate-registry` for the old format.
 
-**P0 — Role-cardinality invariants (the next thing to build; see §18)**
-0. **Assert a declared implementation-count for role R.** The strongest signal
+**P0 — Role-cardinality invariants (MVP SHIPPED — `calque cardinality`; see §18)**
+0. **Assert a declared implementation-count for role R.** *Status: the
+   explicit-declaration MVP is built* — `calque cardinality` reads `- role:` /
+   `- predicate:` / `- expected:` / `- baseline:` declarations from the registry,
+   enumerates each role's implementers across the repo via the existing extractor
+   (delegating wrappers excluded, §12), and gates on count + frozen-baseline membership
+   with `--strict`. Dogfooded on calque's own source. The remaining slices —
+   cluster-proposed role candidates (§18.5 option 2), the boundary-blind predicate scan
+   (§10), `doctor` non-vacuity calibration, and collapse-direction registry fields — are
+   tracked but not yet built. Original derivation below. The strongest signal
    dogfooding has produced (two verified drift instances in a private sibling engine,
    2026-06-07) is that the next primitive is **not another pairwise signal** — it
    is a *cardinality invariant on a declared role*: "role R should have one

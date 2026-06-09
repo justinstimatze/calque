@@ -18,6 +18,7 @@ package registry
 import (
 	"bufio"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/justinstimatze/calque/internal/pairkey"
@@ -37,6 +38,21 @@ type ClusterEntry struct {
 	Keys     []string
 	Verdict  string
 	Reviewed string
+}
+
+// RoleEntry is a FORWARD declaration (the role-cardinality axis, DESIGN_NOTES §18):
+// "role R should have Expected implementations." Unlike Entry/ClusterEntry — which
+// record a backward verdict on a discovered suspect — a role is declared up front and
+// the `cardinality` gate enforces it. Predicate is an AND-composed expression matched
+// against each FuncSig (see internal/code.Match); Baseline, when non-empty, is the
+// frozen set of allowed implementer keys (the ratchet: any new implementer outside it
+// is flagged even when the count is otherwise within Expected).
+type RoleEntry struct {
+	Name      string
+	Predicate string
+	Expected  int // expected implementation count (default 1)
+	Baseline  []string
+	Reviewed  string
 }
 
 // VerdictClass is the leading word of Verdict.
@@ -59,14 +75,16 @@ type Registry struct {
 	Path       string
 	Entries    []Entry
 	Clusters   []ClusterEntry
+	Roles      []RoleEntry
 	byPair     map[string]int
 	byClusters map[string]int
+	byRole     map[string]int
 }
 
 // Load parses the registry at path. A missing file is not an error (returns an
 // empty registry) — a repo need not have adjudicated anything yet.
 func Load(path string) (*Registry, error) {
-	r := &Registry{Path: path, byPair: map[string]int{}, byClusters: map[string]int{}}
+	r := &Registry{Path: path, byPair: map[string]int{}, byClusters: map[string]int{}, byRole: map[string]int{}}
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -80,6 +98,7 @@ func Load(path string) (*Registry, error) {
 	// pair or cluster was opened most recently.
 	var curPair *Entry
 	var curCluster *ClusterEntry
+	var curRole *RoleEntry
 	setVerdict := func(v string) {
 		switch {
 		case curCluster != nil:
@@ -90,6 +109,8 @@ func Load(path string) (*Registry, error) {
 	}
 	setReviewed := func(v string) {
 		switch {
+		case curRole != nil:
+			curRole.Reviewed = v
 		case curCluster != nil:
 			curCluster.Reviewed = v
 		case curPair != nil:
@@ -111,7 +132,16 @@ func Load(path string) (*Registry, error) {
 				r.Clusters = append(r.Clusters, *curCluster)
 			}
 		}
-		curPair, curCluster = nil, nil
+		if curRole != nil && curRole.Name != "" && curRole.Predicate != "" {
+			if _, dup := r.byRole[curRole.Name]; !dup {
+				if curRole.Expected < 0 {
+					curRole.Expected = 1 // default when '- expected:' is absent: collapse to one
+				}
+				r.byRole[curRole.Name] = len(r.Roles)
+				r.Roles = append(r.Roles, *curRole)
+			}
+		}
+		curPair, curCluster, curRole = nil, nil, nil
 	}
 
 	sc := bufio.NewScanner(f)
@@ -136,6 +166,28 @@ func Load(path string) (*Registry, error) {
 			}
 			if len(keys) >= 2 {
 				curCluster = &ClusterEntry{Keys: keys}
+			}
+		case strings.HasPrefix(line, "- role:"):
+			flush()
+			curRole = &RoleEntry{Name: cleanKey(strings.TrimPrefix(line, "- role:")), Expected: -1}
+		case strings.HasPrefix(line, "- predicate:"):
+			if curRole != nil {
+				curRole.Predicate = strings.TrimSpace(strings.TrimPrefix(line, "- predicate:"))
+			}
+		case strings.HasPrefix(line, "- expected:"):
+			if curRole != nil {
+				if n, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "- expected:"))); err == nil {
+					curRole.Expected = n
+				}
+			}
+		case strings.HasPrefix(line, "- baseline:"):
+			if curRole != nil {
+				v := strings.TrimSpace(strings.TrimPrefix(line, "- baseline:"))
+				for _, part := range strings.Split(v, ",") {
+					if k := cleanKey(part); k != "" {
+						curRole.Baseline = append(curRole.Baseline, k)
+					}
+				}
 			}
 		case strings.HasPrefix(line, "- verdict:"):
 			setVerdict(strings.TrimSpace(strings.TrimPrefix(line, "- verdict:")))

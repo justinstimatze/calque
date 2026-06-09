@@ -82,6 +82,9 @@ Usage:
                          --bootstrap, --seed-cmd '<proj seeder>', --exclude
   calque check           spine: registry-aware gate — flag new/drifted vs the
                          registry  (warn-only; --strict to exit 1)
+  calque cardinality     role axis: declare "role R has N implementations", flag
+                         when more exist — the multi-path case pairwise misses
+                         (declare in the registry; --strict to exit 1)
   calque hook            spine: wire check into a git pre-commit / Stop hook
                          (calque hook install — auto-installs pre-commit)
   calque doctor          spine: calibration rollup (fire-rate, hit-rate)
@@ -112,6 +115,8 @@ func main() {
 		runVocabCheck(os.Args[2:])
 	case "check":
 		runCheck(os.Args[2:])
+	case "cardinality":
+		runCardinality(os.Args[2:])
 	case "hook":
 		runHook(os.Args[2:])
 	case "doctor":

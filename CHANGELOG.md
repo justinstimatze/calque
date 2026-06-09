@@ -5,6 +5,17 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+### Added
+- **Role-cardinality axis (`calque cardinality`)** — calque's declare-and-gate axis
+  (DESIGN_NOTES §18), the differentiator no similarity-based competitor occupies.
+  Declare `- role:` / `- predicate:` / `- expected:` / `- baseline:` in the registry;
+  the gate enumerates each role's implementers across the repo (an AND-composed
+  predicate over `FuncSig` fields — `name:`/`qual:`/`file:`/`calls:`/`writes:`/`emits:`/
+  `returns:`, delegating wrappers excluded) and flags any role over its expected count,
+  or any implementer past a frozen baseline (the ratchet). `--strict` exits 1. Catches
+  the dual paths pairwise similarity misses by construction (no shared footprint) and
+  recurrence. Dogfooded on calque's own source.
+
 ## [0.1.0] - 2026-06-07
 
 First tagged release. The Go rewrite is complete: a substrate-general drift nose

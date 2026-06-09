@@ -428,3 +428,54 @@ stay in step. Test mirrors its subject.
 - pair: cmd/calque/check.go::registryParseWarning | cmd/calque/migrate.go::migrateRegistry
 - verdict: contracted-twin-ok
 - reviewed: 2026-06-07
+
+---
+
+## Role declarations (the cardinality axis — DESIGN_NOTES §18)
+
+Forward invariants for `calque cardinality --repo .`: "role R has exactly N
+implementations." Unlike the pairs/clusters above (backward verdicts on discovered
+suspects), these are declared up front and the gate enforces them — catching dual
+paths that share no footprint, and recurrence (a re-added implementation).
+
+## role: verdict-class-producer
+- role: verdict-class-producer
+- predicate: qual:/^verdictClass$/
+- expected: 1
+- reviewed: 2026-06-09
+
+---
+
+## Run — 2026-06-09 (role-cardinality axis added; self-scan churn)
+
+Adding `internal/code/role.go` + `cmd/calque/cardinality.go` introduced new functions;
+the self-scan surfaced coincidental name-stem pairs (Match ≟ MatchAny; the deliberate
+`compute*`/`run*` core-vs-orchestrator split) and shared-utility clusters (everyone
+calls `splitCSV`; predicate-kind literals `name`/`qual`/`file`/… collide with MCP
+JSON-schema field strings; command runners share flag-name strings). None is real drift
+— all false-alarm, recorded so the self-check stays clean.
+
+- pair: internal/code/role.go::Predicate.Matches | internal/code/role.go::predTerm.matches
+- verdict: false-alarm
+- reviewed: 2026-06-09
+- pair: internal/code/role.go::Match | internal/glob/glob.go::MatchAny
+- verdict: false-alarm
+- reviewed: 2026-06-09
+- pair: cmd/calque/cardinality.go::computeCardinality | cmd/calque/cardinality.go::runCardinality
+- verdict: false-alarm
+- reviewed: 2026-06-09
+- pair: cmd/calque/cardinality.go::runCardinality | cmd/calque/cardinality.go::renderCardinality
+- verdict: false-alarm
+- reviewed: 2026-06-09
+- pair: internal/code/role.go::ParsePredicate | internal/code/role.go::predTerm.matches
+- verdict: false-alarm
+- reviewed: 2026-06-09
+- cluster: cmd/calque/mcp.go::checkToolDefinition | cmd/calque/mcp.go::handleMCP | cmd/calque/mcp.go::vocabCheckToolDefinition | internal/code/extract.py::_extract | internal/code/role.go::ParsePredicate | internal/code/role.go::predTerm.matches | internal/code/score.go::Suspicion.Reason | internal/code/score.go::scorePair
+- verdict: false-alarm
+- reviewed: 2026-06-09
+- cluster: cmd/calque/cardinality.go::runCardinality | cmd/calque/mcp.go::checkToolDefinition | cmd/calque/mcp.go::vocabCheckToolDefinition | cmd/calque/scan.go::addBoundaryFlags | cmd/calque/synonym_report.go::runSynonymReport | cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/vocab_report.go::runVocabReport
+- verdict: false-alarm
+- reviewed: 2026-06-09
+- cluster: cmd/calque/cardinality.go::runCardinality | cmd/calque/scan.go::codeAxis | cmd/calque/synonym_report.go::runSynonymReport | cmd/calque/vocab_check.go::computeVocabCheck | cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/vocab_report.go::runVocabReport
+- verdict: false-alarm
+- reviewed: 2026-06-09

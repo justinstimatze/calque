@@ -17,6 +17,12 @@ Verdicts: **drift** (collapse) · **contracted-twin-ok** (pin, watch) ·
 **false-alarm** (suppress). Recency is `reviewed` + liveness reconciliation,
 never age-eviction (an old false-alarm is still a false-alarm).
 
+A **drift** pair may also carry `- canonical:` (the path to keep) and
+`- do-not-resync:` (the doomed path to collapse away). `check` surfaces every
+drift pair whose both paths are still live as `DRIFT (unresolved)` with this
+direction — warn-only — so a later agent collapses the right path instead of
+re-syncing the doomed one (DESIGN_NOTES §18.7).
+
 ---
 
 ## Run — 2026-06-06 (Go rewrite; self-scan of the Go source)

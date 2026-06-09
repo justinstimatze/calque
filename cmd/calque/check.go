@@ -57,13 +57,14 @@ func runCheck(args []string) {
 // over pairs and N-ary clusters plus stale (dangling) registry entries. Isolated
 // from printing + os.Exit so both the CLI and the MCP server share one core.
 type checkFindings struct {
-	Fresh  []code.Suspicion
-	Known  int
-	FreshC []code.Cluster
-	KnownC int
-	Stale  []registry.Entry
-	StaleC []registry.ClusterEntry
-	Warn   string // non-empty when the registry exists but parsed to zero entries
+	Fresh      []code.Suspicion
+	Known      int
+	FreshC     []code.Cluster
+	KnownC     int
+	Stale      []registry.Entry
+	StaleC     []registry.ClusterEntry
+	Unresolved []registry.Entry // known drift, both paths still live — not yet collapsed
+	Warn       string           // non-empty when the registry exists but parsed to zero entries
 }
 
 // computeCheck runs the scan, diffs against the registry, and returns the
@@ -118,6 +119,11 @@ func computeCheck(repo, left, right, exclude string, minScore float64, minLines,
 			}
 		}
 	}
+
+	// Known drift whose both paths are still live = a dual path not yet collapsed.
+	// Surfaced (warn-only) with its recorded collapse direction so a later agent
+	// collapses the doomed path instead of re-syncing it (§18.7).
+	f.Unresolved = unresolvedDrift(reg.Entries, live)
 	return f, nil
 }
 
@@ -163,6 +169,9 @@ func renderCheck(f checkFindings, regPath string) string {
 	nStale := len(f.Stale) + len(f.StaleC)
 	fmt.Fprintf(&b, "calque check: pairs %d new · %d known | clusters %d new · %d known | %d stale registry entr%s\n",
 		len(f.Fresh), f.Known, len(f.FreshC), f.KnownC, nStale, plural(nStale, "y", "ies"))
+	if n := len(f.Unresolved); n > 0 {
+		fmt.Fprintf(&b, "%d known drift pair%s not yet collapsed (warn-only — see below).\n", n, plural(n, "", "s"))
+	}
 
 	for _, s := range f.Fresh {
 		fmt.Fprintf(&b, "\nNEW  %.2f  [%s]  `%s` (%s:%d)  ≟  `%s` (%s:%d)\n     %s\n",
@@ -185,6 +194,20 @@ func renderCheck(f checkFindings, regPath string) string {
 		fmt.Fprintf(&b, "\nSTALE-CLUSTER  {%s} — a referenced member no longer exists; prune or re-home (was: %s)\n",
 			strings.Join(e.Keys, ", "), e.Verdict)
 	}
+	for _, e := range f.Unresolved {
+		fmt.Fprintf(&b, "\nDRIFT (unresolved)  `%s` ≟ `%s` — known drift, both paths still live%s.\n",
+			e.Key1, e.Key2, reviewedSuffix(e))
+		switch {
+		case e.Canonical != "" && e.DoNotResync != "":
+			fmt.Fprintf(&b, "     collapse to `%s`; do NOT re-sync `%s` (it is the doomed path).\n", e.Canonical, e.DoNotResync)
+		case e.Canonical != "":
+			fmt.Fprintf(&b, "     collapse toward the canonical path `%s`.\n", e.Canonical)
+		case e.DoNotResync != "":
+			fmt.Fprintf(&b, "     do NOT re-sync `%s` (it is the doomed path); collapse it away.\n", e.DoNotResync)
+		default:
+			fmt.Fprintf(&b, "     collapse direction not recorded — add `- canonical:` / `- do-not-resync:` so a later agent collapses the right path.\n")
+		}
+	}
 	return b.String()
 }
 
@@ -200,6 +223,21 @@ func reviewedSuffix(e registry.Entry) string {
 		return ""
 	}
 	return ", reviewed " + e.Reviewed
+}
+
+// unresolvedDrift returns the registry's `drift`-verdict pairs whose BOTH paths are
+// still live — known dual paths that have not yet been collapsed. (A drift whose one
+// side is gone collapsed already and surfaces in the Stale pass instead.) These are a
+// standing reminder so a later agent collapses the doomed path rather than re-syncing
+// it; the per-entry Canonical / DoNotResync fields carry the direction (§18.7).
+func unresolvedDrift(entries []registry.Entry, live map[string]bool) []registry.Entry {
+	var out []registry.Entry
+	for _, e := range entries {
+		if e.VerdictClass() == "drift" && live[e.Key1] && live[e.Key2] {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 func joinRepo(repo, p string) string {

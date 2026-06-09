@@ -70,3 +70,42 @@ func TestLoadRoles(t *testing.T) {
 		t.Errorf("pair parsing must still work alongside roles: want 1 entry, got %d", len(r.Entries))
 	}
 }
+
+// TestLoadEntryCollapseFields covers the drift collapse-direction fields (§18.7):
+// `- canonical:` / `- do-not-resync:` attach to the open pair and round-trip.
+func TestLoadEntryCollapseFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "registry.md")
+	content := `# calque registry
+
+## p1 — drift (dual replay backend)
+- pair: engine.go::replayVCR | engine.go::replayCassette
+- verdict: drift
+- canonical: engine.go::replayVCR
+- do-not-resync: engine.go::replayCassette
+- reviewed: 2026-06-09
+
+## p2 — false-alarm (no collapse fields)
+- pair: a.go::f | b.go::g
+- verdict: false-alarm
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Entries) != 2 {
+		t.Fatalf("want 2 entries, got %d", len(r.Entries))
+	}
+	e := r.Entries[0]
+	if e.Canonical != "engine.go::replayVCR" {
+		t.Errorf("canonical = %q", e.Canonical)
+	}
+	if e.DoNotResync != "engine.go::replayCassette" {
+		t.Errorf("do-not-resync = %q", e.DoNotResync)
+	}
+	if r.Entries[1].Canonical != "" || r.Entries[1].DoNotResync != "" {
+		t.Errorf("collapse fields must default empty, got %q / %q", r.Entries[1].Canonical, r.Entries[1].DoNotResync)
+	}
+}

@@ -31,6 +31,15 @@ All notable changes to calque. The version string itself comes from the git tag
   The discover-then-declare loop is adjacent prior art (drift's declared boundaries;
   DejaVu/FICS recall-then-classify); the *cardinality* gate it targets is the unoccupied
   part. Dogfooded on calque's own source. Pinned by `cmd/calque/propose_test.go`.
+- **Collapse-direction registry fields + unresolved-drift surfacing** — a `drift`-verdict
+  `- pair:` may now carry `- canonical:` (the path to keep) and `- do-not-resync:` (the
+  doomed path), recording which way to collapse a known dual path (DESIGN_NOTES §18.7
+  steal #4). `check` surfaces every known-drift pair whose **both** paths are still live
+  as `DRIFT (unresolved)` with its recorded collapse direction (or a prompt to add one) —
+  warn-only, never affects `--strict` exit, so an in-progress collapse doesn't gate. This
+  closes the failure mode where a later agent "fixes" drift by re-syncing the doomed path,
+  maintaining the dual path instead of collapsing it. Pinned by `cmd/calque/check_test.go`
+  (`TestUnresolvedDrift`) + `internal/registry/registry_test.go` (`TestLoadEntryCollapseFields`).
 
 ## [0.1.0] - 2026-06-07
 

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/justinstimatze/calque/internal/registry"
 )
 
 func TestRegistryParseWarning(t *testing.T) {
@@ -41,5 +43,25 @@ func TestRegistryParseWarning(t *testing.T) {
 	w = registryParseWarning(junk, 0, 0)
 	if w == "" || strings.Contains(w, "migrate-registry") {
 		t.Errorf("non-old junk should warn generically (not migrate), got %q", w)
+	}
+}
+
+// TestUnresolvedDrift: a drift pair with both paths live is unresolved; a drift with a
+// dead side has collapsed (→ Stale, not here); a non-drift verdict never qualifies.
+func TestUnresolvedDrift(t *testing.T) {
+	entries := []registry.Entry{
+		{Key1: "a.go::f", Key2: "b.go::g", Verdict: "drift"},                  // both live → unresolved
+		{Key1: "a.go::f", Key2: "gone.go::x", Verdict: "drift"},               // one side gone → collapsed (stale)
+		{Key1: "a.go::f", Key2: "b.go::g", Verdict: "false-alarm"},            // not drift
+		{Key1: "c.go::h", Key2: "d.go::i", Verdict: "contracted-twin-ok (x)"}, // not drift
+	}
+	live := map[string]bool{"a.go::f": true, "b.go::g": true, "c.go::h": true, "d.go::i": true}
+
+	got := unresolvedDrift(entries, live)
+	if len(got) != 1 {
+		t.Fatalf("want exactly 1 unresolved drift, got %d: %+v", len(got), got)
+	}
+	if got[0].Key1 != "a.go::f" || got[0].Key2 != "b.go::g" {
+		t.Fatalf("wrong entry surfaced: %+v", got[0])
 	}
 }

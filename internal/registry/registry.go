@@ -29,6 +29,13 @@ type Entry struct {
 	Key1, Key2 string
 	Verdict    string // raw; use VerdictClass for the leading token
 	Reviewed   string
+
+	// Collapse direction for a `drift` verdict (DESIGN_NOTES §18.7 steal #4): which
+	// path is the source of truth and which is doomed. Without these, a later agent
+	// "fixes" the drift by re-syncing the doomed path — maintaining the dual path
+	// instead of collapsing it. Both name one of Key1/Key2; either may be empty.
+	Canonical   string // the path to KEEP (source of truth)
+	DoNotResync string // the doomed path — collapse it, never re-sync into it
 }
 
 // ClusterEntry is one adjudicated N-ary cluster (a set of >=2 function keys that
@@ -188,6 +195,14 @@ func Load(path string) (*Registry, error) {
 						curRole.Baseline = append(curRole.Baseline, k)
 					}
 				}
+			}
+		case strings.HasPrefix(line, "- canonical:"):
+			if curPair != nil {
+				curPair.Canonical = cleanKey(strings.TrimPrefix(line, "- canonical:"))
+			}
+		case strings.HasPrefix(line, "- do-not-resync:"):
+			if curPair != nil {
+				curPair.DoNotResync = cleanKey(strings.TrimPrefix(line, "- do-not-resync:"))
 			}
 		case strings.HasPrefix(line, "- verdict:"):
 			setVerdict(strings.TrimSpace(strings.TrimPrefix(line, "- verdict:")))

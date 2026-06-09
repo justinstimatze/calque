@@ -317,9 +317,10 @@ public benchmark.
      typo'd declaration can no longer pass silently as a green gate. The deeper
      `doctor` mutation-verification (does the detector flag a known member when its
      allow-list is emptied) remains as a follow-on.
-   - **Collapse-direction in the registry schema** — first-class `canonical-path` and
-     `do-not-resync` fields on a `drift` verdict, so a later agent collapses the
-     doomed path instead of re-syncing it (maintaining the dual path). The delegation
+   - **Collapse-direction in the registry schema** — *SHIPPED (task #18):* first-class
+     `- canonical:` / `- do-not-resync:` fields on a `drift` pair, surfaced by `check`
+     as `DRIFT (unresolved)` (warn-only) so a later agent collapses the doomed path
+     instead of re-syncing it (maintaining the dual path). The delegation
      gate (§12) is separately field-validated by the same campaign (21/30 seed
      suspects were delegating adapters) — keep it, no work needed.
 
@@ -1031,7 +1032,12 @@ opposite directions is the strongest signal we have that it is the right next bu
    which path is canonical. Without those fields a later agent "fixes" a drift by
    re-syncing the doomed path — i.e. *maintaining the dual path*, the exact anti-goal.
    Make **canonical-path** and **do-not-resync** first-class registry fields, not
-   prose in a note.
+   prose in a note. **SHIPPED (task #18):** a `drift` `- pair:` now carries optional
+   `- canonical:` / `- do-not-resync:` lines, and `check` surfaces every drift pair
+   whose both paths are still live as `DRIFT (unresolved)` with that direction (or a
+   prompt to record it) — warn-only, never gating `--strict`, so an in-progress
+   collapse doesn't fail the gate. A collapsed drift (one side gone) falls through to
+   the existing STALE pass to be pruned.
 
 5. **The delegation gate is field-validated, not new work.** 21 of the 30 seed
    suspects were *adapters that delegate to the real implementation* and "can't

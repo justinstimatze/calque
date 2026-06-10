@@ -9,15 +9,56 @@ import (
 )
 
 // weights: surface (strings) + effect (writes) + role (name) carry the most —
-// they survive a full rewrite; calls/ret corroborate.
+// they survive a full rewrite; calls/ret corroborate. These are the STATIC
+// prior/default — the immutable fallback CalibrateWeights shrinks toward and
+// ResetWeights restores to. scorePair reads activeWeights, not this.
 var weights = map[string]float64{
 	"strings": 0.30, "writes": 0.30, "name": 0.22, "calls": 0.10, "ret": 0.08,
 }
+
+// activeWeights is the weight vector scorePair actually sums over. It defaults
+// to a clone of the static `weights` prior; UseWeights swaps in a calibrated
+// vector (from .calque/weights.json) and ResetWeights restores the prior. Kept
+// separate from `weights` so the immutable default is always recoverable and so
+// calque's own repo (no weights.json) trivially stays on defaults.
+var activeWeights = cloneWeights(weights)
 
 // channelOrder fixes the order scorePair sums the weighted signals in. It exists
 // so the score is reproducible: ranging a map and accumulating non-associative
 // float adds otherwise yields run-dependent scores near the threshold.
 var channelOrder = []string{"strings", "writes", "name", "calls", "ret"}
+
+// cloneWeights returns a fresh copy so callers can't alias the static prior.
+func cloneWeights(w map[string]float64) map[string]float64 {
+	out := make(map[string]float64, len(w))
+	for k, v := range w {
+		out[k] = v
+	}
+	return out
+}
+
+// DefaultWeights returns a copy of the static prior weight vector.
+func DefaultWeights() map[string]float64 { return cloneWeights(weights) }
+
+// UseWeights swaps in a calibrated weight vector for subsequent scoring. Only
+// the known channels (channelOrder) are honored; any missing channel falls back
+// to its static prior, so a partial or stale vector can't zero out a signal.
+// hasAnchor in scorePair is weight-independent, so this never changes which
+// pairs anchor — only their scores — keeping the blocking-index superset
+// invariant intact.
+func UseWeights(w map[string]float64) {
+	next := cloneWeights(weights)
+	for _, k := range channelOrder {
+		if v, ok := w[k]; ok {
+			next[k] = v
+		}
+	}
+	activeWeights = next
+}
+
+// ResetWeights restores scoring to the static prior. Mainly for tests that must
+// not leak a calibrated vector into later cases.
+func ResetWeights() { activeWeights = cloneWeights(weights) }
 
 // Suspicion is one ranked suspect pair.
 type Suspicion struct {
@@ -101,8 +142,8 @@ func scorePair(a, b *FuncSig) (Suspicion, bool) {
 	var wsum, score float64
 	for _, k := range channelOrder {
 		if avail[k] {
-			wsum += weights[k]
-			score += weights[k] * sig[k]
+			wsum += activeWeights[k]
+			score += activeWeights[k] * sig[k]
 		}
 	}
 	if wsum == 0 {

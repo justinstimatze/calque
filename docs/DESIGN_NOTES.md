@@ -265,8 +265,26 @@ LLM"; PyPI `drift-analyzer`; CLI `drift`; Python 3.11+). `mick-gsk/drift` serves
    false-alarm = not-useful — the labels `doctor` already joins) is the principled,
    §13-clean path to non-static weights. This is the one place drift is genuinely
    ahead, and the upgrade is well-scoped: `doctor` already computes the join; the
-   missing piece is emitting a calibrated weight vector the gate can load. Queued as a
-   calibration-leg task, NOT this session's work.
+   missing piece is emitting a calibrated weight vector the gate can load.
+
+   **Shipped (2026-06-10), task #1.** `calque calibrate` does exactly this. The
+   estimator (`internal/code/calibrate.go::CalibrateWeights`, pure + table-tested)
+   measures, per channel, `mean(signal | useful) − mean(signal | not-useful)` over
+   adjudicated pairs, normalizes the positive discriminations into observed weights,
+   and shrinks them toward the static prior by `λ = n/(n+priorStrength)` — so a
+   handful of labels can't overfit. `--write` emits a git-tracked `.calque/weights.json`;
+   the gate (`scan`/`check`/`doctor`) loads it via `applyCalibratedWeights` and scores
+   with it, with `--no-calibrated-weights` to fall back to the prior. Two deliberate
+   §13 guards: (a) the gate never auto-writes — calibration is an explicit act; (b)
+   `calibrate` always trains on the static prior (`ResetWeights` up front), never on
+   its own prior output, so it can't chase its tail. Crucially, `hasAnchor` in
+   `scorePair` is weight-independent, so a calibrated vector only **re-ranks** anchored
+   pairs — it can never surface or suppress an anchor, leaving the #16 blocking-index
+   superset invariant intact. The honest limitation surfaced on first run: calque's own
+   registry has only **one** useful-labeled pair, so its calibrated vector overfits that
+   single positive (a thin-minority-class warning fires, and calque's repo ships no
+   weights.json — it stays on the prior). The estimator is sound; the labels are thin —
+   which is the §13-correct place to stop, not a reason to tune harder.
 
 Net unchanged: positioning miss, not thesis miss. The teardown *strengthens* the
 three differentiators by grounding #1 in drift's own algorithm and confirming #2 is

@@ -92,6 +92,8 @@ Usage:
                          (calque hook install — auto-installs pre-commit)
   calque doctor          spine: calibration rollup (fire-rate, hit-rate)
   calque mark-fire <id> <verdict>   spine: tag a finding  useful|mixed|not-useful
+  calque calibrate       spine: reweight signal channels from adjudicated labels
+                         (--write emits .calque/weights.json the gate loads)
   calque mcp             spine: serve the gates over MCP (stdio JSON-RPC) —
                          tools calque_check + calque_vocab_check for inline use
   calque migrate-registry   one-time: convert a Python-era registry
@@ -128,6 +130,8 @@ func main() {
 		runDoctor(os.Args[2:])
 	case "mark-fire":
 		runMarkFire(os.Args[2:])
+	case "calibrate":
+		runCalibrate(os.Args[2:])
 	case "mcp":
 		runMCP(os.Args[2:])
 	case "migrate-registry":

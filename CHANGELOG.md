@@ -6,6 +6,21 @@ All notable changes to calque. The version string itself comes from the git tag
 ## [Unreleased]
 
 ### Added
+- **Adaptive signal weights (`calque calibrate`)** — the calibration-leg upgrade that
+  makes calque's per-channel signal weights (`strings`/`writes`/`name`/`calls`/`ret`)
+  learn from adjudicated registry labels instead of staying hand-tuned (DESIGN_NOTES §6.1,
+  the one steal from `sauremilk/drift`). The pure estimator (`internal/code.CalibrateWeights`)
+  scores each channel by how well it separates useful from not-useful pairs
+  (`mean(useful) − mean(not-useful)`), normalizes the positive discriminations, and shrinks
+  them toward the static prior by `λ = n/(n+priorStrength)` so few labels can't overfit.
+  `--write` emits a git-tracked `.calque/weights.json`; `scan`/`check`/`doctor` load it and
+  score with it (`--no-calibrated-weights` reverts to the prior). §13-clean by construction:
+  trains only on adjudicated labels, never auto-writes, and always trains on the static prior
+  (not its own output). `hasAnchor` is weight-independent, so a calibrated vector only re-ranks
+  anchored pairs — it can't surface or suppress an anchor, preserving the #16 blocking-index
+  invariant. Warns when a label class is too thin to trust (calque's own repo has one
+  useful-labeled pair, so it ships no weights.json and stays on the prior). Table-tested
+  (`internal/code/calibrate_test.go`).
 - **Role-cardinality axis (`calque cardinality`)** — calque's declare-and-gate axis
   (DESIGN_NOTES §18), the differentiator no similarity-based competitor occupies.
   Declare `- role:` / `- predicate:` / `- expected:` / `- baseline:` in the registry;

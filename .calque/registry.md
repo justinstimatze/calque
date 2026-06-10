@@ -536,3 +536,46 @@ new *pairs*; only the new `tokens` method itself is new surface.)
 - pair: internal/code/block.go::FuncSig.tokens | internal/code/funcsig.go::normTokens
 - verdict: false-alarm
 - reviewed: 2026-06-09
+
+---
+
+## Run — 2026-06-10 (adaptive-weights `calibrate` command added; task #1)
+
+The adaptive-weights leg (`internal/code/calibrate.go` + `cmd/calque/calibrate.go`)
+adds a `calibrate` command that reweights the signal channels from adjudicated
+registry labels, plus the `applyCalibratedWeights` loader the gate calls. As with
+every prior command handler, `runCalibrate` goes through the single-sourced spine
+(`addBoundaryFlags`, `codeAxis`, `clusterOptsFrom`, `calqueDir`, `appendJSONL`,
+`pairID`/`clusterID`, `loadFireTags`, `resolveLabel`) — so it joins the existing
+pinned command-handler families (the N-ary shared-spine clusters at "runScan ≟
+runCheck ≟ runHook ≟ runDoctor" and "calib.go commands"). The membership shift
+re-keys those clusters, so they re-fire under new set-keys; all are the same
+intended shared infrastructure, not drift — pin. The two new pairs are coincidental
+name-stem collisions (`verdictClassFor` the cmd-side registry lookup vs the registry
+method `verdictClass`; `normalizeWeights` over channel weights vs `normalize` over an
+embedding vector) — false-alarm.
+
+- pair: cmd/calque/calibrate.go::verdictClassFor | internal/registry/registry.go::verdictClass
+- verdict: false-alarm
+- reviewed: 2026-06-10
+- pair: internal/code/calibrate.go::normalizeWeights | internal/embed/embed.go::normalize
+- verdict: false-alarm
+- reviewed: 2026-06-10
+- cluster: cmd/calque/calib.go::logFires | cmd/calque/calib.go::printDoctor | cmd/calque/calib.go::runDoctor | cmd/calque/calib.go::runMarkFire | cmd/calque/calibrate.go::runCalibrate | cmd/calque/calibrate.go::writeWeights
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- cluster: cmd/calque/calib.go::runDoctor | cmd/calque/calibrate.go::runCalibrate | cmd/calque/cardinality.go::runCardinality | cmd/calque/check.go::computeCheck | cmd/calque/propose.go::runProposeRoles | cmd/calque/vocab_check.go::computeVocabCheck | cmd/calque/vocab_check.go::runVocabCheck
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- cluster: cmd/calque/calib.go::printDoctor | cmd/calque/calib.go::verdictLabel | cmd/calque/calibrate.go::runCalibrate
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- cluster: cmd/calque/calib.go::logFires | cmd/calque/calib.go::runDoctor | cmd/calque/calibrate.go::runCalibrate | cmd/calque/check.go::renderCheck
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- cluster: cmd/calque/calib.go::runDoctor | cmd/calque/calibrate.go::runCalibrate | cmd/calque/check.go::runCheck | cmd/calque/hook.go::runHook | cmd/calque/scan.go::runScan
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- cluster: cmd/calque/calib.go::runDoctor | cmd/calque/calibrate.go::runCalibrate | cmd/calque/check.go::computeCheck | cmd/calque/propose.go::runProposeRoles | cmd/calque/scan.go::runScan
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10

@@ -81,6 +81,19 @@ func verdictLabel(vclass string) string {
 	}
 }
 
+// resolveLabel joins one suspect to its calibration label: a registry verdict
+// wins, then a manual fire-tag, else untagged. Shared by doctor (reporting) and
+// calibrate (training-row construction) so the precedence lives in one place.
+func resolveLabel(vclass, id string, tagOf map[string]string) string {
+	if l := verdictLabel(vclass); l != "" {
+		return l
+	}
+	if v, ok := tagOf[id]; ok {
+		return v
+	}
+	return "untagged"
+}
+
 // runMarkFire tags a fire (by id) with a verdict — the manual calibration signal
 // for suspects not (yet) in the registry. Registry-adjudicated suspects are
 // labelled automatically by doctor; this is for the rest.
@@ -133,10 +146,14 @@ func runDoctor(args []string) {
 	regPath := fs.String("registry", ".calque/registry.md", "registry file (adjudicated verdicts)")
 	clusterMinMembers := fs.Int("cluster-min-members", 3, "smallest N-ary cluster to consider")
 	clusterMaxFanout := fs.Int("cluster-max-fanout", 8, "private-symbol fanout ceiling for a seam")
+	noCalib := fs.Bool("no-calibrated-weights", false, "ignore .calque/weights.json; score on the static prior")
 	if err := fs.Parse(args); err != nil {
 		return
 	}
 
+	if applyCalibratedWeights(*repo, *noCalib) {
+		fmt.Fprintln(os.Stderr, "calque: calibrated weights active (.calque/weights.json)")
+	}
 	copts := clusterOptsFrom(*minLines, *clusterMinMembers, *clusterMaxFanout, 1<<30)
 	r, err := codeAxis(*repo, *left, *right, *exclude, *minScore, *minLines, 1<<30, copts, true)
 	if err != nil {
@@ -151,24 +168,15 @@ func runDoctor(args []string) {
 	tagOf := loadFireTags(filepath.Join(calqueDir(*repo), "fire-tags.jsonl"))
 
 	// Join every current suspect to a calibration label: registry verdict first,
-	// then a manual fire-tag, else untagged.
+	// then a manual fire-tag, else untagged (resolveLabel, shared with calibrate).
 	var rows []labeled
-	label := func(id, regVclass string) string {
-		if l := verdictLabel(regVclass); l != "" {
-			return l
-		}
-		if v, ok := tagOf[id]; ok {
-			return v
-		}
-		return "untagged"
-	}
 	for _, s := range r.Pairs {
 		id := pairID(s)
 		vclass := ""
 		if e, ok := reg.Lookup(s.Left.Key(), s.Right.Key()); ok {
 			vclass = e.VerdictClass()
 		}
-		rows = append(rows, labeled{id, "pair", pairDisplayKey(s), label(id, vclass), s.Score})
+		rows = append(rows, labeled{id, "pair", pairDisplayKey(s), resolveLabel(vclass, id, tagOf), s.Score})
 	}
 	for _, c := range r.Clusters {
 		id := clusterID(c)
@@ -176,7 +184,7 @@ func runDoctor(args []string) {
 		if e, ok := reg.LookupCluster(c.MemberKeys()); ok {
 			vclass = e.VerdictClass()
 		}
-		rows = append(rows, labeled{id, "cluster", clusterDisplayKey(c), label(id, vclass), c.Score})
+		rows = append(rows, labeled{id, "cluster", clusterDisplayKey(c), resolveLabel(vclass, id, tagOf), c.Score})
 	}
 
 	printDoctor(*repo, r, rows, len(reg.Entries)+len(reg.Clusters))

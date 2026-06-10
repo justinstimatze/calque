@@ -32,10 +32,14 @@ func runCheck(args []string) {
 	clusterMinMembers := fs.Int("cluster-min-members", 3, "smallest N-ary cluster to consider (2 includes diluted pairs)")
 	clusterMaxFanout := fs.Int("cluster-max-fanout", 8, "a private symbol touched by more than this is plumbing, not a seam")
 	noFireLog := fs.Bool("no-fire-log", false, "do not append NEW suspects to .calque/fires.jsonl (calibration telemetry)")
+	noCalib := fs.Bool("no-calibrated-weights", false, "ignore .calque/weights.json; score on the static prior")
 	if err := fs.Parse(args); err != nil {
 		return
 	}
 
+	if applyCalibratedWeights(*repo, *noCalib) {
+		fmt.Fprintln(os.Stderr, "calque: calibrated weights active (.calque/weights.json)")
+	}
 	f, err := computeCheck(*repo, *left, *right, *exclude, *minScore, *minLines, *clusterMinMembers, *clusterMaxFanout, *regPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque check: %v\n", err)

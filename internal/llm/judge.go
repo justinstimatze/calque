@@ -100,6 +100,20 @@ func NewJudge() (*Judge, error) {
 // Model reports the model in use (for the report header).
 func (j *Judge) Model() string { return j.model }
 
+// NewJudgeModel is NewJudge with an explicit model override — used by the synthetic
+// harness to REWRITE with a different model than it JUDGES with, breaking the
+// same-model self-recognition confound (a judge can spot its own rewriting style).
+func NewJudgeModel(model string) (*Judge, error) {
+	j, err := NewJudge()
+	if err != nil {
+		return nil, err
+	}
+	if model != "" {
+		j.model = model
+	}
+	return j, nil
+}
+
 // schemaVersion is bumped whenever the prompt or verdict shape changes, so old
 // cached verdicts (a different schema) are not read back.
 const schemaVersion = "v2-taxonomy"
@@ -180,24 +194,31 @@ type apiContentText struct {
 }
 
 func (j *Judge) callAPI(ctx context.Context, in PairInput) (Verdict, error) {
-	user := fmt.Sprintf("Shared signature: %s\n\nFunction A — %s:\n```\n%s\n```\n\nFunction B — %s:\n```\n%s\n```\n\nAre these behavioral twins (the same contract)?",
+	user := fmt.Sprintf("Shared signature: %s\n\nFunction A — %s:\n```\n%s\n```\n\nFunction B — %s:\n```\n%s\n```\n\nClassify the relationship.",
 		in.Sig, in.AKey, in.ASource, in.BKey, in.BSource)
+	blocks, err := j.complete(ctx, judgeSystem, user, 2048)
+	if err != nil {
+		return Verdict{}, err
+	}
+	return parseVerdict(blocks)
+}
 
+// complete is the shared /v1/messages call: system + one user turn → the response's
+// text blocks. Used by both the judge and the rewriter (the synthetic-corpus harness).
+func (j *Judge) complete(ctx context.Context, system, user string, maxTokens int) ([]apiContentText, error) {
 	body := map[string]any{
 		"model":      j.model,
-		"max_tokens": 2048,
-		"system":     judgeSystem,
-		"messages": []map[string]any{
-			{"role": "user", "content": user},
-		},
+		"max_tokens": maxTokens,
+		"system":     system,
+		"messages":   []map[string]any{{"role": "user", "content": user}},
 	}
 	buf, err := json.Marshal(body)
 	if err != nil {
-		return Verdict{}, err
+		return nil, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.anthropic.com/v1/messages", bytes.NewReader(buf))
 	if err != nil {
-		return Verdict{}, err
+		return nil, err
 	}
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set("x-api-key", j.apiKey)
@@ -205,7 +226,7 @@ func (j *Judge) callAPI(ctx context.Context, in PairInput) (Verdict, error) {
 
 	resp, err := j.http.Do(req)
 	if err != nil {
-		return Verdict{}, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	var raw struct {
@@ -215,18 +236,48 @@ func (j *Judge) callAPI(ctx context.Context, in PairInput) (Verdict, error) {
 			Message string `json:"message"`
 		} `json:"error"`
 	}
-	dec := json.NewDecoder(resp.Body)
-	if err := dec.Decode(&raw); err != nil {
-		return Verdict{}, fmt.Errorf("judge: decoding API response: %w", err)
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("llm: decoding API response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		msg := fmt.Sprintf("HTTP %d", resp.StatusCode)
 		if raw.Error != nil {
 			msg = raw.Error.Message
 		}
-		return Verdict{}, fmt.Errorf("judge: API error: %s", msg)
+		return nil, fmt.Errorf("llm: API error: %s", msg)
 	}
-	return parseVerdict(raw.Content)
+	return raw.Content, nil
+}
+
+const rewriteSystem = `You are generating test data for a clone-detection benchmark. Rewrite the given
+TypeScript function to be BEHAVIORALLY IDENTICAL — the same observable result for every input — but
+TEXTUALLY DISSIMILAR from the original: change the function name to a different but plausible name,
+rename every local variable, restructure the control flow, and substitute equivalent-but-different
+idioms and helper calls where natural. KEEP the parameter types and the return type exactly as given
+(the benchmark groups by type signature). Do not change observable behavior. Output ONLY the rewritten
+function source — no prose, no markdown fences.`
+
+var fenceRe = regexp.MustCompile("(?s)```[a-zA-Z]*\\n?(.*?)```")
+
+// Rewrite produces a behaviorally-identical, textually-dissimilar variant of a
+// function — the ground-truth Type-4 twin for the recall measurement. Strips any
+// markdown fence the model adds.
+func (j *Judge) Rewrite(ctx context.Context, source string) (string, error) {
+	blocks, err := j.complete(ctx, rewriteSystem, "```\n"+source+"\n```", 4096)
+	if err != nil {
+		return "", err
+	}
+	var sb strings.Builder
+	for _, b := range blocks {
+		if b.Type == "text" {
+			sb.WriteString(b.Text)
+		}
+	}
+	out := strings.TrimSpace(sb.String())
+	if m := fenceRe.FindStringSubmatch(out); m != nil {
+		out = strings.TrimSpace(m[1])
+	}
+	return out, nil
 }
 
 var jsonObjRe = regexp.MustCompile(`(?s)\{.*\}`)

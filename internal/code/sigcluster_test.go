@@ -7,15 +7,15 @@ func TestSignatureInformative(t *testing.T) {
 		sig  string
 		want bool
 	}{
-		{"(Task[])=>Promise<Task[]>", true},                  // domain type Task
-		{"(string)=>WorktreeInfo|null", true},                // domain type WorktreeInfo
-		{"()=>Promise<string[]>", false},                     // only the Promise generic + primitive
-		{"(string)=>Promise<boolean>", false},                // primitives + generic
-		{"(string,number)=>boolean", false},                  // pure primitives
-		{"()=>?", false},                                     // untyped
-		{"", false},                                          // empty
-		{"(Record<string,unknown>)=>void", false},            // only stdlib generics + primitives
-		{"(ModelTier)=>ModelTier", true},                     // domain type ModelTier
+		{"(Task[])=>Promise<Task[]>", true},       // domain type Task
+		{"(string)=>WorktreeInfo|null", true},     // domain type WorktreeInfo
+		{"()=>Promise<string[]>", false},          // only the Promise generic + primitive
+		{"(string)=>Promise<boolean>", false},     // primitives + generic
+		{"(string,number)=>boolean", false},       // pure primitives
+		{"()=>?", false},                          // untyped
+		{"", false},                               // empty
+		{"(Record<string,unknown>)=>void", false}, // only stdlib generics + primitives
+		{"(ModelTier)=>ModelTier", true},          // domain type ModelTier
 	}
 	for _, c := range cases {
 		if got := signatureInformative(c.sig); got != c.want {

@@ -18,10 +18,11 @@ import (
 // twins), then measure whether the judge recalls them. A behavior-preserving rewrite
 // the judge calls "false-alarm" is a recall miss. Set CALQUE_REWRITE_MODEL to a model
 // DIFFERENT from the judge (e.g. claude-haiku-4-5) to break the same-model
-// self-recognition confound — recall held at 8/8 de-confounded (2026-06-10, undercity).
-//   CALQUE_PROBE_REPO=/path/to/repo CALQUE_TS=... ANTHROPIC_API_KEY=... \
-//     CALQUE_SYNTH_N=8 CALQUE_REWRITE_MODEL=claude-haiku-4-5 \
-//     go test ./cmd/calque/ -run TestSynthRecall -v -timeout 900s
+// self-recognition confound — recall held at 8/8 de-confounded (2026-06-10).
+//
+//	CALQUE_PROBE_REPO=/path/to/repo CALQUE_TS=... ANTHROPIC_API_KEY=... \
+//	  CALQUE_SYNTH_N=8 CALQUE_REWRITE_MODEL=claude-haiku-4-5 \
+//	  go test ./cmd/calque/ -run TestSynthRecall -v -timeout 900s
 func TestSynthRecall(t *testing.T) {
 	repo := os.Getenv("CALQUE_PROBE_REPO")
 	if repo == "" || (os.Getenv("ANTHROPIC_API_KEY") == "" && os.Getenv("CALQUE_API_KEY") == "") {

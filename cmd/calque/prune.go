@@ -6,8 +6,8 @@ package main
 // reconciliation and, with --write, surgically removes the stale entries' machine
 // lines from .calque/registry.md — backup first, dry-run by default.
 //
-// Why this exists: a real dogfood run (stope, 2026-06-10) found 38/40 registry
-// entries stale after the audited repo deleted the file the whole axis pointed at.
+// Why this exists: a real dogfood run (2026-06-10) found 38/40 registry entries
+// stale after the audited repo deleted the file the whole axis pointed at.
 // calque flagged every one but offered no way to act on it except hand-editing a
 // 40KB markdown file. prune closes that loop.
 //
@@ -191,4 +191,3 @@ func isEntryAttribute(t string) bool {
 func cleanRegKey(s string) string {
 	return strings.TrimSpace(strings.Trim(strings.TrimSpace(s), "`"))
 }
-

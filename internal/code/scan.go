@@ -13,8 +13,10 @@ import (
 // in one call). go/ast runs in-process; python3 runs once per scan as a
 // subprocess (so a large scan spawns one interpreter, not one per file).
 var extractors = map[string]func(paths []string, root string) ([]*FuncSig, error){
-	".go": extractGoBatch,
-	".py": extractPyBatch,
+	".go":  extractGoBatch,
+	".py":  extractPyBatch,
+	".ts":  extractTSBatch,
+	".tsx": extractTSBatch,
 }
 
 // codeExts are extensions calque considers "code" — used to count files skipped

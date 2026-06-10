@@ -7,6 +7,11 @@ __pycache__/
 /calque
 *.test
 
+# Node — dev-only TS toolchain for the TypeScript extractor (extract_ts.mjs).
+# package.json + package-lock.json are tracked (they pin typescript for dogfooding
+# and CI); the installed tree is not.
+node_modules/
+
 # calque's own memory: track the adjudicated registry + prose allow-list,
 # ignore calibration logs (fires.jsonl / fire-tags.jsonl)
 .calque/*

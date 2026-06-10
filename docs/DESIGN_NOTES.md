@@ -93,7 +93,7 @@ cmd/calque/        # the CLI — one file per spine leg / axis
   migrate.go       # one-time registry-format converter
 internal/
   code/            # the code-axis core: FuncSig extract (go/ast + embedded
-                   #   python3 extractor) + jaccard scoring + N-ary touchpoint
+                   #   python3 + node/TypeScript extractors) + jaccard scoring + N-ary touchpoint
                    #   clustering (touchpoint.go)
   corpus/ embed/   # prose-axis corpus walker + ollama embedding client
   registry/ pairkey/ glob/   # registry parse, set keys, glob matching
@@ -109,8 +109,14 @@ and dunders excluded. Each left fn keeps its single best match.
 
 **CLI contract:** `--left`/`--right` globs are relative to `--repo`. Only
 left×right pairs are scored (the testing-vs-prod boundary), not within-group. Go
-targets parse via native `go/ast`; Python targets via an embedded `python3` AST
-extractor (one subprocess per scan).
+targets parse via native `go/ast`; Python (`.py`) via an embedded `python3` AST
+extractor; TypeScript (`.ts`/`.tsx`) via an embedded `node` script driving the
+TypeScript compiler API (one subprocess per scan each). The two subprocess
+extractors share one `runJSONExtractor` core so the stdin/JSON/error handling
+can't drift. The node + `typescript` runtime dependency for `.ts` mirrors the
+python3 one already accepted for `.py`; calque resolves `typescript` from the
+scanned repo's `node_modules`, a global install, or `CALQUE_TS`. `.js`/`.jsx`
+are recognized as code but not yet extracted (no type surface).
 
 ---
 
@@ -330,8 +336,8 @@ conventions, (b) close the loop with a real verdict leg, and (c) prove recall on
 public benchmark.
 
 **Done**
-- Code axis (Go `go/ast` + embedded `python3`), parity-verified against the
-  original Python implementation's scores.
+- Code axis (Go `go/ast` + embedded `python3` + embedded `node`/TypeScript),
+  parity-verified against the original Python implementation's scores.
 - The registry-aware `check` gate; warn-only + `--strict`.
 - **N-ary private-symbol touchpoint clustering** (§15) — the recall upgrade for
   inlined sub-function seams; validated on the real target.
@@ -416,9 +422,11 @@ public benchmark.
    re-flag if a side's signature changed since the verdict).
 
 **P2 — Reach & ergonomics**
-7. **TS extractor.** Go and Python extraction already ship natively (`go/ast` +
-   an embedded `python3` script); TypeScript is the remaining language — via
-   ts-morph or tree-sitter (or, Go-side, a query layer over defn).
+7. **TS extractor.** ✅ **Shipped.** Go (`go/ast`), Python (embedded `python3`),
+   and TypeScript/TSX (embedded `node` driving the TS compiler API) all extract
+   natively; the two subprocess extractors share one `runJSONExtractor` core.
+   Validated read-only on a 302-file TS repo (`.js`/`.jsx` still deferred — no
+   type surface).
 8. **Boundary presets** (`--preset harness|client-server|v1-v2`) so users don't
    hand-craft globs.
 9. **Cross-language dogfood — TS.** The meta-bug + the private-symbol-touchpoint

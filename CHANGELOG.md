@@ -6,6 +6,21 @@ All notable changes to calque. The version string itself comes from the git tag
 ## [Unreleased]
 
 ### Added
+- **TypeScript / TSX extractor** — calque's code axis now covers `.ts`/`.tsx`, not
+  just Go and Python. An embedded node script (`extract_ts.mjs`) drives the TypeScript
+  compiler API and emits the same `FuncSig` JSON the go/ast and python3 extractors
+  produce, so the language-agnostic scorer/cluster passes work unchanged. Extracts the
+  full signal set (string literals ≥4 chars incl. templates, `this.x`/`a.b[]` write
+  targets, returned object-literal keys, call leaf names, delegation through wrapper
+  fields) from function declarations, class methods, and const-assigned arrow/function
+  expressions. The node + `typescript` runtime dependency mirrors the already-accepted
+  python3 one for `.py`; calque resolves `typescript` from the scanned repo's
+  `node_modules`, a global install, or `CALQUE_TS` (clear error if absent). `CALQUE_NODE`
+  overrides the interpreter. `.js`/`.jsx` stay counted-as-skipped (no type surface yet).
+  Validated read-only on a 302-file / 2,122-function TS repo. Tests skip cleanly when no
+  node/typescript toolchain is present, so the pure-Go build/CI never requires node.
+  (As a side effect the new `extractTSBatch` and `extractPyBatch` were collapsed onto a
+  shared `runJSONExtractor` — calque flagged its own dual path and it was eliminated.)
 - **Registry liveness GC (`calque prune`)** — the remediation for staleness `check`
   already detects. `check` flags adjudicated pairs/clusters whose referenced code is
   gone (the dusty-over-months problem) but offered no way to act on it except

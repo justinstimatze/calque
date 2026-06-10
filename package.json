@@ -1,0 +1,8 @@
+{
+  "name": "calque-dev",
+  "private": true,
+  "description": "Dev-only TS toolchain for calque's TypeScript extractor (extract_ts.mjs). Not shipped with `go install`; calque resolves typescript at scan time from the target repo, a global install, or CALQUE_TS.",
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}

@@ -5,6 +5,18 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+### Changed
+- **`check` STALE no longer cries wolf on non-function / excluded keys.** A registry
+  entry was flagged STALE whenever a referenced symbol was absent from the extracted
+  *function* corpus — but under the canonical `**/*_test.go` exclude that wrongly
+  flagged every test-referencing entry, and it would equally mis-flag module-level
+  tables and cross-substrate keys calque doesn't extract as functions (calque's own
+  scan showed "20 stale" that were all this false class). STALE now requires a key to
+  be **provably dead** — its source file is gone (`confidentlyDead`, the same
+  soundness `prune` uses for destructive removal). Entries whose symbol is merely
+  absent-but-file-present are counted and surfaced as a soft one-line note
+  (`StaleAmbig`), not flagged STALE. calque's self-scan went 20 → 0 STALE.
+
 ### Added
 - **Go module-level table extraction — the cross-substrate axis now works on a Go
   codebase.** The Python `symbols` mode extracts module-level dict/set/list tables;

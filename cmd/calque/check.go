@@ -70,6 +70,7 @@ type checkFindings struct {
 	Unresolved []registry.Entry // known drift, both paths still live — not yet collapsed
 	Warn       string           // non-empty when the registry exists but parsed to zero entries
 	Corpus     int              // count of extracted functions (liveness denominator; 0 ⇒ scan saw nothing)
+	StaleAmbig int              // entries referencing a symbol absent from the corpus but whose file still exists (not provably dead → not STALE)
 }
 
 // computeCheck runs the scan, diffs against the registry, and returns the
@@ -107,22 +108,41 @@ func computeCheck(repo, left, right, exclude string, minScore float64, minLines,
 		f.FreshC = append(f.FreshC, c)
 	}
 
-	// Liveness reconciliation: registry entries whose referenced code is gone.
+	// Liveness reconciliation. An entry is STALE only when a referenced key is
+	// PROVABLY dead — its source file is gone (confidentlyDead, the same soundness
+	// `prune` uses for destructive removal). A key merely absent from the extracted
+	// corpus but whose file still exists is NOT stale: a test symbol hidden by
+	// --exclude, a module-level table, or a cross-substrate key calque doesn't
+	// extract as a function. Those used to cry wolf; now they're counted (StaleAmbig)
+	// and surfaced softly, not reported as STALE.
 	live := make(map[string]bool, len(r.All))
 	for _, fn := range r.All {
 		live[fn.Key()] = true
 	}
 	for _, e := range reg.Entries {
-		if !live[e.Key1] || !live[e.Key2] {
+		switch {
+		case confidentlyDead(repo, e.Key1) || confidentlyDead(repo, e.Key2):
 			f.Stale = append(f.Stale, e)
+		case !live[e.Key1] || !live[e.Key2]:
+			f.StaleAmbig++
 		}
 	}
 	for _, e := range reg.Clusters {
+		dead, ambiguous := false, false
 		for _, k := range e.Keys {
-			if !live[k] {
-				f.StaleC = append(f.StaleC, e)
+			if confidentlyDead(repo, k) {
+				dead = true
 				break
 			}
+			if !live[k] {
+				ambiguous = true
+			}
+		}
+		switch {
+		case dead:
+			f.StaleC = append(f.StaleC, e)
+		case ambiguous:
+			f.StaleAmbig++
 		}
 	}
 
@@ -177,6 +197,10 @@ func renderCheck(f checkFindings, regPath string) string {
 		len(f.Fresh), f.Known, len(f.FreshC), f.KnownC, nStale, plural(nStale, "y", "ies"))
 	if n := len(f.Unresolved); n > 0 {
 		fmt.Fprintf(&b, "%d known drift pair%s not yet collapsed (warn-only — see below).\n", n, plural(n, "", "s"))
+	}
+	if f.StaleAmbig > 0 {
+		fmt.Fprintf(&b, "(%d registry entr%s reference a symbol not in the scanned corpus but whose file still exists — likely --exclude'd tests, module-level tables, or cross-substrate keys; not flagged stale.)\n",
+			f.StaleAmbig, plural(f.StaleAmbig, "y", "ies"))
 	}
 
 	for _, s := range f.Fresh {

@@ -35,12 +35,26 @@ type FuncSig struct {
 	Calls     []string `json:"calls"`     // called function/method leaf names
 	Delegates bool     `json:"delegates"` // body forwards to a wrapped impl
 
+	// Kind tags non-function entities the CROSS-SUBSTRATE axis extracts: "" = a
+	// function (the default — the code axis; zero perturbation to existing callers),
+	// "table" = a module-level dict/set/list constant (its keys live in RetKeys),
+	// "corpus-field" = a JSON object (its field names live in RetKeys). Only the
+	// generator-only `propose-cross` path produces non-"" kinds; the scoring gate
+	// (Extract→Rank→check→--strict) never sees them.
+	Kind string `json:"kind,omitempty"`
+
 	// Sig is the normalized type signature — "(paramType,…)=>returnType" — a
 	// REPRESENTATION-INDEPENDENT invariant: two behavioral (Type-4) twins share a
 	// contract even when they share no token. Populated where the language exposes
 	// types (TS today); empty otherwise. Experimental: drives the signature-rarity
 	// recall pass, not the jaccard scorer.
 	Sig string `json:"sig,omitempty"`
+
+	// Source is an in-process judge blob for entities with no clean line span (a
+	// JSON object): the corpus-field extractor sets it to the marshaled object so the
+	// oracle reads the real shape. NOT part of the extractor interchange (json:"-");
+	// empty for functions and tables, which the line-based readFuncSource handles.
+	Source string `json:"-"`
 
 	sStr, sWrite, sRet, sCall, stem set
 }

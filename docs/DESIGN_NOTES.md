@@ -1162,3 +1162,66 @@ opposite directions is the strongest signal we have that it is the right next bu
 Adoptions 1–2 sharpen tasks #14/#16; 3–4 are cheap, high-value `doctor`/schema
 additions; 5 confirms an existing mechanism. None require abandoning the pairwise
 engine — they extend the *declare-and-gate* half the field evidence keeps demanding.
+
+## 19. The cross-substrate axis — non-function entities (v0.3.0)
+
+Every axis above the function level shares a structural blind spot: the code axis
+extracts **functions** and scores their effect footprints, but a content-driven
+codebase carries most of its "one concept in N places" drift in *non-function*
+entities — module-level lookup tables, enum/registry constants, and the authored
+corpus (`*.json`) those tables mirror. Two such entities that must agree share no
+surface tokens a jaccard gate can anchor on (a verb registry in one module vs the
+verb-template table in another; a corpus shape vs the schema/table that ingests it),
+so the function axis is *structurally* blind to them — not low-recall, blind.
+
+### 19.1 The mechanism — reuse the engine, change only the extractor
+
+The spine is unchanged. A non-function entity is represented as a `FuncSig` with a
+`Kind` tag (`table` | `corpus-field`) and its **key set in `RetKeys`** — which
+already means "the key set this entity defines," so `Prepare`/`jaccard` need no
+change. Two extractors feed it: the embedded Python extractor gains a `symbols` mode
+(module-level `dict`/`set`/`list` constants → `table`), and a pure-Go JSON extractor
+turns each corpus object's field-name set into a `corpus-field` entity (carrying a
+bounded `Source` blob for the oracle, since a JSON object has no clean line span).
+`KeySetCandidates` pairs entities by shared key set (an inverted key index; a fanout
+cap drops ubiquitous keys as JOIN paths only, never from the jaccard itself), and the
+existing LLM oracle adjudicates. The pairing the function axis can't make is now a
+cheap key-set overlap + a precision judge.
+
+### 19.2 Isolation — the axis cannot disturb the gate
+
+Non-function entities never enter `Extract` (which feeds `Rank` → `check` →
+`--strict`); they have a separate `ExtractSymbols` path consumed only by
+`propose-cross`, which — like `propose-roles`/`propose-deep` — is a **generator, not
+a gate**: stdout only, no registry writes, no exit code. So the cross-substrate axis
+adds zero risk to the self-clean gate, and the corpus the scorer sees is byte-for-byte
+what it saw before. (One dedup detail: identical-shape corpus objects collapse to one
+representative, or a column key shared across 50 location files would blow past the
+fanout cap and prune the one cross-substrate pair that matters.)
+
+### 19.3 What the field run showed — and the honest boundaries
+
+Read-only on a private content-driven codebase: **1346 entities (543 tables + 803
+corpus shapes) → 261 candidates, 188 of them cross-substrate.** A 14-candidate judge
+slice returned 4 drift + 1 contracted-twin-ok + 9 false-alarm — the oracle confirmed
+two copy-paste constant tables and two separately-maintained canonical-fact registries
+as drift (one had **already diverged on a single entry** — a live latent bug invisible
+to any function-axis or AST-shape tool), flagged a **corpus-JSON ↔ code-table** pair as
+a contracted twin needing a differential pin (the headline cross-substrate case), and
+correctly rejected coincidental same-key tables (verb-dispatch vs verb-config,
+beat→arc vs beat→budget) as false alarms. Precision rests on the judge; the key-set
+pass is deliberately high-recall.
+
+Three boundaries, recorded honestly (§13 discipline — don't claim what didn't surface):
+
+1. **SQL-schema side not yet extracted.** A corpus field-set whose code mirror is a
+   *SQL* table (a `CREATE TABLE` / column list, not a Python literal) surfaces only on
+   the corpus side — the code side isn't a literal the table extractor sees. Follow-up:
+   a SQL-schema / column-set extractor (another `symbols`-style emitter).
+2. **Different key spaces stay invisible to key-set pairing.** A `{char_id: descriptor}`
+   table and a corpus record with a `descriptor` *field* are the same concept but share
+   no keys (ids vs field names), so key-set overlap can't pair them. This needs a
+   value-shape or semantic signal (judge-only), and is deferred — measured, not forced.
+3. **Mechanism is substrate-general; the extractor is per-substrate.** Module-level
+   tables are extracted for Python today; the same entity shape applies to a Go
+   `var X = map[…]{…}` (extend `extract_go.go`) or any language with literal tables.

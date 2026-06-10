@@ -165,9 +165,9 @@ func runJudge(repo string, cands []code.SigCandidate, twinsOnly bool) {
 				c := cands[i]
 				in := llm.PairInput{
 					AKey:    c.A.File + "::" + c.A.Qualname,
-					ASource: readFuncSource(repo, c.A, 200),
+					ASource: readEntitySource(repo, c.A, 200),
 					BKey:    c.B.File + "::" + c.B.Qualname,
-					BSource: readFuncSource(repo, c.B, 200),
+					BSource: readEntitySource(repo, c.B, 200),
 					Sig:     c.Sig,
 				}
 				v, err := j.JudgePair(context.Background(), in)

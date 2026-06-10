@@ -115,6 +115,63 @@ func TestNameStemFanoutCap(t *testing.T) {
 	}
 }
 
+func mkTable(file, name string, keys ...string) *FuncSig {
+	f := &FuncSig{File: file, Qualname: name, Name: name, Kind: "table", RetKeys: keys, NLines: 1}
+	f.Prepare()
+	return f
+}
+
+// The headline cross-substrate pair: two registries of the same verbs in different
+// files, sharing no surface tokens the jaccard gate could anchor on.
+func TestKeySetCandidates(t *testing.T) {
+	ents := []*FuncSig{
+		mkTable("engine.py", "HANDLERS", "look", "go", "take", "drop", "give"),
+		mkTable("input_agent.py", "_VERB_TEMPLATES", "look", "go", "take", "drop"),
+		mkTable("db.py", "COLUMNS", "source_era", "description", "trigger"), // disjoint
+	}
+	cands := KeySetCandidates(ents, 3, 0.5, 8)
+	if len(cands) != 1 {
+		t.Fatalf("expected 1 key-set candidate (HANDLERS≟_VERB_TEMPLATES), got %d: %+v", len(cands), cands)
+	}
+	c := cands[0]
+	if c.Kind != "key-set" {
+		t.Errorf("Kind = %q, want key-set", c.Kind)
+	}
+	got := map[string]bool{c.A.Name: true, c.B.Name: true}
+	if !got["HANDLERS"] || !got["_VERB_TEMPLATES"] {
+		t.Errorf("expected HANDLERS≟_VERB_TEMPLATES, got %s ≟ %s", c.A.Name, c.B.Name)
+	}
+	if !c.CrossFile {
+		t.Error("the pair is cross-file")
+	}
+	if c.Jaccard < 0.79 || c.Jaccard > 0.81 { // 4 shared / 5 union
+		t.Errorf("key-set jaccard = %.3f, want ~0.80", c.Jaccard)
+	}
+}
+
+// minKeys filters thin entities; a 2-key table below minKeys=3 never indexes.
+func TestKeySetCandidatesMinKeys(t *testing.T) {
+	ents := []*FuncSig{
+		mkTable("a.py", "A", "x", "y"),
+		mkTable("b.py", "B", "x", "y"),
+	}
+	if got := KeySetCandidates(ents, 3, 0.5, 8); len(got) != 0 {
+		t.Errorf("2-key tables below minKeys=3 should yield 0, got %d", len(got))
+	}
+}
+
+// A key shared by more than maxFanout entities is plumbing, not a shape — its whole
+// posting list is dropped as a JOIN path.
+func TestKeySetCandidatesFanoutCap(t *testing.T) {
+	var ents []*FuncSig
+	for i := 0; i < 10; i++ {
+		ents = append(ents, mkTable("f.py", "T"+string(rune('A'+i)), "id", "name", "kind"))
+	}
+	if got := KeySetCandidates(ents, 3, 0.5, 8); len(got) != 0 {
+		t.Errorf("key shared by 10 entities exceeds fanout cap 8, expected 0, got %d", len(got))
+	}
+}
+
 // A signature group larger than maxMembers is a common shape, not a twin — skipped.
 func TestSignatureCandidatesRarityWindow(t *testing.T) {
 	var sigs []*FuncSig

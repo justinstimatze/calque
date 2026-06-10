@@ -39,15 +39,14 @@ type ScanStats struct {
 	SkippedExts map[string]int // by extension
 }
 
-// Extract walks repo, runs the matching extractor per supported source file, and
-// returns every FuncSig (Prepared) plus coverage stats. Skips VCS/dep/build dirs
-// and hidden dirs. legacy/ is intentionally NOT special-cased — once a .py
-// extractor exists, exclude it via --left/--right if needed.
-func Extract(repo string, exclude []string) ([]*FuncSig, ScanStats, error) {
-	st := ScanStats{SkippedExts: map[string]int{}}
+// walkExtractable walks repo and groups source files by extension, applying the
+// shared skip-dir/exclude rules. accept decides which extensions to collect; onSkip
+// (may be nil) sees every other code-file extension (Extract counts those as
+// skipped-for-want-of-an-extractor; ExtractSymbols ignores them). Single-sources
+// the tree walk shared by the function and symbol extractors.
+func walkExtractable(repo string, exclude []string, accept func(ext string) bool, onSkip func(ext string)) (map[string][]string, error) {
 	exRe := glob.Compile(exclude)
 	excluded := func(rel string) bool { return glob.MatchAny(exRe, rel) }
-
 	byExt := map[string][]string{}
 	err := filepath.WalkDir(repo, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -64,14 +63,30 @@ func Extract(repo string, exclude []string) ([]*FuncSig, ScanStats, error) {
 			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(p))
-		if _, ok := extractors[ext]; ok {
+		if accept(ext) {
 			byExt[ext] = append(byExt[ext], p)
-		} else if codeExts.has(ext) {
-			st.Skipped++
-			st.SkippedExts[ext]++
+		} else if onSkip != nil {
+			onSkip(ext)
 		}
 		return nil
 	})
+	return byExt, err
+}
+
+// Extract walks repo, runs the matching extractor per supported source file, and
+// returns every FuncSig (Prepared) plus coverage stats. Skips VCS/dep/build dirs
+// and hidden dirs. legacy/ is intentionally NOT special-cased — once a .py
+// extractor exists, exclude it via --left/--right if needed.
+func Extract(repo string, exclude []string) ([]*FuncSig, ScanStats, error) {
+	st := ScanStats{SkippedExts: map[string]int{}}
+	byExt, err := walkExtractable(repo, exclude,
+		func(ext string) bool { _, ok := extractors[ext]; return ok },
+		func(ext string) {
+			if codeExts.has(ext) {
+				st.Skipped++
+				st.SkippedExts[ext]++
+			}
+		})
 	if err != nil {
 		return nil, st, err
 	}

@@ -265,3 +265,85 @@ func SignatureCandidates(sigs []*FuncSig, minLines, minMembers, maxMembers int) 
 
 // rich counts the named/structured-type markers in a signature (specificity).
 func rich(sig string) int { return len(richType.FindAllString(sig, -1)) }
+
+// KeySetCandidates is the CROSS-SUBSTRATE recall pass. It pairs NON-FUNCTION
+// entities (module-level tables, JSON corpus-field objects — see ExtractSymbols)
+// whose KEY SETS (RetKeys) overlap by jaccard >= minJaccard: two registries of the
+// same verbs (engine.py::HANDLERS ≟ input_agent.py::_VERB_TEMPLATES), or an
+// authored corpus shape and the code table/schema that mirrors it. This is the
+// pairing the code axis structurally CANNOT make — the two sides aren't functions
+// and share no surface tokens the jaccard gate anchors on. An inverted key index
+// keeps it near-linear; the fanout cap drops ubiquitous keys (id/name) as JOIN
+// paths only — a real twin still surfaces through a rarer shared key, and jaccard
+// is computed over the FULL key sets regardless. High recall, low precision; the
+// judge is the precision filter. minKeys filters thin (non-discriminating) entities.
+func KeySetCandidates(entities []*FuncSig, minKeys int, minJaccard float64, maxFanout int) []SigCandidate {
+	idx := map[string][]*FuncSig{}
+	for _, e := range entities {
+		if len(e.sRet) < minKeys {
+			continue
+		}
+		for k := range e.sRet {
+			idx[k] = append(idx[k], e)
+		}
+	}
+	var out []SigCandidate
+	seen := map[string]bool{}
+	for _, ents := range idx {
+		if len(ents) < 2 || len(ents) > maxFanout {
+			continue // a key shared by >maxFanout entities is plumbing, not a shape
+		}
+		for i := 0; i < len(ents); i++ {
+			for j := i + 1; j < len(ents); j++ {
+				a, b := ents[i], ents[j]
+				if a.Key() == b.Key() {
+					continue
+				}
+				pk := pairkey.Key(a.Key(), b.Key())
+				if seen[pk] {
+					continue
+				}
+				kj := jaccard(a.sRet, b.sRet)
+				if kj < minJaccard {
+					continue
+				}
+				seen[pk] = true
+				out = append(out, SigCandidate{
+					A: a, B: b, Kind: "key-set",
+					Sig:       fmt.Sprintf("keys≈%.2f {%s}", kj, sharedKeysLabel(a, b)),
+					GroupSize: 2, Jaccard: kj, CrossFile: a.File != b.File,
+				})
+			}
+		}
+	}
+	// Strongest shared SHAPE first (highest key-set jaccard), then cross-file, then
+	// deterministic. Unlike the function passes there's no gate to be invisible to —
+	// these entities never enter scorePair — so Jaccard here carries the key-set
+	// overlap and ranks descending (match strength), not ascending.
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Jaccard != out[j].Jaccard {
+			return out[i].Jaccard > out[j].Jaccard
+		}
+		if out[i].CrossFile != out[j].CrossFile {
+			return out[i].CrossFile
+		}
+		return pairkey.Key(out[i].A.Key(), out[i].B.Key()) < pairkey.Key(out[j].A.Key(), out[j].B.Key())
+	})
+	return out
+}
+
+// sharedKeysLabel renders up to 4 shared RetKeys (sorted) for a candidate's human
+// label — what the two entities have in common at a glance.
+func sharedKeysLabel(a, b *FuncSig) string {
+	var shared []string
+	for k := range a.sRet {
+		if b.sRet.has(k) {
+			shared = append(shared, k)
+		}
+	}
+	sort.Strings(shared)
+	if len(shared) > 4 {
+		shared = append(shared[:4], "…")
+	}
+	return strings.Join(shared, ",")
+}

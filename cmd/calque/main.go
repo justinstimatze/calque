@@ -93,6 +93,10 @@ Usage:
                          jaccard gate is blind to (TS/TSX; generator only).
                          --judge adjudicates each with the LLM oracle (the
                          precision half; needs ANTHROPIC_API_KEY)
+  calque propose-cross   cross-substrate axis: pair non-function entities —
+                         module-level tables (.py) and JSON corpus shapes — that
+                         share a key set across files/substrates, the drift the
+                         function axis can't see (generator only; --judge)
   calque hook            spine: wire check into a git pre-commit / Stop hook
                          (calque hook install — auto-installs pre-commit)
   calque doctor          spine: calibration rollup (fire-rate, hit-rate)
@@ -133,6 +137,8 @@ func main() {
 		runProposeRoles(os.Args[2:])
 	case "propose-deep":
 		runProposeDeep(os.Args[2:])
+	case "propose-cross":
+		runProposeCross(os.Args[2:])
 	case "hook":
 		runHook(os.Args[2:])
 	case "doctor":

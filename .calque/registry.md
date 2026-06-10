@@ -680,3 +680,65 @@ mapper). Shared ENUM, different jobs — coincidental, not collapsible.
 - pair: cmd/calque/calib.go::verdictLabel | internal/llm/judge.go::parseVerdict
 - verdict: false-alarm
 - reviewed: 2026-06-10
+
+---
+
+## Run — 2026-06-10 (cross-substrate axis: propose-cross + ExtractSymbols)
+
+The cross-substrate axis (v0.3.0): non-function entity extraction (module-level tables
+`.py`, JSON corpus shapes `.json`) + the `KeySetCandidates` pass + the generator-only
+`propose-cross` command. These entities never enter the scoring gate (separate
+`ExtractSymbols` path), so all churn here is from the NEW Go functions colliding with
+existing code on name-stems (false-alarm) or joining intentional parallel families
+(contracted-twin-ok). Two genuine dual paths the self-scan flagged WERE collapsed, not
+adjudicated: `extractPyBatch≟extractPySymbols` → `runPyExtractor`, and the `Extract` /
+`ExtractSymbols` walk → `walkExtractable`.
+
+- pair: internal/code/extract_json.go::jsonCollector.walk | internal/corpus/corpus.go::Walk
+- verdict: false-alarm
+- reviewed: 2026-06-10
+- pair: internal/code/scan.go::walkExtractable | internal/corpus/corpus.go::Walk
+- verdict: false-alarm
+- reviewed: 2026-06-10
+- pair: internal/code/extract_json.go::jsonCollector.walk | internal/code/scan.go::walkExtractable
+- verdict: false-alarm
+- reviewed: 2026-06-10
+- pair: internal/code/sigcluster.go::KeySetCandidates | internal/code/touchpoint.go::keySet
+- verdict: false-alarm
+- reviewed: 2026-06-10
+- pair: internal/code/sigcluster.go::KeySetCandidates | internal/pairkey/pairkey.go::SetKey
+- verdict: false-alarm
+- reviewed: 2026-06-10
+- pair: internal/code/symbols.go::ExtractSymbols | internal/code/extract.py::_extract_symbols
+- verdict: false-alarm
+- reviewed: 2026-06-10
+- pair: internal/code/extract_json.go::extractJSONBatch | internal/code/extract.py::_extract
+- verdict: false-alarm
+- reviewed: 2026-06-10
+- pair: cmd/calque/propose_cross.go::readEntitySource | cmd/calque/propose_deep.go::readFuncSource
+- verdict: false-alarm
+- reviewed: 2026-06-10
+- pair: internal/code/extract.py::_extract | internal/code/extract.py::_extract_symbols
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- pair: internal/code/scan.go::Extract | internal/code/symbols.go::ExtractSymbols
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- pair: cmd/calque/propose_cross.go::runProposeCross | cmd/calque/propose_deep.go::runProposeDeep
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- pair: cmd/calque/propose.go::runProposeRoles | cmd/calque/propose_cross.go::runProposeCross
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- cluster: internal/code/extract.py::_extract | internal/code/extract.py::_extract_symbols | internal/code/extract_go.go::goBody.Visit | internal/code/role.go::ParsePredicate | internal/code/role.go::predTerm.matches | internal/code/score.go::Suspicion.Reason | internal/code/score.go::scorePair
+- verdict: false-alarm
+- reviewed: 2026-06-10
+- cluster: cmd/calque/mcp.go::checkToolDefinition | cmd/calque/mcp.go::toolText | cmd/calque/mcp.go::vocabCheckToolDefinition
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- cluster: cmd/calque/calib.go::runMarkFire | cmd/calque/cardinality.go::runCardinality | cmd/calque/mcp.go::checkToolDefinition | cmd/calque/propose.go::runProposeRoles | cmd/calque/propose_cross.go::runProposeCross | cmd/calque/propose_deep.go::runProposeDeep | cmd/calque/scan.go::addBoundaryFlags
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- cluster: cmd/calque/vocab_check.go::computeVocabCheck | cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/vocab_report.go::runVocabReport
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10

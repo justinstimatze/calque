@@ -134,12 +134,82 @@ def _extract(path, root):
     return out
 
 
+def _string_keys(node):
+    """For a dict literal: its string-constant keys (+ string-constant values).
+    For a set/list/tuple literal: its string-constant elements. The cross-substrate
+    axis treats these key SETS as the entity's footprint (-> ret_keys)."""
+    keys, vals = [], []
+    if isinstance(node, ast.Dict):
+        for k, v in zip(node.keys, node.values):
+            if isinstance(k, ast.Constant) and isinstance(k.value, str):
+                keys.append(k.value)
+                if isinstance(v, ast.Constant) and isinstance(v.value, str):
+                    vals.append(v.value)
+    elif isinstance(node, (ast.Set, ast.List, ast.Tuple)):
+        for e in node.elts:
+            if isinstance(e, ast.Constant) and isinstance(e.value, str):
+                keys.append(e.value)
+    return keys, vals
+
+
+def _extract_symbols(path, root, min_keys=3, max_keys=400):
+    """Emit one 'table' FuncSig record per MODULE-LEVEL dict/set/list constant
+    (the cross-substrate axis's non-function entity). ret_keys = the key set; the
+    judge then pairs e.g. engine.py::HANDLERS with input_agent.py::_VERB_TEMPLATES."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            tree = ast.parse(fh.read())
+    except (SyntaxError, OSError, ValueError):
+        return []
+    try:
+        rel = os.path.relpath(path, root)
+    except ValueError:
+        rel = path
+    out = []
+    for node in tree.body:  # module level only — not nested in funcs/classes
+        if isinstance(node, ast.Assign):
+            targets = [t for t in node.targets if isinstance(t, ast.Name)]
+            value = node.value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            targets, value = [node.target], node.value
+        else:
+            continue
+        if not targets or value is None:
+            continue
+        keys, vals = _string_keys(value)
+        if not keys:
+            continue
+        end = getattr(node, "end_lineno", node.lineno) or node.lineno
+        for tgt in targets:
+            name = tgt.id
+            # Noise control: a SCREAMING_SNAKE named table, or any map with enough
+            # keys to be a real registry (vs an incidental 1-2 element literal).
+            if not (name.isupper() or len(keys) >= min_keys):
+                continue
+            out.append({
+                "file": rel,
+                "qualname": name,
+                "name": name,
+                "kind": "table",
+                "line": node.lineno,
+                "n_lines": end - node.lineno + 1,
+                "strings": sorted(set(vals))[:max_keys],
+                "writes": [],
+                "ret_keys": sorted(set(keys))[:max_keys],
+                "calls": [],
+                "delegates": False,
+            })
+    return out
+
+
 def main():
     root = sys.argv[1] if len(sys.argv) > 1 else "."
+    mode = sys.argv[2] if len(sys.argv) > 2 else "functions"
+    extract = _extract_symbols if mode == "symbols" else _extract
     paths = sys.stdin.read().split()
     out = []
     for p in paths:
-        out.extend(_extract(p, root))
+        out.extend(extract(p, root))
     json.dump(out, sys.stdout)
 
 

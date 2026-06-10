@@ -5,6 +5,40 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+### Added
+- **Cross-substrate axis (`propose-cross`) — pair non-function entities across
+  files and substrates.** The code axis only sees functions; the hardest drifts
+  in a content-driven codebase live between *non-function* entities — a
+  module-level table mirrored in another file, or an authored corpus shape
+  (`*.json`) mirrored by a code table/schema. Those share no surface tokens, so
+  the jaccard gate is structurally blind to them. The new axis extracts
+  non-function "symbols" — module-level dict/set/list constants (`.py`, via the
+  embedded extractor's `symbols` mode) and JSON object field-sets (`.json`, pure
+  Go) — as `FuncSig`-like entities whose KEY SET is their footprint, then pairs
+  them by shared key set (`KeySetCandidates`, jaccard ≥ `--key-jaccard`, default
+  0.5) and adjudicates with the same LLM oracle (`--judge`). Like
+  `propose-roles`/`propose-deep` it is a **generator, not a gate**: stdout only,
+  no registry writes, no exit code, never part of `--strict` — non-function
+  entities use a separate `ExtractSymbols` path and never enter the scoring gate,
+  so the self-clean `check` is provably undisturbed. Identical-shape corpus
+  objects collapse to one representative (so a common column key can't blow past
+  the fanout cap and prune the real cross pair). Flags: `--min-keys`,
+  `--key-jaccard`, `--max-fanout`, `--top`, `--judge`, `--twins-only`.
+  **Validated read-only on a private content-driven codebase** (1346 entities:
+  543 module-level tables + 803 corpus shapes → 261 candidates, 188 of them
+  cross-substrate): the oracle confirmed copy-paste constant tables and two
+  separately-maintained canonical-fact registries as drift (one had *already
+  diverged* on a single entry — a live latent bug no function-axis tool can see),
+  flagged a corpus-JSON ↔ code-table pair as a contracted twin needing a
+  differential pin, and correctly rejected coincidental same-key tables (verb
+  dispatch vs verb config, etc.) as false alarms.
+
+### Changed
+- **Collapsed two dual paths the self-scan flagged in the new code** (dogfooding
+  the thesis): the Python function/symbol extractors now share one
+  `runPyExtractor` (mode arg), and `Extract` / `ExtractSymbols` share one
+  `walkExtractable` tree walk.
+
 ## [0.2.0] - 2026-06-10
 
 The Type-4 release: a representation-independent behavioral-twin detector

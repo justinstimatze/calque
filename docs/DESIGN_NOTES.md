@@ -1214,10 +1214,14 @@ pass is deliberately high-recall.
 
 Three boundaries, recorded honestly (§13 discipline — don't claim what didn't surface):
 
-1. **SQL-schema side not yet extracted.** A corpus field-set whose code mirror is a
-   *SQL* table (a `CREATE TABLE` / column list, not a Python literal) surfaces only on
-   the corpus side — the code side isn't a literal the table extractor sees. Follow-up:
-   a SQL-schema / column-set extractor (another `symbols`-style emitter).
+1. **SQL-schema side — ADDRESSED (`extract_sql.go`).** A corpus field-set whose code
+   mirror is a *SQL* table (a `CREATE TABLE` in a `.sql` file or embedded as a string
+   in source) used to surface only on the corpus side. A tolerant pure-Go
+   `CREATE TABLE` scanner now extracts each table's column set as a `sql-table` entity,
+   so the corpus ↔ db pair joins: the `temporal_markers` corpus shape ↔ the `db.py`
+   schema now surfaces (jaccard ~0.62 — the schema carries extra operational columns
+   the authored corpus doesn't). Remaining nuance: the scanner is regex/paren-based,
+   not a SQL engine — good for column *sets*, not for type/constraint fidelity.
 2. **Different key spaces stay invisible to key-set pairing.** A `{char_id: descriptor}`
    table and a corpus record with a `descriptor` *field* are the same concept but share
    no keys (ids vs field names), so key-set overlap can't pair them. This needs a

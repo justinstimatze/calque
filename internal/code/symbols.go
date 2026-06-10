@@ -45,5 +45,29 @@ func ExtractSymbols(repo string, exclude []string) ([]*FuncSig, ScanStats, error
 		st.Files += len(paths)
 		st.Funcs += len(sigs)
 	}
+
+	// SQL schemas — CREATE TABLE in .sql files or embedded in source. A separate
+	// pass because a schema can live in a file the per-ext symbol extractors also
+	// handle (db.py carries both module dicts AND CREATE TABLE strings); each pass
+	// extracts a different entity from it.
+	sqlByExt, err := walkExtractable(repo, exclude,
+		func(ext string) bool { return sqlBearingExts.has(ext) }, nil)
+	if err != nil {
+		return nil, st, err
+	}
+	var sqlPaths []string
+	for _, paths := range sqlByExt {
+		sqlPaths = append(sqlPaths, paths...)
+	}
+	schemas, err := extractSQLBatch(sqlPaths, repo)
+	if err != nil {
+		return nil, st, fmt.Errorf("SQL schema extractor: %w", err)
+	}
+	for _, s := range schemas {
+		s.Prepare()
+	}
+	all = append(all, schemas...)
+	st.Funcs += len(schemas)
+
 	return all, st, nil
 }

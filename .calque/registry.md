@@ -587,7 +587,7 @@ embedding vector) — false-alarm.
 `calque prune` (`cmd/calque/prune.go`) is the remediation for the staleness `check`
 already detects: it re-runs liveness reconciliation and surgically removes dead
 `- pair:`/`- cluster:` entries from the registry (dry-run default, `--write` +.bak).
-Surfaced by the 2026-06-10 stope dogfood (38/40 entries stale, no tool to act). As
+Surfaced by a 2026-06-10 adopter dogfood (38/40 entries stale, no tool to act). As
 with every command handler, `runPrune` goes through the shared spine (`addBoundaryFlags`,
 `computeCheck`, `joinRepo`, the compute/render split), so it joins the existing pinned
 command-handler families — re-keying those N-ary clusters. All contracted-twin-ok, same
@@ -713,6 +713,9 @@ adjudicated: `extractPyBatch≟extractPySymbols` → `runPyExtractor`, and the `
 - verdict: false-alarm
 - reviewed: 2026-06-10
 - pair: internal/code/extract_json.go::extractJSONBatch | internal/code/extract.py::_extract
+- verdict: false-alarm
+- reviewed: 2026-06-10
+- pair: internal/code/extract_sql.go::extractSQLBatch | internal/code/extract.py::_extract
 - verdict: false-alarm
 - reviewed: 2026-06-10
 - pair: cmd/calque/propose_cross.go::readEntitySource | cmd/calque/propose_deep.go::readFuncSource

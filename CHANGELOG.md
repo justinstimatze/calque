@@ -6,6 +6,24 @@ All notable changes to calque. The version string itself comes from the git tag
 ## [Unreleased]
 
 ### Added
+- **SQL-schema extractor — the third cross-substrate emitter, closing the
+  corpus ↔ database boundary.** The v0.3.0 axis surfaced authored corpus shapes
+  and code tables, but a corpus field-set whose code mirror is a *SQL* table (a
+  `CREATE TABLE` in a `.sql` file or embedded as a string in source, not a Python
+  literal) had no code-side entity to pair against. A tolerant pure-Go
+  `CREATE TABLE` scanner (`extract_sql.go`) now extracts each table's COLUMN SET
+  as a `sql-table` entity's `RetKeys`, scanning `.sql` plus SQL-bearing source
+  (`.py`/`.go`/`.ts`/…) — a file may yield both module-dict and schema entities.
+  It strips SQL comments and respects nested type/constraint parens so
+  `DECIMAL(10,2)` and `PRIMARY KEY (…)` don't corrupt the column split.
+  **Validated read-only**: the corpus-JSON ↔ `db.py` `temporal_markers` pair —
+  the documented v0.3.0 boundary — now surfaces (corpus field-set ↔ the SQL
+  schema's columns, jaccard 0.62, the schema carrying extra operational columns),
+  along with 31 schema-involving candidates total.
+
+## [0.3.0] - 2026-06-10
+
+### Added
 - **Cross-substrate axis (`propose-cross`) — pair non-function entities across
   files and substrates.** The code axis only sees functions; the hardest drifts
   in a content-driven codebase live between *non-function* entities — a

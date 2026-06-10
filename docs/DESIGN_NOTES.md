@@ -1235,3 +1235,33 @@ Three boundaries, recorded honestly (§13 discipline — don't claim what didn't
    registries pair against corpus shapes and SQL schemas the same way, and tables pair
    *across* languages (a TS `HANDLERS` ↔ a Python `_VERB_TEMPLATES` share a key set
    regardless of source language).
+
+### 19.4 Second validation — a different language (TypeScript), real drifts
+
+The first field run (§19.3) was a Python codebase. A second, independent run on an
+unseen **TypeScript** repo (~300 source files) makes the validation plural across
+languages — and exercises the TS table extractor at scale: **127 entities (74 module-
+level TS tables + 31 corpus shapes) → 44 candidates.** A 14-candidate judge slice
+returned **2 drift + 11 false-alarm + 1 judge error**. Both drifts were hand-verified
+(positive-control discipline) and both are function-axis-invisible:
+
+- A **duplicated SQL schema** — one logical table's `CREATE TABLE` written verbatim in
+  two modules (a setup helper and a migration); identical today, free to diverge the
+  moment one gains a column. Surfaced by the SQL extractor + cross-file key-set pairing.
+- A **duplicated config literal** — the same typed baseline constant defined in a test
+  file and a build-config file; re-tune one and the test asserts a stale target.
+  Surfaced by the **TS table extractor** (a module-level `const X = {…}`, invisible to
+  the function axis). This is the entity the TS leg was built to see.
+
+The judge again held high precision on the false-alarm class — it rejected coincidental
+key-shape matches (an agent-type enum used as a list vs as a map's keys; distinct
+threshold presets that intentionally hold different values; differently-sized test
+fixtures) rather than crying drift on shared shape alone.
+
+One honest wrinkle: **1 of 14 judge calls returned malformed verdict JSON** — the model
+emitted a short reasoning preamble and *then* a corrected JSON object, and the parser
+took the first object and choked on the trailing prose. The verdict was lost (counted as
+errored, not silently mis-classified). This is concrete motivation for the fenced-oracle
+hardening (§13 / the stull select-don't-invent pattern): constrain the judge to *select*
+a vetted verdict token under a grammar that fails safe, so a chatty completion can't
+corrupt the parse.

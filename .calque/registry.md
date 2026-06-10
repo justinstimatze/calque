@@ -611,3 +611,39 @@ no helper and do opposite transforms (format-convert vs stale-removal) — false
 - cluster: cmd/calque/calib.go::runDoctor | cmd/calque/calibrate.go::runCalibrate | cmd/calque/check.go::runCheck | cmd/calque/hook.go::runHook | cmd/calque/prune.go::runPrune | cmd/calque/scan.go::runScan
 - verdict: contracted-twin-ok
 - reviewed: 2026-06-10
+
+---
+
+## Run — 2026-06-10 (propose-deep Type-4 signature generator added)
+
+`calque propose-deep` (`internal/code/sigcluster.go` + `cmd/calque/propose_deep.go`) is
+the representation-independent Type-4 candidate generator — groups functions by rare
+domain-typed signature, the contract the jaccard gate is blind to. Validated on undercity
+(surfaced the getWorktreeForSession≟getWorktreeInfo already-drifted bug at jaccard 0.00).
+Generator, not gate. New helpers collide on name-stems with existing code (false-alarm) and
+runProposeDeep joins the command-handler spine families (contracted-twin-ok).
+
+- pair: internal/code/sigcluster.go::buildOpposed | internal/code/sigcluster.go::opposed
+- verdict: false-alarm
+- reviewed: 2026-06-10
+- pair: internal/code/block.go::FuncSig.tokens | internal/code/sigcluster.go::diffTokens
+- verdict: false-alarm
+- reviewed: 2026-06-10
+- pair: internal/code/funcsig.go::toSet | internal/code/sigcluster.go::tokenSet
+- verdict: false-alarm
+- reviewed: 2026-06-10
+- pair: cmd/calque/propose.go::runProposeRoles | cmd/calque/propose_deep.go::runProposeDeep
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- cluster: cmd/calque/cardinality.go::runCardinality | cmd/calque/propose.go::runProposeRoles | cmd/calque/propose_deep.go::runProposeDeep | cmd/calque/scan.go::codeAxis | cmd/calque/synonym_report.go::runSynonymReport | cmd/calque/vocab_check.go::computeVocabCheck | cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/vocab_report.go::runVocabReport
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- cluster: cmd/calque/calib.go::runMarkFire | cmd/calque/cardinality.go::runCardinality | cmd/calque/mcp.go::checkToolDefinition | cmd/calque/propose.go::runProposeRoles | cmd/calque/propose_deep.go::runProposeDeep | cmd/calque/scan.go::addBoundaryFlags
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- cluster: cmd/calque/calib.go::runDoctor | cmd/calque/calibrate.go::runCalibrate | cmd/calque/cardinality.go::runCardinality | cmd/calque/check.go::runCheck | cmd/calque/mcp.go::checkToolDefinition | cmd/calque/propose.go::runProposeRoles | cmd/calque/propose_deep.go::runProposeDeep | cmd/calque/prune.go::runPrune
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- cluster: cmd/calque/mcp.go::vocabCheckToolDefinition | cmd/calque/synonym_report.go::runSynonymReport | cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/vocab_report.go::runVocabReport
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10

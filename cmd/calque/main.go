@@ -88,6 +88,9 @@ Usage:
   calque propose-roles   role axis: synthesize paste-ready role candidates
                          from N-ary private-seam clusters (assists cardinality;
                          generator only — prints, never gates or writes)
+  calque propose-deep    Type-4 axis: twin candidates sharing a rare type
+                         signature but no surface tokens — the contract the
+                         jaccard gate is blind to (TS/TSX; generator only)
   calque hook            spine: wire check into a git pre-commit / Stop hook
                          (calque hook install — auto-installs pre-commit)
   calque doctor          spine: calibration rollup (fire-rate, hit-rate)
@@ -126,6 +129,8 @@ func main() {
 		runCardinality(os.Args[2:])
 	case "propose-roles":
 		runProposeRoles(os.Args[2:])
+	case "propose-deep":
+		runProposeDeep(os.Args[2:])
 	case "hook":
 		runHook(os.Args[2:])
 	case "doctor":

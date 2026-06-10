@@ -35,6 +35,13 @@ type FuncSig struct {
 	Calls     []string `json:"calls"`     // called function/method leaf names
 	Delegates bool     `json:"delegates"` // body forwards to a wrapped impl
 
+	// Sig is the normalized type signature — "(paramType,…)=>returnType" — a
+	// REPRESENTATION-INDEPENDENT invariant: two behavioral (Type-4) twins share a
+	// contract even when they share no token. Populated where the language exposes
+	// types (TS today); empty otherwise. Experimental: drives the signature-rarity
+	// recall pass, not the jaccard scorer.
+	Sig string `json:"sig,omitempty"`
+
 	sStr, sWrite, sRet, sCall, stem set
 }
 

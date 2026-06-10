@@ -106,6 +106,17 @@ function extractFile(ts, filePath, root) {
   const lineOf = (pos) => sf.getLineAndCharacterOfPosition(pos).line + 1;
   const nLines = (node) => lineOf(node.getEnd()) - lineOf(node.getStart(sf)) + 1;
 
+  // signatureOf builds a normalized "(paramType,…)=>returnType" string — a
+  // representation-independent invariant for the Type-4 recall pass. Declared types
+  // only (no inference); an absent type is "?". Whitespace stripped so textually-
+  // formatted-differently-but-identical signatures still match.
+  const typeText = (t) => (t ? t.getText(sf).replace(/\s+/g, "") : "?");
+  const signatureOf = (node) => {
+    const params = (node.parameters || []).map((p) => typeText(p.type));
+    const ret = node.type ? typeText(node.type) : "?";
+    return `(${params.join(",")})=>${ret}`;
+  };
+
   const emit = (node, qualname, name) => {
     const body = node.body;
     if (!body) return; // overload signature / ambient decl — no body to scan
@@ -122,6 +133,7 @@ function extractFile(ts, filePath, root) {
       ret_keys: bv.sorted(bv.retKeys),
       calls: bv.sorted(bv.calls),
       delegates: bv.delegates,
+      sig: signatureOf(node),
     });
   };
 

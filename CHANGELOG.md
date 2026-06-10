@@ -6,6 +6,22 @@ All notable changes to calque. The version string itself comes from the git tag
 ## [Unreleased]
 
 ### Added
+- **`calque propose-deep` — representation-independent Type-4 candidate generator.**
+  The jaccard `scan`/`check` gate scores surface tokens, so it is structurally blind to
+  behavioral twins that share a *contract* but no token — the textbook Type-4 case (two
+  impls of `sessionId → WorktreeInfo`, one reading JSON, one rebuilding from git). This
+  pass groups functions by a rare, **domain-typed** signature (`(paramTypes…)=>returnType`,
+  via the new `FuncSig.Sig`) — the shared contract — and emits the pairs as twin candidates,
+  each tagged with the jaccard score that proves how gate-invisible it is. Precision boosters:
+  rarity window, an opposed-verb filter (drops `insertTask≟deleteTask`, `taskStart≟taskComplete`
+  — same shape, opposite job), a domain-type requirement (a signature whose only named types
+  are stdlib generics like `Promise<string[]>` is too common to anchor a twin), and cross-file
+  ranking. **Generator, not gate**: stdout only, no registry writes, no exit code — cannot
+  disturb `check --strict`. Signatures are extracted for TS/TSX today (Go/Python is a planned
+  extension). Validated on a 1,987-function TS repo: surfaced a real, already-drifted Type-4
+  twin at jaccard 0.00 — two `sessionId → WorktreeInfo|null` impls where one fabricates the
+  `createdAt`/`isActive` fields the other stores — that the token scorer never sees. The
+  motivation + measurement is recorded in DESIGN_NOTES / RESEARCH_AND_MARKET §5.
 - **TypeScript / TSX extractor** — calque's code axis now covers `.ts`/`.tsx`, not
   just Go and Python. An embedded node script (`extract_ts.mjs`) drives the TypeScript
   compiler API and emits the same `FuncSig` JSON the go/ast and python3 extractors

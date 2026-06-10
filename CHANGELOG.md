@@ -6,6 +6,19 @@ All notable changes to calque. The version string itself comes from the git tag
 ## [Unreleased]
 
 ### Added
+- **Registry liveness GC (`calque prune`)** — the remediation for staleness `check`
+  already detects. `check` flags adjudicated pairs/clusters whose referenced code is
+  gone (the dusty-over-months problem) but offered no way to act on it except
+  hand-editing the markdown; `prune` re-runs liveness reconciliation and surgically
+  removes the dead entries' machine lines (the `- pair:`/`- cluster:` anchor + its
+  attached attributes), preserving freeform prose and `##` headers. Dry-run by default;
+  `--write` removes in place after a `.bak` backup. Refuses to run on an empty corpus
+  (a wrong `--repo`/over-broad `--exclude` would otherwise mark everything stale and
+  wipe the registry), and warns when run under an `--exclude` (which can hide live code).
+  Surfaced by a real dogfood run (stope, 2026-06-10): the audited repo deleted the file
+  the whole registry axis pointed at, leaving 38/40 entries stale — `prune` clears them
+  in one pass. Pure core (`pruneRegistry`) unit-tested for surgical removal + prose
+  preservation + adjacent-entry boundaries.
 - **Adaptive signal weights (`calque calibrate`)** — the calibration-leg upgrade that
   makes calque's per-channel signal weights (`strings`/`writes`/`name`/`calls`/`ret`)
   learn from adjudicated registry labels instead of staying hand-tuned (DESIGN_NOTES §6.1,

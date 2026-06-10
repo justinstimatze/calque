@@ -94,6 +94,8 @@ Usage:
   calque mark-fire <id> <verdict>   spine: tag a finding  useful|mixed|not-useful
   calque calibrate       spine: reweight signal channels from adjudicated labels
                          (--write emits .calque/weights.json the gate loads)
+  calque prune           spine: GC stale registry entries (referenced code gone);
+                         dry-run by default, --write removes them (.bak first)
   calque mcp             spine: serve the gates over MCP (stdio JSON-RPC) —
                          tools calque_check + calque_vocab_check for inline use
   calque migrate-registry   one-time: convert a Python-era registry
@@ -132,6 +134,8 @@ func main() {
 		runMarkFire(os.Args[2:])
 	case "calibrate":
 		runCalibrate(os.Args[2:])
+	case "prune":
+		runPrune(os.Args[2:])
 	case "mcp":
 		runMCP(os.Args[2:])
 	case "migrate-registry":

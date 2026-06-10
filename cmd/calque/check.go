@@ -69,6 +69,7 @@ type checkFindings struct {
 	StaleC     []registry.ClusterEntry
 	Unresolved []registry.Entry // known drift, both paths still live — not yet collapsed
 	Warn       string           // non-empty when the registry exists but parsed to zero entries
+	Corpus     int              // count of extracted functions (liveness denominator; 0 ⇒ scan saw nothing)
 }
 
 // computeCheck runs the scan, diffs against the registry, and returns the
@@ -86,6 +87,7 @@ func computeCheck(repo, left, right, exclude string, minScore float64, minLines,
 	}
 
 	var f checkFindings
+	f.Corpus = len(r.All)
 	f.Warn = registryParseWarning(joinRepo(repo, regPath), len(reg.Entries), len(reg.Clusters))
 	for _, s := range r.Pairs {
 		if reg.Has(s.Left.Key(), s.Right.Key()) {

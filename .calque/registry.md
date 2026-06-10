@@ -579,3 +579,35 @@ embedding vector) — false-alarm.
 - cluster: cmd/calque/calib.go::runDoctor | cmd/calque/calibrate.go::runCalibrate | cmd/calque/check.go::computeCheck | cmd/calque/propose.go::runProposeRoles | cmd/calque/scan.go::runScan
 - verdict: contracted-twin-ok
 - reviewed: 2026-06-10
+
+---
+
+## Run — 2026-06-10 (registry-GC `prune` command added; post-#1 leverage task)
+
+`calque prune` (`cmd/calque/prune.go`) is the remediation for the staleness `check`
+already detects: it re-runs liveness reconciliation and surgically removes dead
+`- pair:`/`- cluster:` entries from the registry (dry-run default, `--write` +.bak).
+Surfaced by the 2026-06-10 stope dogfood (38/40 entries stale, no tool to act). As
+with every command handler, `runPrune` goes through the shared spine (`addBoundaryFlags`,
+`computeCheck`, `joinRepo`, the compute/render split), so it joins the existing pinned
+command-handler families — re-keying those N-ary clusters. All contracted-twin-ok, same
+intended infrastructure. `runPrune ≟ pruneRegistry` is the deliberate CLI-wrapper ↔
+pure-core split (like `runCheck ≟ computeCheck`). `migrateRegistry ≟ pruneRegistry` is a
+coincidental name-stem + both-walk-markdown-lines collision at the 0.28 floor — they share
+no helper and do opposite transforms (format-convert vs stale-removal) — false-alarm.
+
+- pair: cmd/calque/prune.go::runPrune | cmd/calque/prune.go::pruneRegistry
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- pair: cmd/calque/migrate.go::migrateRegistry | cmd/calque/prune.go::pruneRegistry
+- verdict: false-alarm
+- reviewed: 2026-06-10
+- cluster: cmd/calque/calib.go::runDoctor | cmd/calque/calibrate.go::runCalibrate | cmd/calque/cardinality.go::runCardinality | cmd/calque/check.go::computeCheck | cmd/calque/propose.go::runProposeRoles | cmd/calque/prune.go::runPrune | cmd/calque/vocab_check.go::computeVocabCheck | cmd/calque/vocab_check.go::runVocabCheck
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- cluster: cmd/calque/check.go::runCheck | cmd/calque/mcp.go::mcpCheck | cmd/calque/prune.go::runPrune
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- cluster: cmd/calque/calib.go::runDoctor | cmd/calque/calibrate.go::runCalibrate | cmd/calque/check.go::runCheck | cmd/calque/hook.go::runHook | cmd/calque/prune.go::runPrune | cmd/calque/scan.go::runScan
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10

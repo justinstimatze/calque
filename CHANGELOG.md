@@ -6,6 +6,20 @@ All notable changes to calque. The version string itself comes from the git tag
 ## [Unreleased]
 
 ### Added
+- **Name-stem recall pass (`propose-deep`) — broadens Type-4 candidate generation and makes
+  it language-agnostic.** Signature recall only catches twins that share a type signature; a
+  rigorous measurement found it missed a real twin whose params differed (`formatRemainingTime`
+  ≟ `formatTimeRemaining` — same role, different signature). The name-stem pass pairs functions
+  whose name-token SETS are near-identical (jaccard ≥ `--name-jaccard`, default 0.6) regardless
+  of token order or a differing word — recovering that class (the verified-label recall went
+  2/3 → 3/3). Crucially, **name stems exist in every language**, so this extends Type-4 candidate
+  generation to Go and Python (signature recall is TS-only) — `propose-deep` now produces
+  candidates on Go/Python repos for the first time. An inverted stem index keeps it near-linear;
+  a fanout cap (`--name-max-fanout`) skips ultra-common stems. The two passes are unioned and
+  ranked by **gate-invisibility** (lowest jaccard score first = the pairs the existing scan/check
+  gate is most blind to = highest unique Type-4 value), so the best of both kinds interleave.
+  `--no-name-stem` disables it. The LLM judge remains the precision filter over the (looser,
+  higher-recall) union.
 - **LLM equivalence oracle (`propose-deep --judge`) — the precision half of the Type-4
   loop.** Signature recall is high-recall / low-precision (many same-signature functions
   do different jobs); the oracle adjudicates each candidate pair — "are these two functions

@@ -1,6 +1,7 @@
 package code
 
 import (
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"
@@ -83,6 +84,72 @@ func buildOpposed(pairs [][2]string) map[string]map[string]bool {
 	return m
 }
 
+// NameStemCandidates is the representation-independent recall pass that DOESN'T need
+// types — so it works for every language (signature recall is TS-only). It pairs
+// functions whose name-stem token SETS are near-identical (jaccard >= minJaccard):
+// two functions named for the same role, regardless of token order or a different
+// word ("formatRemainingTime" ≟ "formatTimeRemaining" = 1.0). This catches the twin
+// class signature recall misses — different/absent type signatures but the same role.
+// Cheap and noisier than signature recall; the judge is the precision filter. An
+// inverted stem index keeps it near-linear (only functions sharing a stem are scored),
+// and a fanout cap skips ultra-common stems (get/handle/…) that would pair everything.
+func NameStemCandidates(sigs []*FuncSig, minLines int, minJaccard float64, maxFanout int) []SigCandidate {
+	idx := map[string][]*FuncSig{}
+	for _, f := range sigs {
+		if f.NLines < minLines || strings.HasPrefix(f.Name, "__") || len(f.stem) == 0 {
+			continue
+		}
+		for tok := range f.stem {
+			idx[tok] = append(idx[tok], f)
+		}
+	}
+	var out []SigCandidate
+	seen := map[string]bool{}
+	for _, fns := range idx {
+		if len(fns) < 2 || len(fns) > maxFanout {
+			continue // a stem shared by >maxFanout funcs is plumbing, not a role
+		}
+		for i := 0; i < len(fns); i++ {
+			for j := i + 1; j < len(fns); j++ {
+				a, b := fns[i], fns[j]
+				if a.Key() == b.Key() {
+					continue
+				}
+				pk := pairkey.Key(a.Key(), b.Key())
+				if seen[pk] {
+					continue
+				}
+				nj := jaccard(a.stem, b.stem)
+				if nj < minJaccard {
+					continue
+				}
+				seen[pk] = true
+				jac := 0.0
+				if s, ok := scorePair(a, b); ok {
+					jac = s.Score
+				}
+				out = append(out, SigCandidate{
+					A: a, B: b, Kind: "name-stem",
+					Sig:       fmt.Sprintf("name≈%.2f %s", nj, a.Name),
+					GroupSize: 2, Jaccard: jac, CrossFile: a.File != b.File,
+				})
+			}
+		}
+	}
+	// Strongest first: highest name-stem jaccard (rendered into Sig), then most
+	// gate-invisible, then deterministic.
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Sig != out[j].Sig {
+			return out[i].Sig > out[j].Sig
+		}
+		if out[i].Jaccard != out[j].Jaccard {
+			return out[i].Jaccard < out[j].Jaccard
+		}
+		return pairkey.Key(out[i].A.Key(), out[i].B.Key()) < pairkey.Key(out[j].A.Key(), out[j].B.Key())
+	})
+	return out
+}
+
 // opposed reports whether two names are identical except for ONE token each, and
 // that differing pair is an opposed verb (insertTask↔deleteTask, taskStart↔
 // taskComplete). Position-independent — the discriminating token need not lead
@@ -117,12 +184,13 @@ func diffTokens(a, b map[string]bool) []string {
 	return out
 }
 
-// SigCandidate is one signature-matched twin candidate.
+// SigCandidate is one Type-4 twin candidate.
 type SigCandidate struct {
 	A, B      *FuncSig
-	Sig       string
-	GroupSize int     // how many functions share this signature (smaller = rarer = stronger)
-	Jaccard   float64 // the current scorer's score for this pair (shows how gate-invisible it is)
+	Kind      string  // "signature" | "name-stem" — how it was generated
+	Sig       string  // the shared signature, or "name≈<stems>" for a name-stem match
+	GroupSize int     // signature-group size (smaller = rarer); 2 for a name-stem pair
+	Jaccard   float64 // the jaccard scorer's score for this pair (how gate-(in)visible it is)
 	CrossFile bool
 }
 
@@ -168,7 +236,7 @@ func SignatureCandidates(sigs []*FuncSig, minLines, minMembers, maxMembers int) 
 					jac = s.Score
 				}
 				out = append(out, SigCandidate{
-					A: a, B: b, Sig: sig, GroupSize: len(fns),
+					A: a, B: b, Kind: "signature", Sig: sig, GroupSize: len(fns),
 					Jaccard: jac, CrossFile: a.File != b.File,
 				})
 			}

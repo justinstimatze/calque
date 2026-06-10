@@ -79,6 +79,42 @@ func TestSignatureCandidates(t *testing.T) {
 	}
 }
 
+func TestNameStemCandidates(t *testing.T) {
+	sigs := []*FuncSig{
+		// Near-identical role names (token sets equal modulo order) — should pair.
+		mkSig("a.ts", "formatRemainingTime", "formatRemainingTime", "()=>string", 6),
+		mkSig("a.ts", "formatTimeRemaining", "formatTimeRemaining", "(number)=>string", 6),
+		// Unrelated name — should not pair with either.
+		mkSig("b.ts", "parseConfigFile", "parseConfigFile", "(string)=>Config", 6),
+		// Shares only the common stem "get" with nothing rich — no pair.
+		mkSig("c.ts", "getUser", "getUser", "()=>User", 6),
+	}
+	cands := NameStemCandidates(sigs, 4, 0.6, 8)
+	if len(cands) != 1 {
+		t.Fatalf("expected 1 name-stem candidate (the format pair), got %d: %+v", len(cands), cands)
+	}
+	c := cands[0]
+	if c.Kind != "name-stem" {
+		t.Errorf("Kind = %q, want name-stem", c.Kind)
+	}
+	got := map[string]bool{c.A.Name: true, c.B.Name: true}
+	if !got["formatRemainingTime"] || !got["formatTimeRemaining"] {
+		t.Errorf("expected the format pair, got %s ≟ %s", c.A.Name, c.B.Name)
+	}
+}
+
+// A stem shared by more than maxFanout functions is plumbing, not a role — skipped.
+func TestNameStemFanoutCap(t *testing.T) {
+	var sigs []*FuncSig
+	for i := 0; i < 10; i++ {
+		// All share the stem "handle" but are otherwise distinct → high fanout.
+		sigs = append(sigs, mkSig("f.ts", "handle"+string(rune('A'+i)), "handle"+string(rune('A'+i)), "()=>void", 6))
+	}
+	if got := NameStemCandidates(sigs, 4, 0.6, 8); len(got) != 0 {
+		t.Errorf("stem 'handle' shared by 10 funcs exceeds fanout cap 8, expected 0, got %d", len(got))
+	}
+}
+
 // A signature group larger than maxMembers is a common shape, not a twin — skipped.
 func TestSignatureCandidatesRarityWindow(t *testing.T) {
 	var sigs []*FuncSig

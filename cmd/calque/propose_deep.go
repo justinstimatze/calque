@@ -21,10 +21,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
 	"sync"
 
 	"github.com/justinstimatze/calque/internal/code"
 	"github.com/justinstimatze/calque/internal/llm"
+	"github.com/justinstimatze/calque/internal/pairkey"
 	"github.com/justinstimatze/calque/internal/registry"
 )
 
@@ -37,6 +39,9 @@ func runProposeDeep(args []string) {
 	minMembers := fs.Int("sig-min-members", 2, "smallest signature group to propose from (2 = a rare shared contract)")
 	maxMembers := fs.Int("sig-max-members", 6, "largest signature group to consider (above this the shape is common, not a twin)")
 	top := fs.Int("top", 40, "max candidates to print")
+	noNameStem := fs.Bool("no-name-stem", false, "skip the name-stem recall pass (signature only)")
+	nameJac := fs.Float64("name-jaccard", 0.6, "name-stem pass: min name-token jaccard to pair (1.0 = identical token set)")
+	nameFanout := fs.Int("name-max-fanout", 8, "name-stem pass: skip stems shared by more than this many functions")
 	judge := fs.Bool("judge", false, "adjudicate each candidate with the LLM oracle (needs ANTHROPIC_API_KEY; the precision half)")
 	twinsOnly := fs.Bool("twins-only", false, "with --judge, print only candidates the oracle confirms as twins")
 	if err := fs.Parse(args); err != nil {
@@ -54,15 +59,38 @@ func runProposeDeep(args []string) {
 		os.Exit(1)
 	}
 
-	cands := code.SignatureCandidates(sigs, *minLines, *minMembers, *maxMembers)
-	// Dedup against already-adjudicated pairs (don't re-propose a settled verdict).
-	var fresh []code.SigCandidate
-	for _, c := range cands {
-		if reg.Has(c.A.Key(), c.B.Key()) {
-			continue
-		}
-		fresh = append(fresh, c)
+	// Union two representation-independent recall passes: signature (TS-only, rare
+	// domain-typed signature) + name-stem (every language, near-identical role name).
+	// Signature candidates take precedence on conflict; dedup vs already-adjudicated.
+	sigCands := code.SignatureCandidates(sigs, *minLines, *minMembers, *maxMembers)
+	var nameCands []code.SigCandidate
+	if !*noNameStem {
+		nameCands = code.NameStemCandidates(sigs, *minLines, *nameJac, *nameFanout)
 	}
+	seen := map[string]bool{}
+	var fresh []code.SigCandidate
+	addCands := func(cs []code.SigCandidate) {
+		for _, c := range cs {
+			pk := pairkey.Key(c.A.Key(), c.B.Key())
+			if seen[pk] || reg.Has(c.A.Key(), c.B.Key()) {
+				continue
+			}
+			seen[pk] = true
+			fresh = append(fresh, c)
+		}
+	}
+	addCands(sigCands)
+	addCands(nameCands)
+
+	// Unified ranking across both kinds: most gate-INVISIBLE first (lowest jaccard
+	// score = the pair the existing scan/check gate is most blind to = the highest
+	// unique Type-4 value). Stable, so each kind's own ordering breaks ties.
+	sort.SliceStable(fresh, func(i, j int) bool {
+		if fresh[i].Jaccard != fresh[j].Jaccard {
+			return fresh[i].Jaccard < fresh[j].Jaccard
+		}
+		return fresh[i].CrossFile && !fresh[j].CrossFile
+	})
 
 	withSig := 0
 	for _, f := range sigs {
@@ -73,18 +101,17 @@ func runProposeDeep(args []string) {
 
 	fmt.Println("# calque — Type-4 candidates (shared contract, representation-independent)")
 	fmt.Println()
-	fmt.Printf("scanned %d func(s) in %d file(s); %d carry a type signature; %d fresh candidate(s)\n",
-		st.Funcs, st.Files, withSig, len(fresh))
-	if withSig == 0 {
-		fmt.Println()
-		fmt.Println("No functions carried a type signature — signatures are extracted for TS/TSX only")
-		fmt.Println("today. (Go/Python signature extraction is a planned extension.)")
+	fmt.Printf("scanned %d func(s) in %d file(s); %d with a type signature; %d fresh candidate(s) (%d signature, %d name-stem)\n",
+		st.Funcs, st.Files, withSig, len(fresh), len(sigCands), len(nameCands))
+	if len(fresh) == 0 {
+		fmt.Println("\nno candidates. (Signature recall needs TS/TSX; name-stem needs near-identical role names.)")
 		return
 	}
 	fmt.Println()
-	fmt.Println("Twins sharing a rare type signature but NO surface tokens — the gate scores")
-	fmt.Println("them near zero (the `jac` column). High recall, low precision: adjudicate each")
-	fmt.Println("as drift / contracted-twin-ok / false-alarm before trusting it.")
+	fmt.Println("Twins by shared contract — a rare type SIGNATURE (no surface tokens) or a")
+	fmt.Println("near-identical NAME role — that the jaccard gate scores near zero (`jac`). High")
+	fmt.Println("recall, low precision: adjudicate each (drift / contracted-twin-ok / false-alarm),")
+	fmt.Println("or pass --judge to have the oracle do it.")
 	fmt.Println()
 
 	if len(fresh) > *top {
@@ -104,7 +131,7 @@ func runProposeDeep(args []string) {
 
 // printCandidate renders one candidate, with the oracle's verdict when present.
 func printCandidate(n int, c code.SigCandidate, v *llm.Verdict) {
-	fmt.Printf("## %d. `%s`  (group %d, jac %.2f%s)\n", n, c.Sig, c.GroupSize, c.Jaccard, crossFileMark(c.CrossFile))
+	fmt.Printf("## %d. [%s] `%s`  (jac %.2f%s)\n", n, c.Kind, c.Sig, c.Jaccard, crossFileMark(c.CrossFile))
 	fmt.Printf("- `%s` (%s:%d)\n", c.A.Qualname, c.A.File, c.A.Line)
 	fmt.Printf("- `%s` (%s:%d)\n", c.B.Qualname, c.B.File, c.B.Line)
 	if v != nil {

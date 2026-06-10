@@ -18,6 +18,16 @@ All notable changes to calque. The version string itself comes from the git tag
   (`StaleAmbig`), not flagged STALE. calque's self-scan went 20 → 0 STALE.
 
 ### Added
+- **TypeScript module-level table extraction — the cross-substrate axis now works on a
+  TS/TSX codebase too.** Mirrors the Go and Python table extractors: the embedded
+  `extract_ts.mjs` gains a `symbols` mode that walks module-level `const/let/var X =
+  {…}` / `[…]` literals (via the TS compiler API) and emits `table` entities whose
+  property names / string elements are their `RetKeys`. Same noise control as the
+  Python leg (UPPER-cased name or ≥3 keys), and the function and symbol extractors share
+  the temp-script + process setup (`runTSExtractor`, the analogue of `runPyExtractor`).
+  The cross-substrate axis now covers Python, Go, and TypeScript, and tables pair
+  *across* languages — a TS `HANDLERS` joins a Python `_VERB_TEMPLATES` on their shared
+  key set regardless of source language.
 - **Go module-level table extraction — the cross-substrate axis now works on a Go
   codebase.** The Python `symbols` mode extracts module-level dict/set/list tables;
   this adds the Go analogue via `go/ast` — package-level `var X = map[…]{…}` /

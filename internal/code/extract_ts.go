@@ -25,12 +25,27 @@ func nodeBin() string {
 	return "node"
 }
 
-// extractTSBatch runs the embedded extractor once over all .ts/.tsx paths (one node
-// process per scan, not per file) and returns the parsed FuncSigs (unprepared).
+// extractTSBatch extracts FUNCTIONS from .ts/.tsx paths (the code axis).
+func extractTSBatch(paths []string, root string) ([]*FuncSig, error) {
+	return runTSExtractor(paths, root, "")
+}
+
+// extractTSSymbols extracts module-level TABLES from .ts/.tsx paths (the cross-
+// substrate axis) — object/array literal constants, their key set in RetKeys. Shares
+// the temp-script + process setup with extractTSBatch via runTSExtractor.
+func extractTSSymbols(paths []string, root string) ([]*FuncSig, error) {
+	return runTSExtractor(paths, root, "symbols")
+}
+
+// runTSExtractor writes the embedded TS extractor to a temp .mjs and runs it once over
+// all paths in the given mode ("" = functions, "symbols" = module-level tables) — one
+// node process per scan, not per file. Single-sources the temp-script + process setup
+// so the function and symbol extractors can't drift (mirrors runPyExtractor; the same
+// collapse the self-scan asks for on dual extractor paths).
 //
 // The script is written to a temp .mjs and run as a file (not `node -e`) because it
 // uses import.meta.url to resolve the `typescript` module; -e has no module URL.
-func extractTSBatch(paths []string, root string) ([]*FuncSig, error) {
+func runTSExtractor(paths []string, root, mode string) ([]*FuncSig, error) {
 	if len(paths) == 0 {
 		return nil, nil
 	}
@@ -44,8 +59,12 @@ func extractTSBatch(paths []string, root string) ([]*FuncSig, error) {
 		return nil, fmt.Errorf("ts extractor: writing script: %w", err)
 	}
 
+	args := []string{script, root}
+	if mode != "" {
+		args = append(args, mode)
+	}
 	// Exit code 3 inside the script is its "typescript module not found" signal; its
 	// stderr explains the fix and runJSONExtractor surfaces it verbatim.
-	cmd := exec.Command(nodeBin(), script, root)
+	cmd := exec.Command(nodeBin(), args...)
 	return runJSONExtractor(cmd, paths, nodeBin(), "TypeScript", "set CALQUE_NODE or install node")
 }

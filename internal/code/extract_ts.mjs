@@ -50,15 +50,20 @@ function resolveTypescript(root) {
 
 function main() {
   const root = process.argv[2] || '.';
+  const mode = process.argv[3] || 'functions';
   const ts = resolveTypescript(root);
 
   const input = readStdin();
   const paths = input.split('\n').map((s) => s.trim()).filter(Boolean);
 
+  // mode "symbols" = module-level tables (the cross-substrate axis); else functions
+  // (the code axis). Mirrors extract.py's mode dispatch so the .ts path matches .py.
+  const extract = mode === 'symbols' ? extractSymbolsFile : extractFile;
+
   const out = [];
   for (const p of paths) {
     try {
-      out.push(...extractFile(ts, p, root));
+      out.push(...extract(ts, p, root));
     } catch {
       // A single unparseable file must not abort the batch (mirrors extract.py's
       // per-file try/except) — skip it and keep going.
@@ -311,6 +316,107 @@ function propKey(ts, prop) {
     if (ts.isStringLiteral(n) || ts.isNumericLiteral(n)) return n.text;
   }
   return null;
+}
+
+// extractSymbolsFile emits one 'table' record per MODULE-LEVEL const/let/var whose
+// initializer is an object or array literal (the cross-substrate axis's non-function
+// entity). ret_keys = the object's property names / the array's string elements; the
+// existing key-set + judge machinery then pairs e.g. a TS HANDLERS table with a Python
+// _VERB_TEMPLATES. Mirrors extract.py's _extract_symbols exactly: module level only,
+// SCREAMING_SNAKE name OR >= minKeys, key/value sets deduped + sorted + capped.
+function extractSymbolsFile(ts, filePath, root) {
+  const fs = require_fs();
+  let src;
+  try {
+    src = fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return [];
+  }
+  const isTSX = filePath.endsWith('.tsx') || filePath.endsWith('.jsx');
+  const sf = ts.createSourceFile(
+    filePath, src, ts.ScriptTarget.Latest, /*setParentNodes*/ true,
+    isTSX ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+
+  let rel;
+  try {
+    rel = path.relative(root, filePath) || filePath;
+  } catch {
+    rel = filePath;
+  }
+
+  const lineOf = (pos) => sf.getLineAndCharacterOfPosition(pos).line + 1;
+  const out = [];
+  const minKeys = 3, maxKeys = 400;
+
+  // Only top-level statements — not nested in functions/classes. `export const X`
+  // is still a VariableStatement at module scope, so it is covered.
+  for (const stmt of sf.statements) {
+    if (!ts.isVariableStatement(stmt)) continue;
+    for (const decl of stmt.declarationList.declarations) {
+      if (!ts.isIdentifier(decl.name) || !decl.initializer) continue;
+      const name = decl.name.text;
+      const { keys, vals } = literalKeys(ts, decl.initializer);
+      if (!keys.length) continue;
+      // Noise control: an UPPER-cased table name (HANDLERS, _VERB_TEMPLATES), or any
+      // literal with enough keys to be a real registry (vs an incidental 1-2 element
+      // config). Mirrors extract.py's `name.isupper() or len(keys) >= min_keys`.
+      if (!(isUpperName(name) || keys.length >= minKeys)) continue;
+      const start = lineOf(decl.getStart(sf));
+      const end = lineOf(decl.getEnd());
+      out.push({
+        file: rel,
+        qualname: name,
+        name,
+        kind: 'table',
+        line: start,
+        n_lines: end - start + 1,
+        strings: uniqSorted(vals).slice(0, maxKeys),
+        writes: [],
+        ret_keys: uniqSorted(keys).slice(0, maxKeys),
+        calls: [],
+        delegates: false,
+      });
+    }
+  }
+  return out;
+}
+
+// literalKeys returns the string keys of an object literal (+ its string-literal
+// values, for the strings channel) or the string elements of an array literal —
+// the table's footprint. Mirrors extract.py's _string_keys.
+function literalKeys(ts, node) {
+  const keys = [], vals = [];
+  if (ts.isObjectLiteralExpression(node)) {
+    for (const prop of node.properties) {
+      const k = propKey(ts, prop);
+      if (k == null) continue;
+      keys.push(k);
+      if (ts.isPropertyAssignment(prop) && prop.initializer &&
+          (ts.isStringLiteral(prop.initializer) ||
+           ts.isNoSubstitutionTemplateLiteral(prop.initializer))) {
+        const v = (prop.initializer.text || '').trim();
+        if (v) vals.push(v);
+      }
+    }
+  } else if (ts.isArrayLiteralExpression(node)) {
+    for (const el of node.elements) {
+      if (ts.isStringLiteral(el) || ts.isNoSubstitutionTemplateLiteral(el)) {
+        const v = (el.text || '').trim();
+        if (v) keys.push(v);
+      }
+    }
+  }
+  return { keys, vals };
+}
+
+// isUpperName mirrors Python str.isupper(): at least one cased letter and no
+// lowercase — so HANDLERS and _VERB_TEMPLATES qualify, camelCase/handlers do not.
+function isUpperName(name) {
+  return /[A-Za-z]/.test(name) && name === name.toUpperCase();
+}
+
+function uniqSorted(arr) {
+  return [...new Set(arr)].sort();
 }
 
 main();

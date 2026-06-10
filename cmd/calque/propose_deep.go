@@ -108,11 +108,7 @@ func printCandidate(n int, c code.SigCandidate, v *llm.Verdict) {
 	fmt.Printf("- `%s` (%s:%d)\n", c.A.Qualname, c.A.File, c.A.Line)
 	fmt.Printf("- `%s` (%s:%d)\n", c.B.Qualname, c.B.File, c.B.Line)
 	if v != nil {
-		tag := "NOT a twin"
-		if v.SameContract {
-			tag = "TWIN"
-		}
-		fmt.Printf("  oracle: %s (%s) — %s\n", tag, v.Confidence, v.Reason)
+		fmt.Printf("  oracle: %s (%s) — %s\n", v.Class, v.Confidence, v.Reason)
 	}
 	fmt.Printf("  adjudicate:  - pair: %s::%s | %s::%s\n", c.A.File, c.A.Qualname, c.B.File, c.B.Qualname)
 }
@@ -165,27 +161,35 @@ func runJudge(repo string, cands []code.SigCandidate, twinsOnly bool) {
 	close(ch)
 	wg.Wait()
 
-	twins := 0
-	shown := 0
+	var drift, contracted, falseAlarm, shown int
 	for i, c := range cands {
 		v := verdicts[i]
 		if v == nil {
 			continue // errored — already reported to stderr
 		}
-		if v.SameContract {
-			twins++
+		switch v.Class {
+		case "drift":
+			drift++
+		case "contracted-twin-ok":
+			contracted++
+		default:
+			falseAlarm++
 		}
-		if twinsOnly && !v.SameContract {
+		if twinsOnly && !v.IsTwin() {
 			continue
 		}
 		shown++
 		printCandidate(shown, c, v)
 	}
-	fmt.Printf("\noracle confirmed %d twin(s) of %d judged", twins, len(cands)-failed)
+	fmt.Printf("\noracle: %d drift · %d contracted-twin-ok · %d false-alarm (of %d judged)",
+		drift, contracted, falseAlarm, len(cands)-failed)
 	if failed > 0 {
-		fmt.Printf(" (%d errored)", failed)
+		fmt.Printf(" · %d errored", failed)
 	}
-	fmt.Println(".")
+	fmt.Println()
+	if drift > 0 {
+		fmt.Println("drift = independent impls that can diverge → collapse to one source.")
+	}
 }
 
 // readFuncSource reads a function's source text from disk via File+Line+NLines,

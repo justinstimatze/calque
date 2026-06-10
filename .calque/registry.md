@@ -663,3 +663,19 @@ handleMCP, …) via os.Getenv scaffolding — intended, not drift.
 - cluster: cmd/calque/hook.go::buildCheckCmd | cmd/calque/hook.go::installPreCommit | cmd/calque/main.go::main | cmd/calque/mcp.go::handleMCP | internal/llm/judge.go::NewJudge
 - verdict: contracted-twin-ok
 - reviewed: 2026-06-10
+
+---
+
+## Run — 2026-06-10 (judge 3-way taxonomy: drift/contracted-twin-ok/false-alarm)
+
+`parseVerdict` now validates the judge's class against calque's registry verdict
+vocabulary, so it switches on the same {drift, contracted-twin-ok, false-alarm} strings
+as `normalizeVerdict` (registry-input normalizer) and `verdictLabel` (calibration-label
+mapper). Shared ENUM, different jobs — coincidental, not collapsible.
+
+- pair: cmd/calque/migrate.go::normalizeVerdict | internal/llm/judge.go::parseVerdict
+- verdict: false-alarm
+- reviewed: 2026-06-10
+- pair: cmd/calque/calib.go::verdictLabel | internal/llm/judge.go::parseVerdict
+- verdict: false-alarm
+- reviewed: 2026-06-10

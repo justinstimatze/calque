@@ -26,13 +26,21 @@ import (
 	"time"
 )
 
-// Verdict is the oracle's judgment on one candidate pair.
+// Verdict is the oracle's judgment on one candidate pair, classified into calque's
+// registry taxonomy so the output is directly actionable.
 type Verdict struct {
-	SameContract bool   `json:"same_contract"`
-	Confidence   string `json:"confidence"` // low | medium | high
-	Reason       string `json:"reason"`
-	Cached       bool   `json:"-"` // true if served from disk, not the API
+	Class      string `json:"class"`      // drift | contracted-twin-ok | false-alarm
+	Confidence string `json:"confidence"` // low | medium | high
+	Reason     string `json:"reason"`
+	Cached     bool   `json:"-"` // true if served from disk, not the API
 }
+
+// IsTwin reports whether the pair shares a contract at all (drift OR an intentional
+// twin) — i.e. anything but a false-alarm.
+func (v Verdict) IsTwin() bool { return v.Class == "drift" || v.Class == "contracted-twin-ok" }
+
+// IsDrift reports the actionable case: two independent impls that can diverge.
+func (v Verdict) IsDrift() bool { return v.Class == "drift" }
 
 // PairInput is the two functions to judge.
 type PairInput struct {
@@ -92,11 +100,16 @@ func NewJudge() (*Judge, error) {
 // Model reports the model in use (for the report header).
 func (j *Judge) Model() string { return j.model }
 
-// cacheKey hashes everything that affects the verdict: model + both sources. A
-// body edit or a model change re-judges; an unchanged pair is a free disk read.
+// schemaVersion is bumped whenever the prompt or verdict shape changes, so old
+// cached verdicts (a different schema) are not read back.
+const schemaVersion = "v2-taxonomy"
+
+// cacheKey hashes everything that affects the verdict: schema + model + both
+// sources. A body edit, model change, or prompt/schema bump re-judges; an
+// unchanged pair is a free disk read.
 func (j *Judge) cacheKey(in PairInput) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s\x00%s", j.model, in.AKey, in.ASource, in.BKey, in.BSource)
+	fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s\x00%s\x00%s", schemaVersion, j.model, in.AKey, in.ASource, in.BKey, in.BSource)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -137,20 +150,28 @@ func (j *Judge) writeCache(key string, v Verdict) {
 }
 
 const judgeSystem = `You are a code-equivalence judge for calque, a dual-path drift detector.
+Two functions share a CONTRACT when, given equivalent inputs, a caller expects equivalent
+observable results — the same role and responsibility — regardless of how differently they
+are written. Classify the pair into exactly one class:
 
-Decide whether two functions are BEHAVIORAL TWINS: two implementations of the SAME
-CONTRACT — the same role, responsibility, and observable behavior — regardless of how
-differently they are written. Two functions are twins if a maintainer would want to
-collapse them to a single source of truth (or pin them with a differential test so they
-cannot drift apart). They share a contract when, given equivalent inputs, a caller would
-expect equivalent observable results.
+- "drift": two INDEPENDENT implementations of the same contract that can diverge (or already
+  have). Neither calls the other; each could be edited without the other following. This is
+  the dangerous case — a maintainer should collapse them to one source of truth. (Example:
+  two functions that both resolve a session's worktree, one reading a JSON file and one
+  rebuilding from git, whose fields have already drifted apart.)
 
-They are NOT twins when they merely share a type signature but do different jobs — e.g.
-insert vs update, encode vs decode, two unrelated operations that happen to take the same
-arguments. A shared shape is not a shared contract.
+- "contracted-twin-ok": the same contract, but the parallelism is INTENTIONAL and safe — a
+  thin wrapper/adapter that delegates to the other, or a deliberately mirrored pair. Collapsing
+  would remove intended indirection; the right action is to pin them with a differential test,
+  not merge them.
+
+- "false-alarm": NOT the same contract. They merely share a type signature but do different
+  jobs (insert vs update, find-by-X vs find-by-Y, escalate vs cap), OR one is a higher-level
+  dispatcher that delegates to the other while adding real logic of its own (a layering
+  relationship, not a duplicate). A shared shape is not a shared contract.
 
 Respond with ONLY a JSON object, no prose around it:
-{"same_contract": true|false, "confidence": "low"|"medium"|"high", "reason": "<one sentence>"}`
+{"class": "drift"|"contracted-twin-ok"|"false-alarm", "confidence": "low"|"medium"|"high", "reason": "<one sentence>"}`
 
 // apiRequest / apiResponse are the minimal /v1/messages shapes calque needs.
 type apiContentText struct {
@@ -230,6 +251,13 @@ func parseVerdict(blocks []apiContentText) (Verdict, error) {
 	}
 	if v.Confidence == "" {
 		v.Confidence = "low"
+	}
+	// Conservative default: an unrecognized class is treated as not-a-twin rather
+	// than risk a false "drift" on a malformed verdict.
+	switch v.Class {
+	case "drift", "contracted-twin-ok", "false-alarm":
+	default:
+		v.Class = "false-alarm"
 	}
 	return v, nil
 }

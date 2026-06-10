@@ -32,7 +32,7 @@ func newTestJudge(t *testing.T, fd *fakeDoer) *Judge {
 	return &Judge{model: "claude-opus-4-8", apiKey: "test-key", cacheDir: t.TempDir(), http: fd}
 }
 
-const okBody = `{"content":[{"type":"text","text":"{\"same_contract\": true, \"confidence\": \"high\", \"reason\": \"Both resolve a session's worktree.\"}"}]}`
+const okBody = `{"content":[{"type":"text","text":"{\"class\": \"drift\", \"confidence\": \"high\", \"reason\": \"Both resolve a session's worktree.\"}"}]}`
 
 func TestJudgePairParsesVerdict(t *testing.T) {
 	fd := &fakeDoer{status: 200, body: okBody}
@@ -41,7 +41,7 @@ func TestJudgePairParsesVerdict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("JudgePair: %v", err)
 	}
-	if !v.SameContract || v.Confidence != "high" {
+	if v.Class != "drift" || !v.IsTwin() || !v.IsDrift() || v.Confidence != "high" {
 		t.Errorf("unexpected verdict: %+v", v)
 	}
 	if v.Cached {
@@ -79,14 +79,25 @@ func TestJudgePairAPIError(t *testing.T) {
 
 func TestParseVerdictToleratesProse(t *testing.T) {
 	blocks := []apiContentText{
-		{Type: "text", Text: "Here is my judgment:\n{\"same_contract\": false, \"confidence\": \"medium\", \"reason\": \"insert vs update.\"}\nDone."},
+		{Type: "text", Text: "Here is my judgment:\n{\"class\": \"false-alarm\", \"confidence\": \"medium\", \"reason\": \"insert vs update.\"}\nDone."},
 	}
 	v, err := parseVerdict(blocks)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.SameContract || v.Confidence != "medium" {
+	if v.IsTwin() || v.Confidence != "medium" {
 		t.Errorf("unexpected: %+v", v)
+	}
+}
+
+// An unrecognized class is conservatively treated as false-alarm.
+func TestParseVerdictUnknownClass(t *testing.T) {
+	v, err := parseVerdict([]apiContentText{{Type: "text", Text: `{"class":"maybe","confidence":"low","reason":"unsure"}`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Class != "false-alarm" || v.IsTwin() {
+		t.Errorf("unknown class should default to false-alarm, got %+v", v)
 	}
 }
 

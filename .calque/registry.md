@@ -745,3 +745,21 @@ adjudicated: `extractPyBatch≟extractPySymbols` → `runPyExtractor`, and the `
 - cluster: cmd/calque/vocab_check.go::computeVocabCheck | cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/vocab_report.go::runVocabReport
 - verdict: contracted-twin-ok
 - reviewed: 2026-06-10
+
+---
+
+## Run — 2026-06-10 (Go module-level table extraction for the cross-substrate axis)
+
+`extractGoSymbolsFile` (go/ast package-level map/slice tables → the cross-substrate
+axis's Go entity source — the analogue of the Python `symbols` mode) is intentionally
+parallel to the two existing per-file extractors: `ExtractGoFile` (Go functions) and
+`_extract_symbols` (the Python table extractor, same job, different language). Same
+parse-then-emit shape, different decl kind — contracted twins, not collapsible (the
+shared loop already collapsed into `goBatch`).
+
+- pair: internal/code/extract_go.go::ExtractGoFile | internal/code/extract_go.go::extractGoSymbolsFile
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- pair: internal/code/extract_go.go::extractGoSymbolsFile | internal/code/extract.py::_extract_symbols
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10

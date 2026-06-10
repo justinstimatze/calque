@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -50,14 +51,125 @@ func ExtractGoFile(path, root string) []*FuncSig {
 	return out
 }
 
-// extractGoBatch extracts every path in-process (go/ast). Errors per file are
-// tolerated (the file is skipped). Returns unprepared FuncSigs.
-func extractGoBatch(paths []string, root string) ([]*FuncSig, error) {
+// goBatch runs a per-file go/ast extractor over every path in-process, tolerating
+// per-file parse errors (the file is skipped). Single-sources the path loop shared
+// by the function and table extractors.
+func goBatch(paths []string, root string, perFile func(path, root string) []*FuncSig) ([]*FuncSig, error) {
 	var all []*FuncSig
 	for _, p := range paths {
-		all = append(all, ExtractGoFile(p, root)...)
+		all = append(all, perFile(p, root)...)
 	}
 	return all, nil
+}
+
+// extractGoBatch extracts FUNCTIONS from .go paths (the code axis).
+func extractGoBatch(paths []string, root string) ([]*FuncSig, error) {
+	return goBatch(paths, root, ExtractGoFile)
+}
+
+// extractGoSymbols extracts package-level map/slice/array CONSTANTS as "table"
+// entities — the Go analogue of the Python `symbols` mode. A `var HANDLERS =
+// map[Verb]Handler{…}` or `var verbs = []string{…}` becomes a table whose keys (or
+// elements) are its RetKeys, so a Go port's registries pair against corpus shapes /
+// SQL schemas the same way Python tables do. In-process via go/ast; this is the
+// cross-substrate axis's Go table source, consumed only by propose-cross.
+func extractGoSymbols(paths []string, root string) ([]*FuncSig, error) {
+	return goBatch(paths, root, extractGoSymbolsFile)
+}
+
+func extractGoSymbolsFile(path, root string) []*FuncSig {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		return nil
+	}
+	rel := corpus.RelPath(root, path)
+	var out []*FuncSig
+	for _, decl := range f.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok || (gd.Tok != token.VAR && gd.Tok != token.CONST) {
+			continue // only top-level var/const declarations
+		}
+		for _, spec := range gd.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for i, name := range vs.Names {
+				if i >= len(vs.Values) {
+					continue
+				}
+				cl, ok := vs.Values[i].(*ast.CompositeLit)
+				if !ok {
+					continue // not a literal table (struct/call/etc.)
+				}
+				keys, vals := goLiteralKeys(cl)
+				if len(keys) == 0 {
+					continue
+				}
+				// Noise control: an exported (package-public) named table, or any
+				// literal with enough keys to be a real registry.
+				if !(isExportedName(name.Name) || len(keys) >= 3) {
+					continue
+				}
+				start := fset.Position(vs.Pos()).Line
+				end := fset.Position(vs.End()).Line
+				out = append(out, &FuncSig{
+					File: rel, Qualname: name.Name, Name: name.Name, Kind: "table",
+					Line: start, NLines: end - start + 1,
+					Strings: vals, RetKeys: keys,
+				})
+			}
+		}
+	}
+	return out
+}
+
+// goLiteralKeys returns the string keys (map literal) or string elements (slice/
+// array literal) of a composite literal, plus string values where present.
+func goLiteralKeys(cl *ast.CompositeLit) (keys, vals []string) {
+	switch cl.Type.(type) {
+	case *ast.MapType:
+		for _, el := range cl.Elts {
+			kv, ok := el.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+			if k := litKey(kv.Key); k != "" {
+				keys = append(keys, k)
+				if v := goStringLit(kv.Value); v != "" {
+					vals = append(vals, v)
+				}
+			}
+		}
+	case *ast.ArrayType:
+		for _, el := range cl.Elts {
+			if v := goStringLit(el); v != "" {
+				keys = append(keys, v)
+			}
+		}
+	}
+	keys = dedupStrings(keys)
+	sort.Strings(keys)
+	vals = dedupStrings(vals)
+	sort.Strings(vals)
+	return keys, vals
+}
+
+func goStringLit(e ast.Expr) string {
+	bl, ok := e.(*ast.BasicLit)
+	if !ok || bl.Kind != token.STRING {
+		return ""
+	}
+	if v, err := strconv.Unquote(bl.Value); err == nil {
+		return v
+	}
+	return ""
+}
+
+// isExportedName reports whether a Go identifier is package-exported (Capitalized).
+func isExportedName(name string) bool {
+	return name != "" && name[0] >= 'A' && name[0] <= 'Z'
 }
 
 type goBody struct {

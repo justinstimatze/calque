@@ -6,6 +6,16 @@ All notable changes to calque. The version string itself comes from the git tag
 ## [Unreleased]
 
 ### Added
+- **Go module-level table extraction — the cross-substrate axis now works on a Go
+  codebase.** The Python `symbols` mode extracts module-level dict/set/list tables;
+  this adds the Go analogue via `go/ast` — package-level `var X = map[…]{…}` /
+  `[]string{…}` literals become `table` entities whose keys/elements are their
+  `RetKeys` (`extract_go.go`). So a Go project's registries pair against corpus
+  shapes and SQL schemas exactly as Python's do (the SQL side already scanned `.go`;
+  the corpus `.json` side is language-agnostic — this closes the gap). Mirrors the
+  Python noise control (exported-name or ≥3 keys) and shares the per-file batch loop
+  with the function extractor (`goBatch`). Verified on a Go repo: `propose-cross`
+  now surfaces module-level Go tables that were previously invisible.
 - **SQL-schema extractor — the third cross-substrate emitter, closing the
   corpus ↔ database boundary.** The v0.3.0 axis surfaced authored corpus shapes
   and code tables, but a corpus field-set whose code mirror is a *SQL* table (a

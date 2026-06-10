@@ -10,6 +10,7 @@ import "fmt"
 var symbolExtractors = map[string]func(paths []string, root string) ([]*FuncSig, error){
 	".py":   extractPySymbols,
 	".json": extractJSONBatch,
+	".go":   extractGoSymbols,
 }
 
 // extractPySymbols extracts module-level TABLES from .py paths (the cross-substrate

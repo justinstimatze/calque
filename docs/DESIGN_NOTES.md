@@ -1226,6 +1226,9 @@ Three boundaries, recorded honestly (§13 discipline — don't claim what didn't
    table and a corpus record with a `descriptor` *field* are the same concept but share
    no keys (ids vs field names), so key-set overlap can't pair them. This needs a
    value-shape or semantic signal (judge-only), and is deferred — measured, not forced.
-3. **Mechanism is substrate-general; the extractor is per-substrate.** Module-level
-   tables are extracted for Python today; the same entity shape applies to a Go
-   `var X = map[…]{…}` (extend `extract_go.go`) or any language with literal tables.
+3. **Mechanism is substrate-general; the extractor is per-substrate — now Python AND
+   Go.** Module-level tables are extracted for Python (`symbols` mode) and Go
+   (`extract_go.go`: package-level `var X = map[…]{…}` / `[]string{…}` via `go/ast`);
+   the same entity shape applies to any language with literal tables. So the axis is
+   not Python-bound — a Go codebase's registries pair against corpus shapes and SQL
+   schemas the same way.

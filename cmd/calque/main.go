@@ -90,7 +90,9 @@ Usage:
                          generator only — prints, never gates or writes)
   calque propose-deep    Type-4 axis: twin candidates sharing a rare type
                          signature but no surface tokens — the contract the
-                         jaccard gate is blind to (TS/TSX; generator only)
+                         jaccard gate is blind to (TS/TSX; generator only).
+                         --judge adjudicates each with the LLM oracle (the
+                         precision half; needs ANTHROPIC_API_KEY)
   calque hook            spine: wire check into a git pre-commit / Stop hook
                          (calque hook install — auto-installs pre-commit)
   calque doctor          spine: calibration rollup (fire-rate, hit-rate)

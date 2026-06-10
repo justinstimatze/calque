@@ -647,3 +647,19 @@ runProposeDeep joins the command-handler spine families (contracted-twin-ok).
 - cluster: cmd/calque/mcp.go::vocabCheckToolDefinition | cmd/calque/synonym_report.go::runSynonymReport | cmd/calque/vocab_check.go::runVocabCheck | cmd/calque/vocab_report.go::runVocabReport
 - verdict: contracted-twin-ok
 - reviewed: 2026-06-10
+
+---
+
+## Run — 2026-06-10 (LLM judge / propose-deep --judge added)
+
+The behavioral-equivalence oracle (`internal/llm/judge.go`) — the precision half of the
+Type-4 loop. `readCache ≟ writeCache` is the intended read/write pair of one disk cache
+(mirror by design). `NewJudge` joins the loose env-reading/constructor cluster (main,
+handleMCP, …) via os.Getenv scaffolding — intended, not drift.
+
+- pair: internal/llm/judge.go::Judge.readCache | internal/llm/judge.go::Judge.writeCache
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10
+- cluster: cmd/calque/hook.go::buildCheckCmd | cmd/calque/hook.go::installPreCommit | cmd/calque/main.go::main | cmd/calque/mcp.go::handleMCP | internal/llm/judge.go::NewJudge
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-10

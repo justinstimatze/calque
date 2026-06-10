@@ -6,6 +6,20 @@ All notable changes to calque. The version string itself comes from the git tag
 ## [Unreleased]
 
 ### Added
+- **LLM equivalence oracle (`propose-deep --judge`) — the precision half of the Type-4
+  loop.** Signature recall is high-recall / low-precision (many same-signature functions
+  do different jobs); the oracle adjudicates each candidate pair — "are these two functions
+  the same contract?" — the judgment a human equivalence oracle would make, automated. It
+  reads both function bodies, asks the model for a `{same_contract, confidence, reason}`
+  verdict (parsed defensively), and prints each candidate annotated with the verdict;
+  `--twins-only` filters to confirmed twins. Deliberately **stdlib-only** (one `net/http`
+  POST to `/v1/messages`) to keep calque a zero-dependency single binary. Results are
+  content-hash **cached to disk** (model + both sources in the key), so re-runs over
+  unchanged code are free. Defaults to `claude-opus-4-8`; `CALQUE_JUDGE_MODEL` (e.g.
+  `claude-haiku-4-5`) trades quality for cost. Needs `ANTHROPIC_API_KEY` (or `CALQUE_API_KEY`)
+  and fails loudly without one. Bounded concurrency (4 workers). Still a generator — stdout
+  only, no writes, no exit code — so it can't touch the deterministic `check` gate. The pure
+  request/parse/cache logic is unit-tested with a mock HTTP transport (no key or network).
 - **`calque propose-deep` — representation-independent Type-4 candidate generator.**
   The jaccard `scan`/`check` gate scores surface tokens, so it is structurally blind to
   behavioral twins that share a *contract* but no token — the textbook Type-4 case (two

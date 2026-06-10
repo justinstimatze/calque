@@ -16,11 +16,15 @@ package main
 // on those repos until their extractors emit types.
 
 import (
+	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/justinstimatze/calque/internal/code"
+	"github.com/justinstimatze/calque/internal/llm"
 	"github.com/justinstimatze/calque/internal/registry"
 )
 
@@ -33,6 +37,8 @@ func runProposeDeep(args []string) {
 	minMembers := fs.Int("sig-min-members", 2, "smallest signature group to propose from (2 = a rare shared contract)")
 	maxMembers := fs.Int("sig-max-members", 6, "largest signature group to consider (above this the shape is common, not a twin)")
 	top := fs.Int("top", 40, "max candidates to print")
+	judge := fs.Bool("judge", false, "adjudicate each candidate with the LLM oracle (needs ANTHROPIC_API_KEY; the precision half)")
+	twinsOnly := fs.Bool("twins-only", false, "with --judge, print only candidates the oracle confirms as twins")
 	if err := fs.Parse(args); err != nil {
 		return
 	}
@@ -85,12 +91,135 @@ func runProposeDeep(args []string) {
 		fmt.Printf("(showing top %d of %d)\n\n", *top, len(fresh))
 		fresh = fresh[:*top]
 	}
-	for i, c := range fresh {
-		fmt.Printf("## %d. `%s`  (group %d, jac %.2f%s)\n", i+1, c.Sig, c.GroupSize, c.Jaccard, crossFileMark(c.CrossFile))
-		fmt.Printf("- `%s` (%s:%d)\n", c.A.Qualname, c.A.File, c.A.Line)
-		fmt.Printf("- `%s` (%s:%d)\n", c.B.Qualname, c.B.File, c.B.Line)
-		fmt.Printf("  adjudicate:  - pair: %s::%s | %s::%s\n", c.A.File, c.A.Qualname, c.B.File, c.B.Qualname)
+
+	if *judge {
+		runJudge(*repo, fresh, *twinsOnly)
+		return
 	}
+
+	for i, c := range fresh {
+		printCandidate(i+1, c, nil)
+	}
+}
+
+// printCandidate renders one candidate, with the oracle's verdict when present.
+func printCandidate(n int, c code.SigCandidate, v *llm.Verdict) {
+	fmt.Printf("## %d. `%s`  (group %d, jac %.2f%s)\n", n, c.Sig, c.GroupSize, c.Jaccard, crossFileMark(c.CrossFile))
+	fmt.Printf("- `%s` (%s:%d)\n", c.A.Qualname, c.A.File, c.A.Line)
+	fmt.Printf("- `%s` (%s:%d)\n", c.B.Qualname, c.B.File, c.B.Line)
+	if v != nil {
+		tag := "NOT a twin"
+		if v.SameContract {
+			tag = "TWIN"
+		}
+		fmt.Printf("  oracle: %s (%s) — %s\n", tag, v.Confidence, v.Reason)
+	}
+	fmt.Printf("  adjudicate:  - pair: %s::%s | %s::%s\n", c.A.File, c.A.Qualname, c.B.File, c.B.Qualname)
+}
+
+// runJudge adjudicates the candidates with the LLM oracle (bounded concurrency,
+// disk-cached) and prints each with its verdict. Generator semantics are preserved:
+// stdout only, no writes, no exit code.
+func runJudge(repo string, cands []code.SigCandidate, twinsOnly bool) {
+	j, err := llm.NewJudge()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "calque propose-deep --judge: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("\noracle: judging %d candidate(s) with %s (cached results are free)...\n\n", len(cands), j.Model())
+
+	verdicts := make([]*llm.Verdict, len(cands))
+	const workers = 4
+	var wg sync.WaitGroup
+	ch := make(chan int)
+	var mu sync.Mutex
+	var failed int
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range ch {
+				c := cands[i]
+				in := llm.PairInput{
+					AKey:    c.A.File + "::" + c.A.Qualname,
+					ASource: readFuncSource(repo, c.A, 200),
+					BKey:    c.B.File + "::" + c.B.Qualname,
+					BSource: readFuncSource(repo, c.B, 200),
+					Sig:     c.Sig,
+				}
+				v, err := j.JudgePair(context.Background(), in)
+				if err != nil {
+					mu.Lock()
+					failed++
+					mu.Unlock()
+					fmt.Fprintf(os.Stderr, "  judge %s ≟ %s: %v\n", c.A.Qualname, c.B.Qualname, err)
+					continue
+				}
+				verdicts[i] = &v
+			}
+		}()
+	}
+	for i := range cands {
+		ch <- i
+	}
+	close(ch)
+	wg.Wait()
+
+	twins := 0
+	shown := 0
+	for i, c := range cands {
+		v := verdicts[i]
+		if v == nil {
+			continue // errored — already reported to stderr
+		}
+		if v.SameContract {
+			twins++
+		}
+		if twinsOnly && !v.SameContract {
+			continue
+		}
+		shown++
+		printCandidate(shown, c, v)
+	}
+	fmt.Printf("\noracle confirmed %d twin(s) of %d judged", twins, len(cands)-failed)
+	if failed > 0 {
+		fmt.Printf(" (%d errored)", failed)
+	}
+	fmt.Println(".")
+}
+
+// readFuncSource reads a function's source text from disk via File+Line+NLines,
+// capped at maxLines to bound the oracle's token cost. Best-effort: an unreadable
+// file yields an empty body (the oracle still has the signature + name).
+func readFuncSource(repo string, f *code.FuncSig, maxLines int) string {
+	fh, err := os.Open(joinRepo(repo, f.File))
+	if err != nil {
+		return ""
+	}
+	defer fh.Close()
+	sc := bufio.NewScanner(fh)
+	sc.Buffer(make([]byte, 1<<20), 1<<20)
+	start := f.Line
+	end := f.Line + f.NLines
+	if f.NLines > maxLines {
+		end = f.Line + maxLines
+	}
+	var b []string
+	ln := 0
+	for sc.Scan() {
+		ln++
+		if ln >= start && ln < end {
+			b = append(b, sc.Text())
+		}
+		if ln >= end {
+			break
+		}
+	}
+	out := ""
+	for _, l := range b {
+		out += l + "\n"
+	}
+	return out
 }
 
 func crossFileMark(cross bool) string {

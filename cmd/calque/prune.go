@@ -22,11 +22,43 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/justinstimatze/calque/internal/code"
 	"github.com/justinstimatze/calque/internal/pairkey"
 )
+
+// confidentlyDead reports whether a registry key references source code calque OWNS
+// and can prove is gone: a supported-language source FILE (no glob meta) that no
+// longer exists. Absence from the extracted-function corpus is NOT enough — a
+// module-level table (engine.py::HANDLERS) or a cross-substrate key
+// (corpus/x.json::field) is never extracted yet very much alive, so prune must not
+// treat symbol-absence as death.
+func confidentlyDead(repo, key string) bool {
+	file := key
+	if i := strings.Index(key, "::"); i >= 0 {
+		file = key[:i]
+	}
+	if strings.ContainsAny(file, "*?[") {
+		return false // a glob path (corpus/*.json) — not a literal file we can stat
+	}
+	ext := strings.ToLower(filepath.Ext(file))
+	supported := false
+	for _, e := range code.SupportedExts() {
+		if e == ext {
+			supported = true
+			break
+		}
+	}
+	if !supported {
+		return false // not a source file calque parses → can't judge → keep
+	}
+	if _, err := os.Stat(joinRepo(repo, file)); err == nil {
+		return false // file exists → the symbol may be a non-function; treat as alive
+	}
+	return true // supported source file, gone → dead
+}
 
 func runPrune(args []string) {
 	fs := flag.NewFlagSet("prune", flag.ContinueOnError)
@@ -67,17 +99,46 @@ func runPrune(args []string) {
 		fmt.Fprintf(os.Stderr, "⚠ pruning with --exclude %q active: any entry whose code lives in an excluded file will read as stale. Prefer no --exclude for prune.\n\n", *exclude)
 	}
 
+	// prune is DESTRUCTIVE, so it acts only on entries calque can PROVE are dead: a
+	// referenced supported-source FILE that no longer exists. `check`'s staleness
+	// flags mere absence from the extracted-function corpus — which is unsound for
+	// removal: a module-level table (engine.py::HANDLERS) or a cross-substrate key
+	// (corpus/x.json::field) is never extracted yet very much alive. Removing those
+	// would delete the registry's highest-value content (caught by a real dry-run on
+	// a cross-substrate registry, 2026-06-10).
 	staleKeys := map[string]bool{}
+	keptLive := 0
 	for _, e := range f.Stale {
-		staleKeys[pairkey.Key(e.Key1, e.Key2)] = true
+		if confidentlyDead(*repo, e.Key1) || confidentlyDead(*repo, e.Key2) {
+			staleKeys[pairkey.Key(e.Key1, e.Key2)] = true
+		} else {
+			keptLive++
+		}
 	}
 	staleClusterKeys := map[string]bool{}
 	for _, e := range f.StaleC {
-		staleClusterKeys[pairkey.SetKey(e.Keys)] = true
+		dead := false
+		for _, k := range e.Keys {
+			if confidentlyDead(*repo, k) {
+				dead = true
+				break
+			}
+		}
+		if dead {
+			staleClusterKeys[pairkey.SetKey(e.Keys)] = true
+		} else {
+			keptLive++
+		}
+	}
+	keptNote := ""
+	if keptLive > 0 {
+		keptNote = fmt.Sprintf("\n%d stale-by-symbol entr%s KEPT — their files still exist (module-level "+
+			"tables or cross-substrate keys calque doesn't extract; not provably dead).\n",
+			keptLive, plural(keptLive, "y", "ies"))
 	}
 
 	if len(staleKeys) == 0 && len(staleClusterKeys) == 0 {
-		fmt.Printf("# calque prune\n\nno stale entries in %s — registry is live (corpus: %d funcs).\n", regFull, corpus)
+		fmt.Printf("# calque prune\n\nno provably-dead entries in %s — registry is live (corpus: %d funcs).%s", regFull, corpus, keptNote)
 		return
 	}
 
@@ -89,7 +150,8 @@ func runPrune(args []string) {
 	kept, removed := pruneRegistry(string(data), staleKeys, staleClusterKeys)
 
 	fmt.Printf("# calque prune\n\n")
-	fmt.Printf("corpus: %d funcs · stale pairs: %d · stale clusters: %d\n\n", corpus, len(staleKeys), len(staleClusterKeys))
+	fmt.Printf("corpus: %d funcs · provably-dead pairs: %d · clusters: %d%s\n", corpus, len(staleKeys), len(staleClusterKeys), keptNote)
+	fmt.Println()
 	for _, r := range removed {
 		fmt.Printf("- %s\n", r)
 	}

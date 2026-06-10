@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -101,5 +103,28 @@ func TestPruneRegistryAdjacentEntries(t *testing.T) {
 	}
 	if !strings.Contains(out, "- pair: a::Live | b::Live") || !strings.Contains(out, "- reviewed: 2026-06-09") {
 		t.Errorf("adjacent live entry was damaged:\n%s", out)
+	}
+}
+
+func TestConfidentlyDead(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repo, "live.go"), []byte("package x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		key  string
+		want bool
+		why  string
+	}{
+		{"gone.go::Func", true, "supported source file that doesn't exist → dead"},
+		{"live.go::SomeSymbol", false, "file exists (symbol may be a non-function table) → keep"},
+		{"corpus/chars/x.json::field", false, "non-source ext → calque doesn't own it → keep"},
+		{"corpus/*.json::field", false, "glob path → not a literal file → keep"},
+		{"gone.py::HANDLERS", true, "supported ext (.py), file gone → dead"},
+	}
+	for _, c := range cases {
+		if got := confidentlyDead(repo, c.key); got != c.want {
+			t.Errorf("confidentlyDead(%q) = %v, want %v (%s)", c.key, got, c.want, c.why)
+		}
 	}
 }

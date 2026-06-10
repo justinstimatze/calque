@@ -618,8 +618,9 @@ no helper and do opposite transforms (format-convert vs stale-removal) — false
 
 `calque propose-deep` (`internal/code/sigcluster.go` + `cmd/calque/propose_deep.go`) is
 the representation-independent Type-4 candidate generator — groups functions by rare
-domain-typed signature, the contract the jaccard gate is blind to. Validated on undercity
-(surfaced the getWorktreeForSession≟getWorktreeInfo already-drifted bug at jaccard 0.00).
+domain-typed signature, the contract the jaccard gate is blind to. Validated on an
+unseen TypeScript repo (surfaced a `getWorktreeForSession`≟`getWorktreeInfo`
+already-drifted bug at jaccard 0.00).
 Generator, not gate. New helpers collide on name-stems with existing code (false-alarm) and
 runProposeDeep joins the command-handler spine families (contracted-twin-ok).
 

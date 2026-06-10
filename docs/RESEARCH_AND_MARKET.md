@@ -175,3 +175,98 @@ only the part nobody else does and that the survey + lit-review converge on:
    should calque run automatically."
 
 Risk (downhill from three directions) only matters for a product play, which this isn't.
+
+---
+
+## 5. Field validation (2026-06-10) — what the evidence actually supports
+
+The §4 verdict above leaned on "Type-4-by-construction recall" as the distinctive bet.
+A falsification-first measurement (not a confirmation pass) against the project's own
+dogfood corpus tempers that claim and re-anchors the differentiator on what the data
+supports.
+
+**Method.** calque's signals were derived from one repo's dual paths, so a *catch* on
+that repo is confounded (possible overfit) but a *miss* is not (overfitting would only
+help recall). Probed the scorer directly on confirmed, human-adjudicated code-to-code
+twins, and adjudicated precision by reading top suspects on a second repo calque had
+never seen.
+
+**Result.**
+- **Type-4 (no-shared-footprint) recall is low — on home turf.** Of three confirmed
+  code-to-code twins, two were missed (one scored a literal zero anchor — the textbook
+  "same concept, two mechanisms, no shared footprint" case); the one catch landed
+  *entirely* on an identical function name (a Type-1 match any grep makes). A miss where
+  overfitting would help is clean negative evidence: recall on genuine Type-4 twins is
+  ~0 on the very codebase the signals were tuned to.
+- **Precision on an unseen repo is high and real.** Top suspects there were genuine,
+  already-drifted dual paths with concrete latent bugs (two copies of one method that had
+  diverged in a falsy-check; two time-formatters where one handled a case the other
+  dropped). Useful finds a maintainer wants — but caught via name + shared footprint
+  (Type 1–3), the territory `drift`/SonarQube already occupy. (Precision-at-top is
+  structurally blind to Type-4, which scores low and never surfaces.)
+- **Independent field tally (the adopter, reconstructed from 4 days of git history).**
+  Over a sustained dual-path collapse campaign: ~2 collapses were *caught by calque's
+  scan* (including one real prod bug no test covered and nothing else was looking for);
+  ~9+ were found by other means (playtests, reachability tests, reasoning) and *registered
+  into* calque afterward. The adopter's own summary: the daily flow is **into the registry,
+  not out of the scan** — the persistent adjudicated memory ("grep before assuming two
+  paths are independent") is the used value; live-scan recall is low because what remains
+  is **cross-substrate** (code ↔ corpus-JSON ↔ LLM-constructor-enum ↔ sqlite, partly
+  cross-process) or **above pair granularity** ("this whole shell shouldn't exist").
+
+**Re-anchored differentiator (evidence-backed).** Lead with what's validated, not with
+the unproven headline:
+1. **The persistent adjudicated registry as durable memory** — independently the most-used
+   value; still zero commercial instances.
+2. **N-ary / architecture-granularity drift** (the touchpoint cluster pass) — the adopter's
+   hardest calls were "a whole subsystem is duplicated," which pair-granularity can't state.
+3. **Cross-substrate twins** (the same contract drifting across code/config/data/prose) —
+   where the adopter's hardest hand-found drifts actually lived, and which *no* AST/code-only
+   competitor occupies. There is a ready 4-case validation set for any future substrate
+   adapter.
+
+**The open hypothesis was then tested — and the detector built; see §5.1.** §5 falsified
+*jaccard* recall on Type-4, not Type-4 detection. The token scorer indexes surface; when
+twins share no surface there is nothing to match. The fix is a representation-independent
+pipeline the original implementation never had.
+
+---
+
+## 5.1 The Type-4 detector — built and measured (2026-06-10)
+
+**Architecture — cheap, high-recall candidate generation → LLM precision.**
+- *Candidate generation* (deterministic, no LLM): two passes, unioned and ranked
+  by *gate-invisibility* (the pairs the jaccard gate is most blind to first). (1) a
+  rare **domain-typed type signature** — the contract a behavioral twin keeps even
+  with zero shared tokens (TS/TSX). (2) near-identical **name-stem token sets** —
+  same role, *every language* (Go/Python/TS), catching twins whose signatures differ.
+- *Precision — the oracle*: an LLM judge classifies each candidate into calque's
+  registry taxonomy — **drift / contracted-twin-ok / false-alarm** — so the output
+  is directly actionable (drift = collapse; contracted-twin-ok = pin; else ignore).
+
+**Measured un-circularly** (the hazard — an LLM both labeling ground truth and
+judging — was the binding design constraint):
+- **Candidate-generator recall: 3/3** on human-verified twins (labels from *reading*
+  both bodies; the generator is deterministic). The third was recovered by the
+  name-stem pass after a *measured* signature-recall miss (a twin with differing
+  params): 2/3 → 3/3.
+- **Judge precision: 3/3** agreement with the human labels — reasoning that
+  independently rediscovered the latent bugs.
+- **Judge recall: 8/8** on twins built *by construction* (behavior-preserving
+  rewrite → a twin true by the transformation, not by any judge's opinion). It
+  **held 8/8 when the rewriter model ≠ the judge model**, breaking a same-model
+  self-recognition confound an earlier run had made visible.
+
+**Honest bounds.** n on human labels is small (4); synthetic recall is an *upper
+bound* (a rewrite preserves more structure than two developers independently
+reimplementing); the judge is LLM-dependent (cost + nondeterminism — mitigated by
+content-hash disk caching and a cheaper-model option). The detector is a
+**generator** (stdout, no gate, no exit code) — it never touches the deterministic
+`check` gate an adopter depends on.
+
+**The differentiator is re-earned, not asserted:** representation-independent Type-4
+candidate generation (signature + name-stem, language-agnostic) plus an LLM
+equivalence oracle emitting calque's own taxonomy. The cross-substrate frontier
+(§5 #3) is still the next axis; the AI-codebase recall question now has a
+reproducible harness (`cmd/calque/synth_recall_test.go`) to answer it at scale on
+any repo.

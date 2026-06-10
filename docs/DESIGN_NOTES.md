@@ -296,6 +296,28 @@ Net unchanged: positioning miss, not thesis miss. The teardown *strengthens* the
 three differentiators by grounding #1 in drift's own algorithm and confirming #2 is
 unoccupied against the strongest in-category tool.
 
+> **⚠ Validation update (2026-06-10) — differentiator #1 (Type-4-by-construction)
+> is DEMOTED by measurement; see RESEARCH_AND_MARKET §5 for the full evidence.** A
+> falsification-first probe (confirmed twins from the dogfood corpus + an adopter's
+> 4-day field tally) found scan recall on genuine no-shared-footprint Type-4 twins is
+> ~0 *even on the repo the signals were tuned to* — the misses are exactly the
+> no-footprint cases; the catches are name/footprint (Type 1–3). What *is* validated:
+> the persistent registry as durable memory (the adopter's most-used surface), the
+> N-ary/architecture-granularity cluster pass, and **cross-substrate** drift (code ↔
+> config/JSON/sqlite/prose) as the real unoccupied frontier — the adopter's hardest
+> hand-found drifts lived there, with a ready 4-case validation set.
+>
+> **Update (same day) — the Type-4 detector was then BUILT and measured; the demotion
+> applied to *jaccard* recall, not Type-4 detection.** A representation-independent
+> pipeline now exists: candidate generation by rare domain-typed type signature
+> (`propose-deep`) + near-identical name-stem token sets (language-agnostic), unioned and
+> ranked by gate-invisibility, with an LLM judge (`--judge`) classifying each into
+> drift / contracted-twin-ok / false-alarm. Measured un-circularly: candidate recall 3/3
+> and judge precision 3/3 on human-verified labels, judge recall 8/8 on
+> by-construction synthetic twins (held de-confounded with split rewriter/judge models).
+> Differentiator #1 is **re-earned** — see RESEARCH_AND_MARKET §5.1 for the full numbers,
+> bounds, and the honest n=4-small caveat.
+
 ---
 
 ## 7. Naming
@@ -457,7 +479,7 @@ public benchmark.
   return-shape), kept only if it earns its precision against the adjudicated registry
   (§13). *Slice-2 measurement ran (2026-06-09) and stopped at the precondition:* a registry
   records only what the gate already surfaced (every entry has shared footprint by
-  construction), and the stope seed is likewise gate-found pairs — so the labeled
+  construction), and the adopter seed is likewise gate-found pairs — so the labeled
   no-footprint set is n≈1 (the external two-backend anecdote), too thin to discriminate
   three candidate signals without fitting to noise. Deferred, not abandoned: `channelSet`
   in `internal/code/block.go` is already parameterized to drive a looser-channel discovery

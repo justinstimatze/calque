@@ -111,12 +111,19 @@ and dunders excluded. Each left fn keeps its single best match.
 left×right pairs are scored (the testing-vs-prod boundary), not within-group. Go
 targets parse via native `go/ast`; Python (`.py`) via an embedded `python3` AST
 extractor; TypeScript (`.ts`/`.tsx`) via an embedded `node` script driving the
-TypeScript compiler API (one subprocess per scan each). The two subprocess
-extractors share one `runJSONExtractor` core so the stdin/JSON/error handling
-can't drift. The node + `typescript` runtime dependency for `.ts` mirrors the
-python3 one already accepted for `.py`; calque resolves `typescript` from the
-scanned repo's `node_modules`, a global install, or `CALQUE_TS`. `.js`/`.jsx`
-are recognized as code but not yet extracted (no type surface).
+TypeScript compiler API; Rust (`.rs`) via an embedded `syn`-based helper crate
+(one subprocess per scan each). The subprocess extractors share one
+`runJSONExtractor` core so the stdin/JSON/error handling can't drift. The node +
+`typescript` runtime dependency for `.ts` mirrors the python3 one already accepted
+for `.py`; calque resolves `typescript` from the scanned repo's `node_modules`, a
+global install, or `CALQUE_TS`. Rust differs in one way: `syn` is a compiled
+parser, not an interpreter running a script, so calque embeds the helper crate's
+*source* and **builds it once into a cached binary** on the first `.rs` scan
+(`cargo build --release --locked`, pinned `syn`), reusing the cache thereafter —
+`cargo` is present wherever Rust is actively developed (the same "toolchain is
+co-located with the code" property `python3`/`node` rely on), and
+`CALQUE_RUST_EXTRACTOR` overrides with a prebuilt binary. `.js`/`.jsx` are
+recognized as code but not yet extracted (no type surface).
 
 ---
 
@@ -444,11 +451,13 @@ public benchmark.
    re-flag if a side's signature changed since the verdict).
 
 **P2 — Reach & ergonomics**
-7. **TS extractor.** ✅ **Shipped.** Go (`go/ast`), Python (embedded `python3`),
-   and TypeScript/TSX (embedded `node` driving the TS compiler API) all extract
-   natively; the two subprocess extractors share one `runJSONExtractor` core.
-   Validated read-only on a 302-file TS repo (`.js`/`.jsx` still deferred — no
-   type surface).
+7. **TS + Rust extractors.** ✅ **Shipped.** Go (`go/ast`), Python (embedded
+   `python3`), TypeScript/TSX (embedded `node` driving the TS compiler API), and
+   Rust (embedded `syn` helper, built-once-cached) all extract natively; the
+   subprocess extractors share one `runJSONExtractor` core. TS validated read-only
+   on a 302-file repo; Rust added for a sibling Rust codebase with a confirmed
+   function-level dual-path bug as the validation target (`.js`/`.jsx` still
+   deferred — no type surface; cross-substrate Rust *tables* are a follow-up).
 8. **Boundary presets** (`--preset harness|client-server|v1-v2`) so users don't
    hand-craft globs.
 9. **Cross-language dogfood — TS.** The meta-bug + the private-symbol-touchpoint

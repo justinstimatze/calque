@@ -17,6 +17,7 @@ var extractors = map[string]func(paths []string, root string) ([]*FuncSig, error
 	".py":  extractPyBatch,
 	".ts":  extractTSBatch,
 	".tsx": extractTSBatch,
+	".rs":  extractRustBatch,
 }
 
 // codeExts are extensions calque considers "code" — used to count files skipped

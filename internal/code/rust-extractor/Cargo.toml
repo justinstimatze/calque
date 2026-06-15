@@ -1,0 +1,30 @@
+[package]
+name = "calque-rust-extractor"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# calque's Rust function-axis extractor. Embedded in the Go binary and built once
+# (cached) on the first `.rs` scan; see internal/code/extract_rust.go. It reads
+# newline-separated file paths on stdin and emits the same FuncSig JSON array the
+# go/ast and python3 extractors produce. Cargo.lock is committed and the build is
+# `--locked` so the syn version is pinned (reproducible extraction).
+
+[[bin]]
+name = "calque-rust-extractor"
+path = "src/main.rs"
+
+[dependencies]
+# `full` = parse complete files (not just proc-macro token streams); `visit` = the
+# read-only AST walker; `extra-traits` = Debug/Eq for nodes (handy, cheap).
+syn = { version = "2", features = ["full", "visit", "extra-traits"] }
+# `span-locations` is what makes span().start().line return real 1-based line
+# numbers in a normal binary (proc-macro2's fallback path).
+proc-macro2 = { version = "1", features = ["span-locations"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+# opt-level 1 keeps the one-time first-build fast; the helper is I/O-bound parsing,
+# runtime speed past -O1 is irrelevant for a short-lived per-scan process.
+opt-level = 1

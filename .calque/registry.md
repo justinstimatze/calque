@@ -763,3 +763,65 @@ shared loop already collapsed into `goBatch`).
 - pair: internal/code/extract_go.go::extractGoSymbolsFile | internal/code/extract.py::_extract_symbols
 - verdict: contracted-twin-ok
 - reviewed: 2026-06-10
+
+---
+
+## Run — 2026-06-14 (Rust function extraction; calque now self-scans its own `syn` helper)
+
+Adding `.rs` extraction makes calque scan its OWN embedded helper crate
+(`internal/code/rust-extractor/src/main.rs`) — which deliberately mirrors `extract.py`
+and `extract_go.go` so the four substrates emit identical `FuncSig` JSON. That
+intentional cross-language parity is what these pairs are; it's *asserted* by
+`extract_rust_test.go`, so it's pinned (`contracted-twin-ok`), not collapsible — the
+shared core already lives in `runJSONExtractor` on the Go side. (This only fires on
+calque scanning its own repo; a user's repo never contains the crate — it's materialized
+to a cache dir outside their tree.) The remaining matches are incidental name-stem or
+Rust-stdlib-idiom (`.collect()`/`.last()`/`.to_string()`) coincidences → `false-alarm`.
+
+Intentional extractor parity (pinned):
+
+- pair: internal/code/extract.py::_BodyVisitor._record_target | internal/code/rust-extractor/src/main.rs::Body.record_target
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-14
+- pair: internal/code/extract.py::_BodyVisitor.visit_Call | internal/code/rust-extractor/src/main.rs::Body.visit_expr
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-14
+- pair: internal/code/extract_go.go::recvTypeName | internal/code/rust-extractor/src/main.rs::type_name
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-14
+- pair: internal/code/extract_go.go::goBody.recordTarget | internal/code/rust-extractor/src/main.rs::Body.record_target
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-14
+- pair: internal/code/extract_go.go::goBody.Visit | internal/code/rust-extractor/src/main.rs::Body.visit_expr
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-14
+
+Incidental coincidences (suppressed):
+
+- pair: internal/corpus/corpus.go::RelPath | internal/code/rust-extractor/src/main.rs::rel_path
+- verdict: false-alarm
+- reviewed: 2026-06-14
+- pair: cmd/calque/main.go::main | internal/code/rust-extractor/src/main.rs::main
+- verdict: false-alarm
+- reviewed: 2026-06-14
+- pair: internal/code/extract.py::main | internal/code/rust-extractor/src/main.rs::main
+- verdict: false-alarm
+- reviewed: 2026-06-14
+- pair: internal/corpus/corpus.go::Walk | internal/code/rust-extractor/src/main.rs::walk_items
+- verdict: false-alarm
+- reviewed: 2026-06-14
+- pair: internal/code/extract_json.go::jsonCollector.walk | internal/code/rust-extractor/src/main.rs::walk_items
+- verdict: false-alarm
+- reviewed: 2026-06-14
+- pair: internal/code/extract_rust.go::rustExtractorBin | internal/code/extract_rust.go::buildRustExtractor
+- verdict: false-alarm
+- reviewed: 2026-06-14
+- cluster: internal/code/rust-extractor/src/main.rs::Body.visit_expr | internal/code/rust-extractor/src/main.rs::emit_fn | internal/code/rust-extractor/src/main.rs::main | internal/code/rust-extractor/src/main.rs::member_str | internal/code/rust-extractor/src/main.rs::rel_path | internal/code/rust-extractor/src/main.rs::type_name
+- verdict: false-alarm
+- reviewed: 2026-06-14
+- cluster: cmd/calque/hook.go::buildCheckCmd | cmd/calque/hook.go::installPreCommit | cmd/calque/main.go::main | cmd/calque/mcp.go::handleMCP | internal/code/extract_rust.go::rustExtractorBin | internal/llm/judge.go::NewJudge
+- verdict: false-alarm
+- reviewed: 2026-06-14
+- cluster: internal/code/rust-extractor/src/main.rs::Body.record_target | internal/code/rust-extractor/src/main.rs::Body.visit_expr | internal/code/rust-extractor/src/main.rs::field_members
+- verdict: false-alarm
+- reviewed: 2026-06-14

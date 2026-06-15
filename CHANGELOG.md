@@ -3,7 +3,7 @@
 All notable changes to calque. The version string itself comes from the git tag
 (`git describe`), not this file — see `Makefile` / `cmd/calque/main.go`.
 
-## [Unreleased]
+## [0.4.0] - 2026-06-15
 
 ### Changed
 - **`check` STALE no longer cries wolf on non-function / excluded keys.** A registry
@@ -18,6 +18,25 @@ All notable changes to calque. The version string itself comes from the git tag
   (`StaleAmbig`), not flagged STALE. calque's self-scan went 20 → 0 STALE.
 
 ### Added
+- **Rust function extraction — the code (scoring) axis now works on `.rs` codebases.**
+  Adds Rust as the fourth function-axis substrate (after Go/Python/TypeScript). Unlike
+  `.py`/`.ts` (run a script via an always-present interpreter), Rust needs a compiled
+  parser, so calque embeds a tiny `syn`-based helper crate
+  (`internal/code/rust-extractor/`) and **builds it once, then caches** the binary under
+  the user cache dir keyed by a hash of the embedded source — the first `.rs` scan runs
+  `cargo build --release --locked` (pinned `syn` via a committed `Cargo.lock`), every
+  scan after reuses the cached binary. A real AST (not a brace-scanner) keeps the
+  scoring gate's inputs precise: the helper emits the same `FuncSig` JSON the go/ast and
+  python3 extractors produce (so `runJSONExtractor` handles all four identically), with
+  field semantics mirroring `extract.py` — `writes` strip the `self.` root
+  (`self.speed += x` → `speed`), `delegates` detects forwarding through a delegation-root
+  field (`self.inner.f()` / `self._engine.step()`), `ret_keys` come from a returned
+  struct literal. `cargo` is present wherever Rust is actively developed (you can't build
+  the crate without it), so the build-time dependency mirrors the existing
+  `node`+`typescript` requirement for the TS leg. `CALQUE_RUST_EXTRACTOR` overrides with
+  a prebuilt binary (CI / no-toolchain); the test skips when `cargo` is absent so the
+  pure-Go build/CI is unaffected. Cross-substrate Rust tables (const/static/`phf!` maps)
+  remain a follow-up.
 - **TypeScript module-level table extraction — the cross-substrate axis now works on a
   TS/TSX codebase too.** Mirrors the Go and Python table extractors: the embedded
   `extract_ts.mjs` gains a `symbols` mode that walks module-level `const/let/var X =

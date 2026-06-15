@@ -113,8 +113,13 @@ calque vocab-check --bootstrap            # seed the allow-list from the current
 calque vocab-check --seed-cmd '<proj seeder>'   # merge a project's own slug list
 ```
 
-`scan`/`check` work on Go (native `go/ast`) and Python (an embedded `python3`
-extractor — needs `python3` on PATH for `.py` targets).
+`scan`/`check` work on Go (native `go/ast`), Python (embedded `python3`),
+TypeScript/TSX (embedded `node` + the TypeScript compiler), and Rust (an embedded
+`syn` helper, built once and cached on the first `.rs` scan). Each language needs its
+own toolchain present for that language's targets — `python3` for `.py`,
+`node`+`typescript` for `.ts`, `cargo` for `.rs` (the same toolchain you already build
+that code with; `CALQUE_RUST_EXTRACTOR` can point at a prebuilt binary to skip the
+build).
 
 ## The loop
 
@@ -154,8 +159,10 @@ functions equivalent; that's undecidable. Read the output with that in mind:
   return records. On pure-functional, value-returning libraries the per-pair
   effect-signals thin out, and the N-ary **cluster pass** (functions sharing a rare
   private symbol — convention-free and language-agnostic) carries more of the load.
-- **Validated on real Python and Go codebases** (and calque's own source), where it
-  has surfaced concrete, shipped-bug-class drift. TypeScript is on the roadmap.
+- **Validated on real Python, Go, and Rust codebases** (and calque's own source),
+  where it has surfaced concrete, shipped-bug-class drift — on a real Rust codebase its
+  first run surfaced three genuine dual-path collapses and correctly pinned a deliberate
+  twin whose drift-guard had no backing test. TypeScript/TSX extraction also ships.
 - **Tune the boundary, not the threshold.** A well-chosen `--left/--right` (two
   things that genuinely should agree — harness vs prod, client vs server, v2 vs v1)
   beats scanning a whole repo against itself every time.
@@ -184,8 +191,8 @@ unbounded) and gate it — catching the dual paths that pairwise similarity can'
 because counting needs no resemblance (see `docs/DESIGN_NOTES.md` §18). The MVP ships
 the explicit-declaration form (declare a predicate + expected count in the registry,
 `--strict` to gate); cluster-proposed candidates and a boundary-blind scan are the
-next slices. Further axes (config/env, catalog, narrative) and a TypeScript extractor
-are roadmapped in `docs/DESIGN_NOTES.md` §16–18. Apache-2.0; the prose axis, calibration, and
+next slices. Further axes (config/env, catalog, narrative) are roadmapped in
+`docs/DESIGN_NOTES.md` §16–18. Apache-2.0; the prose axis, calibration, and
 hook are consolidated from the sibling project `cupel` (MIT, attribution
 preserved) — which now consumes calque back: cupel retired its own vocabulary
 tooling and runs `calque vocab-check` as its pre-commit prose gate.

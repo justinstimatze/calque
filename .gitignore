@@ -17,6 +17,11 @@ __pycache__/
 # and CI); the installed tree is not.
 node_modules/
 
+# Rust — the syn extractor crate is built once into the user cache dir, not in-tree.
+# Cargo.toml/Cargo.lock/src are tracked (embedded + pinned); guard against an
+# accidental in-tree `cargo build` leaving a target/ behind.
+internal/code/rust-extractor/target/
+
 # calque's own memory: track the adjudicated registry + prose allow-list,
 # ignore calibration logs (fires.jsonl / fire-tags.jsonl)
 .calque/*

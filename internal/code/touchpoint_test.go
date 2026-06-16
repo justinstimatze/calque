@@ -111,6 +111,42 @@ func TestPairBelowMinMembers(t *testing.T) {
 	}
 }
 
+// TestExternalCallNotSeam pins item 1: a non-underscore call name that resolves to
+// no project-defined function (a std / extern-crate method like read_to_end, parent)
+// must NOT form a cluster, even when three functions share it. A leading-underscore
+// private call, or a non-underscore call that IS a project def, still clusters.
+func TestExternalCallNotSeam(t *testing.T) {
+	mk := func(file, name string, calls []string) *FuncSig {
+		f := &FuncSig{File: file, Qualname: "T." + name, Name: name, NLines: 10, Calls: calls}
+		f.Prepare()
+		return f
+	}
+	// Three unrelated fetchers sharing only the std methods read_to_end + parent.
+	extern := []*FuncSig{
+		mk("a.go", "fetchA", []string{"read_to_end", "parent"}),
+		mk("b.go", "fetchB", []string{"read_to_end", "parent"}),
+		mk("c.go", "fetchC", []string{"read_to_end", "parent"}),
+	}
+	if cl := ClusterByTouchpoint(extern, DefaultClusterOptions()); len(cl) != 0 {
+		t.Fatalf("std-method calls (read_to_end/parent) must not cluster, got %d: %+v", len(cl), cl)
+	}
+
+	// Same shape but the shared calls ARE project-defined functions (geomKernel +
+	// spanMath are extracted) — real shared private seams, so the trio must cluster.
+	// Two shared seams clear the default MinScore the single std-pair would also have
+	// cleared, so the only thing that differs is project-def resolution.
+	defs := []*FuncSig{
+		mk("k.go", "geomKernel", nil), // resolvable targets
+		mk("m.go", "spanMath", nil),
+		mk("a.go", "deriveA", []string{"geomKernel", "spanMath"}),
+		mk("b.go", "deriveB", []string{"geomKernel", "spanMath"}),
+		mk("c.go", "deriveC", []string{"geomKernel", "spanMath"}),
+	}
+	if cl := ClusterByTouchpoint(defs, DefaultClusterOptions()); len(cl) != 1 {
+		t.Fatalf("project-defined shared calls (geomKernel/spanMath) must cluster, got %d: %+v", len(cl), cl)
+	}
+}
+
 func TestClusterKeyOrderIndependent(t *testing.T) {
 	x := &FuncSig{File: "a.go", Qualname: "T.x"}
 	y := &FuncSig{File: "b.go", Qualname: "T.y"}

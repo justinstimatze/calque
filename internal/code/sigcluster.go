@@ -350,6 +350,45 @@ func sharedSetLabel(as, bs set) string {
 	return strings.Join(shared, ",")
 }
 
+// structuralShareMax is the largest shared read-set still treated as a single small
+// value-type's complete field set (a Pose's {x,z,hdg}). Camber dogfood observed the
+// false-twin cases at exactly 3 members; tunable.
+const structuralShareMax = 3
+
+// flatField reports whether a read-path is a whole-object field access (one field off
+// one root) rather than a deeper domain sub-path. Go/Py/Rust drop the root, so a
+// whole-object field is a bare token ("x", "geom"); TS keeps a "this." prefix, so strip
+// it first ("this.x" -> "x"). A dotted remainder ("road.width") is a specific sub-path.
+func flatField(m string) bool {
+	return !strings.Contains(strings.TrimPrefix(m, "this."), ".")
+}
+
+// structuralShare reports whether the fields two functions SHARE are likely the
+// complete field set of a single small value-type (a Pose's {x,z,hdg}, a RoadPiece's
+// {geom,elevation,super}) rather than a derived domain quantity. Such sharing is
+// STRUCTURAL — both functions merely touch the same struct — not evidence of
+// value-derivation drift. Proxy (no type info available): the shared (intersection)
+// read-set is small AND every member is a whole-object field token (flatField). A
+// dotted shared path (road.width) names a specific quantity and is NOT discounted.
+// Camber dogfood: this single filter killed 3/3 read-set false alarms with no loss to
+// the 2 real twins (whose shared sets were dotted or larger).
+func structuralShare(as, bs set) bool {
+	var n int
+	for k := range as {
+		if !bs.has(k) {
+			continue
+		}
+		if !flatField(k) {
+			return false // a specific domain sub-path — not a whole-struct field set
+		}
+		n++
+		if n > structuralShareMax {
+			return false
+		}
+	}
+	return n > 0
+}
+
 // SharedDerivationCandidates surfaces VALUE-DERIVATION DRIFT: functions that derive
 // an output from the SAME input field-set without routing through a shared authority
 // — the dual-path shape where one physical quantity (a height, width, offset) is
@@ -367,8 +406,10 @@ func sharedSetLabel(as, bs set) string {
 // A pairwise op-type gate additionally drops provably-dual pairs (opposedOps) and,
 // unless includeMutators is set, same-op bare-mutator pairs (mutate/mutate) — the
 // read-set's dominant low-signal false-twin variety (0.36 precision across a 7-repo
-// corpus vs 0.50 for construct/construct).
-func SharedDerivationCandidates(sigs []*FuncSig, minReads int, minJaccard float64, maxFanout int, includeMutators bool) []SigCandidate {
+// corpus vs 0.50 for construct/construct). Unless includeStructural is set, it also
+// drops pairs whose SHARED reads are a small whole-object field set (structuralShare)
+// — structural co-access of one struct, not derivation drift.
+func SharedDerivationCandidates(sigs []*FuncSig, minReads int, minJaccard float64, maxFanout int, includeMutators, includeStructural bool) []SigCandidate {
 	idx := map[string][]*FuncSig{}
 	for _, f := range sigs {
 		if f.Kind != "" || f.Delegates || len(f.sRead) < minReads {
@@ -414,6 +455,15 @@ func SharedDerivationCandidates(sigs []*FuncSig, minReads int, minJaccard float6
 				// (n=50 @ 0.36 across a 7-repo corpus, vs construct/construct @ 0.50). The
 				// read-set analog of the confession prose gate; --include-mutators opts in.
 				if !includeMutators && oa == "mutate" && ob == "mutate" {
+					continue
+				}
+				// Structural-sharing gate: when the fields the two functions SHARE are a
+				// small whole-object field set (a Pose's {x,z,hdg}), the overlap is
+				// structural — both merely touch the same struct — not value-derivation
+				// drift. Camber dogfood: this killed 3/3 read-set false alarms with no loss
+				// to the real twins (whose shared sets were dotted/larger). --include-structural
+				// opts back in.
+				if !includeStructural && structuralShare(a.sRead, b.sRead) {
 					continue
 				}
 				seen[pk] = true

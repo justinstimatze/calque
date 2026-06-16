@@ -80,7 +80,7 @@ var identShaped = regexp.MustCompile(`^_?[a-zA-Z][a-zA-Z0-9_]*$`)
 // across channels (a seam shows up as a call in one shell and a getattr-string
 // or write in another — pooling by name is exactly why this beats per-channel
 // Jaccard). Returns identifier-shaped, private symbols only.
-func (f *FuncSig) seamSymbols() set {
+func (f *FuncSig) seamSymbols(projectDefs set) set {
 	out := set{}
 	add := func(s string) {
 		if isSeam(s) {
@@ -88,6 +88,15 @@ func (f *FuncSig) seamSymbols() set {
 		}
 	}
 	for _, c := range f.Calls {
+		// An external call — a std / extern-crate method (read_to_end, parent, open,
+		// sort_by_key) — is NOT a shared private seam, but its snake_case leaf name
+		// passes isSeam's lower-first test and forms false clusters of unrelated
+		// fetchers (camber C6/C11/C16). A non-underscore call-name counts only if it
+		// resolves to a project-defined symbol; leading-underscore names are
+		// unambiguously project-private (std uses none) and pass unconditionally.
+		if !isPrivate(c) && !projectDefs.has(c) {
+			continue
+		}
 		add(c)
 	}
 	for _, s := range f.Strings {
@@ -164,12 +173,23 @@ func ClusterByTouchpoint(sigs []*FuncSig, opts ClusterOptions) []Cluster {
 		return nil
 	}
 
+	// Project-defined symbol names (every extracted function/method leaf), so a
+	// call seam can be required to resolve to one — excluding std / extern-crate
+	// methods that otherwise masquerade as private seams. Built from all sigs (not
+	// just the >=MinLines pool) so a short helper is still a resolvable call target.
+	projectDefs := set{}
+	for _, f := range sigs {
+		if f.Name != "" {
+			projectDefs[f.Name] = struct{}{}
+		}
+	}
+
 	// Inverted index: seam symbol -> functions touching it (deduped by Key, so a
 	// self-scan where a fn appears on both sides doesn't double-count).
 	index := map[string][]*FuncSig{}
 	for _, f := range pool {
 		seen := map[string]bool{}
-		for sym := range f.seamSymbols() {
+		for sym := range f.seamSymbols(projectDefs) {
 			k := f.Key()
 			if seen[sym+"\x00"+k] {
 				continue

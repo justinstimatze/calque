@@ -43,6 +43,15 @@ All notable changes to calque. The version string itself comes from the git tag
   the read-set — removing call-name overlap that was depressing jaccard surfaced 5 additional
   domain-field derivation candidates that sat below the 0.5 threshold (7 → 12) with zero churn
   to the existing pairs, so the fix is a recall gain on Python, not just noise removal.
+- **Cluster-seam detector no longer treats std / extern-crate methods as private seams.** The
+  N-ary touchpoint detector (`propose-roles`, `cardinality`) pooled any lower-first call name as a
+  candidate private seam — but a Rust/Python snake_case stdlib method (`read_to_end`, `parent`,
+  `lerp`, `from_xyz`, `sort_unstable`) is not a *shared private* symbol, so unrelated functions
+  that merely call the same library method clustered as false roles. A *non-underscore* call name
+  now counts as a seam only if it resolves to a project-defined function; leading-underscore names
+  (unambiguously project-private — std uses none) still pass unconditionally, and the
+  string/write seam channels are unchanged. On a Rust codebase this nearly halved proposed roles
+  (38 → 19), and every dropped seam was a genuine std/Bevy/glam method.
 
 ### Changed
 - **`propose-deriv` gates same-op bare-mutator (`mutate/mutate`) pairs by default.** Two
@@ -61,6 +70,14 @@ All notable changes to calque. The version string itself comes from the git tag
   `*.test.*`/`*.spec.*`; and `tests/`/`test/`/`__tests__/` dirs); `--include-tests` opts back
   in. On a large Go+Python corpus this cut candidates ~55% (215 → 97) and lifted read-set
   precision from 0.32 to 0.81.
+- **`propose-deriv` gates whole-struct field shares (structural co-access) by default.** When the
+  fields two functions SHARE are a small whole-object field set — a `Pose`'s bare `{x,z,hdg}`, a
+  `RoadPiece`'s `{geom,elevation,super}` — the overlap is structural (both merely touch the same
+  struct), not value-derivation drift. With no type info, the proxy is: the shared (intersection)
+  read-set is small (≤3) and every member is a whole-object field token (a bare leaf, or a TS
+  `this.`-prefixed leaf), vs a dotted domain path (`road.width`) which names a specific quantity
+  and is kept. Camber dogfood found this single filter killed 3/3 read-set false alarms with no
+  loss to the real twins; `--include-structural` opts back in.
 
 ## [0.6.0] - 2026-06-16
 

@@ -48,6 +48,7 @@ func runProposeDeriv(args []string) {
 	readJac := fs.Float64("read-jaccard", 0.5, "min read-set jaccard to pair (1.0 = identical input field-set)")
 	maxFanout := fs.Int("max-fanout", 8, "skip field-paths read by more than this many functions (plumbing, not a seam)")
 	includeMutators := fs.Bool("include-mutators", false, "also pair bare field-mutators (both sides write but neither constructs/measures/searches); gated by default — co-mutation of a shared field-set is the read-set's dominant false-twin variety (0.36 precision)")
+	includeStructural := fs.Bool("include-structural", false, "also pair functions whose shared reads are a small whole-object field set (a Pose's {x,z,hdg}); gated by default — such overlap is structural co-access of one struct, not derivation drift")
 	top := fs.Int("top", 40, "max candidates to print")
 	judge := fs.Bool("judge", false, "adjudicate each candidate with the LLM oracle (needs ANTHROPIC_API_KEY; the precision half)")
 	twinsOnly := fs.Bool("twins-only", false, "with --judge, print only candidates the oracle confirms as twins")
@@ -70,7 +71,7 @@ func runProposeDeriv(args []string) {
 		os.Exit(1)
 	}
 
-	cands := code.SharedDerivationCandidates(sigs, *minReads, *readJac, *maxFanout, *includeMutators)
+	cands := code.SharedDerivationCandidates(sigs, *minReads, *readJac, *maxFanout, *includeMutators, *includeStructural)
 	seen := map[string]bool{}
 	var fresh []code.SigCandidate
 	for _, c := range cands {
@@ -93,8 +94,12 @@ func runProposeDeriv(args []string) {
 	if *includeMutators {
 		mutNote = " · bare-mutator pairs included"
 	}
-	fmt.Printf("scanned %d func(s) in %d file(s); %d fresh candidate(s)  [min-reads=%d read-jaccard=%.2f max-fanout=%d]%s%s\n",
-		st.Funcs, st.Files, len(fresh), *minReads, *readJac, *maxFanout, testNote, mutNote)
+	structNote := " · whole-struct field shares gated (--include-structural to keep)"
+	if *includeStructural {
+		structNote = " · whole-struct field shares included"
+	}
+	fmt.Printf("scanned %d func(s) in %d file(s); %d fresh candidate(s)  [min-reads=%d read-jaccard=%.2f max-fanout=%d]%s%s%s\n",
+		st.Funcs, st.Files, len(fresh), *minReads, *readJac, *maxFanout, testNote, mutNote, structNote)
 	if len(fresh) == 0 {
 		fmt.Println("\nno candidates. (Looking for functions deriving a value from the same field-set without delegating to one authority — loosen --read-jaccard / --min-reads to widen.)")
 		return

@@ -53,7 +53,7 @@ func TestOpTypeGateSuppression(t *testing.T) {
 		return pairs
 	}
 
-	pairs := pairSet(SharedDerivationCandidates(all, 2, 0.5, 8, false))
+	pairs := pairSet(SharedDerivationCandidates(all, 2, 0.5, 8, false, false))
 	// Provably-dual pairs suppressed.
 	if pairs["sample|project"] {
 		t.Error("forward-map ≟ inverse-search (sample ≟ project) should be suppressed")
@@ -71,7 +71,7 @@ func TestOpTypeGateSuppression(t *testing.T) {
 	}
 
 	// ...and surfaced when the user opts back in with includeMutators=true.
-	withMut := pairSet(SharedDerivationCandidates(all, 2, 0.5, 8, true))
+	withMut := pairSet(SharedDerivationCandidates(all, 2, 0.5, 8, true, false))
 	if !withMut["applyDrift|applyTrim"] {
 		t.Error("applyDrift ≟ applyTrim should surface with includeMutators=true")
 	}

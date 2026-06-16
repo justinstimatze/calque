@@ -24,6 +24,7 @@ func runConfess(args []string) {
 	repo := fs.String("repo", ".", "repo root to scan")
 	exclude := fs.String("exclude", "", "comma-separated glob(s) to skip entirely (e.g. node_modules/**); test files are excluded by default")
 	includeTests := fs.Bool("include-tests", false, "scan test files too (excluded by default — a confession in a test fixture rarely names a production twin)")
+	includeProse := fs.Bool("include-prose", false, "also emit directed candidates from the figurative \"prose\" register (docstring/block-comment narrative); by default only literal line-comment confessions become candidates (the high-precision register)")
 	regPath := fs.String("registry", ".calque/registry.md", "registry file (dedup directed candidates vs already-adjudicated pairs)")
 	top := fs.Int("top", 40, "max directed candidates to judge/print")
 	judge := fs.Bool("judge", false, "adjudicate each directed twin candidate with the LLM oracle (needs ANTHROPIC_API_KEY; the precision half)")
@@ -42,7 +43,7 @@ func runConfess(args []string) {
 		os.Exit(1)
 	}
 	confs := code.FindConfessions(sigs, *repo)
-	cands := code.ConfessionCandidates(confs, sigs)
+	cands := code.ConfessionCandidates(confs, sigs, *includeProse)
 
 	// Dedup the directed candidates vs the registry so --judge never re-pays for an
 	// already-adjudicated pair (the census stays whole — every confession shows).
@@ -62,14 +63,25 @@ func runConfess(args []string) {
 		fresh = append(fresh, c)
 	}
 
+	var prose int
+	for _, c := range confs {
+		if c.Register == "prose" {
+			prose++
+		}
+	}
+
 	fmt.Println("# calque — drift-confessing comments (self-witnessed twins)")
 	fmt.Println()
 	testNote := " · tests excluded (--include-tests to scan them)"
 	if *includeTests {
 		testNote = " · tests included"
 	}
-	fmt.Printf("scanned %d func(s) in %d file(s); %d confession(s); %d fresh directed twin candidate(s)%s\n",
-		st.Funcs, st.Files, len(confs), len(fresh), testNote)
+	proseNote := ""
+	if prose > 0 && !*includeProse {
+		proseNote = fmt.Sprintf(" · %d in the figurative \"prose\" register gated from candidates (--include-prose to keep)", prose)
+	}
+	fmt.Printf("scanned %d func(s) in %d file(s); %d confession(s); %d fresh directed twin candidate(s)%s%s\n",
+		st.Funcs, st.Files, len(confs), len(fresh), testNote, proseNote)
 	if len(confs) == 0 {
 		fmt.Println("\nno drift-confessing comments. (Looking for \"mirrors X\", \"keep in sync\", \"must match\", \"copy of\", …)")
 		return
@@ -95,9 +107,9 @@ func runConfess(args []string) {
 		}
 	}
 
-	fmt.Println("\n## Confession census (every drift-confessing comment)")
+	fmt.Println("\n## Confession census (every drift-confessing comment; [register] line=literal prose=figurative)")
 	fmt.Println()
 	for _, cf := range confs {
-		fmt.Printf("- `%s` (%s:%d) — %q\n", cf.Func.Qualname, cf.Func.File, cf.Line, cf.Text)
+		fmt.Printf("- [%s] `%s` (%s:%d) — %q\n", cf.Register, cf.Func.Qualname, cf.Func.File, cf.Line, cf.Text)
 	}
 }

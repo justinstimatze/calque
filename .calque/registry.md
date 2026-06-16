@@ -981,3 +981,14 @@ authority (delegation, the opposite of duplicated logic):
 - cluster: cmd/calque/confess.go::runConfess | cmd/calque/propose_cross.go::runProposeCross | cmd/calque/propose_deep.go::runProposeDeep | cmd/calque/propose_deriv.go::runProposeDeriv | internal/llm/judge.go::NewJudge
 - verdict: false-alarm
 - reviewed: 2026-06-16
+
+## Run — 2026-06-16 (confess register discriminator)
+
+Adding confessionRegister (line vs prose register classifier) next to
+ConfessionCandidates makes them share the "confession" name stem — name-adjacency,
+not a contract. One builds directed twin candidates; the other classifies a single
+comment line's register. False-alarm.
+
+- pair: internal/code/confess.go::ConfessionCandidates | internal/code/confess.go::confessionRegister
+- verdict: false-alarm
+- reviewed: 2026-06-16

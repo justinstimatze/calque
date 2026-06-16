@@ -14,6 +14,17 @@ All notable changes to calque. The version string itself comes from the git tag
   census still lists every confession), `--top` to bound cost, `--twins-only` to print only
   confirmed twins, and test files excluded by default (`--include-tests` opts back in). The
   bare `confess` (no `--judge`) is unchanged — generator-only, stdout, no exit code.
+- **`confess` register discriminator — gate the figurative "prose" register.** A confession's
+  source line is now classified `line` (a dedicated `//`/`///`/`//!`/`#` single-line comment —
+  the terse register where "mirrors X" is a literal twin-flag) or `prose` (a docstring body or
+  block/JSDoc continuation — where "mirrors" is usually the figurative English verb). Directed
+  candidates keep the `line` register by default; `--include-prose` opts the figurative register
+  back in. The register is tagged into the Layer D matrix variety (`[line]`/`[prose]`), and the
+  census annotates each confession with its register. No extractor change — the raw source line
+  carries the signal. The matrix this enables shows the real structure: `confession · go · line`
+  pulls weight (~0.6) while Python confessions underperform in *both* registers, so the dominant
+  axis is language, not register — the prose gate is a defensible noise-reducer (and a no-op on
+  Go, which has no docstrings), not a fix for the language-level weakness.
 
 ### Fixed
 - **Collapsed a real key-cleaning twin the new `confess --judge` caught on calque's own

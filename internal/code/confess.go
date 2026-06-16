@@ -26,10 +26,16 @@ var wordRe = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*`)
 
 // Confession is a drift-confessing comment found inside a function's source span.
 type Confession struct {
-	Func   *FuncSig
-	Line   int    // absolute source line of the confession
-	Phrase string // the matched phrase (lowercased)
-	Text   string // the trimmed source/comment line
+	Func     *FuncSig
+	Line     int    // absolute source line of the confession
+	Phrase   string // the matched phrase (lowercased)
+	Text     string // the trimmed source/comment line
+	Register string // "line" (dedicated // or # comment — literal twin-flag) or
+	// "prose" (docstring body / block-comment narrative — figurative). The reads
+	// axis found "mirrors X" means different things by register: in a terse line
+	// comment it's a literal maintenance warning (high precision), in a docstring
+	// it's usually figurative ("telemetry mirrors the prior sites"). Used to gate
+	// the directed candidates and to tag the Layer D matrix variety.
 }
 
 // FindConfessions scans every function's source span for drift-confessing comment
@@ -61,8 +67,9 @@ func FindConfessions(sigs []*FuncSig, repo string) []Confession {
 				if m := confessRe.FindString(text); m != "" {
 					out = append(out, Confession{
 						Func: f, Line: ln,
-						Phrase: strings.ToLower(strings.TrimSpace(m)),
-						Text:   strings.TrimSpace(text),
+						Phrase:   strings.ToLower(strings.TrimSpace(m)),
+						Text:     strings.TrimSpace(text),
+						Register: confessionRegister(text),
 					})
 				}
 			}
@@ -115,7 +122,13 @@ func readSourceLines(path string) []string {
 // that pair (the code told us its twin). High precision — the comment IS the recall
 // trigger; the judge/human confirms. Confessions whose prose names no resolvable
 // function surface only in the `confess` census, not here.
-func ConfessionCandidates(confs []Confession, sigs []*FuncSig) []SigCandidate {
+//
+// includeProse keeps the figurative "prose" register (docstring bodies / block-comment
+// narrative); by default only the literal "line"-comment register is emitted — the
+// register discriminator (see confessionRegister): on a mixed corpus the prose register
+// was ~all false alarms. Each candidate's register is tagged into Sig as `[line]`/`[prose]`
+// so the Layer D matrix slices precision by register.
+func ConfessionCandidates(confs []Confession, sigs []*FuncSig, includeProse bool) []SigCandidate {
 	// Index by lowercased simple name and by qualname leaf (Type.method → method).
 	// Directed pairing fires ONLY on an identifier-like word that exactly NAMES a
 	// function — prose words ("drift", "engine", "match") are not matched, keeping
@@ -139,6 +152,9 @@ func ConfessionCandidates(confs []Confession, sigs []*FuncSig) []SigCandidate {
 	var out []SigCandidate
 	seen := map[string]bool{}
 	for _, c := range confs {
+		if c.Register == "prose" && !includeProse {
+			continue // figurative register — gated by default (see confessionRegister)
+		}
 		for _, word := range wordRe.FindAllString(stripCommentLeader(c.Text), -1) {
 			if !identifierLike(word) {
 				continue
@@ -158,7 +174,7 @@ func ConfessionCandidates(confs []Confession, sigs []*FuncSig) []SigCandidate {
 				seen[pk] = true
 				out = append(out, SigCandidate{
 					A: c.Func, B: b, Kind: "confession",
-					Sig:       "comment: " + c.Phrase,
+					Sig:       "comment: " + c.Phrase + " [" + c.Register + "]",
 					GroupSize: 2, CrossFile: c.Func.File != b.File,
 				})
 			}
@@ -189,4 +205,23 @@ func stripCommentLeader(s string) string {
 		s = strings.TrimSpace(strings.TrimPrefix(s, p))
 	}
 	return s
+}
+
+// confessionRegister classifies a confession's source line by comment register:
+// "line" if it's a dedicated single-line comment (//, ///, //!, #) — the terse
+// maintenance register where "mirrors X" is a literal twin-flag; "prose" otherwise
+// (a docstring body or block/JSDoc continuation, where "mirrors" is usually the
+// figurative English verb). This is the register discriminator: on a mixed corpus
+// the prose register's confessions were ~all false alarms while the line register's
+// carried the real drift (Layer D matrix, 2026-06-16), so the directed pass keeps
+// the line register by default. Substrate-general: every line-comment convention has
+// a leader, while docstring prose (Python """…""") is leaderless.
+func confessionRegister(text string) string {
+	t := strings.TrimSpace(text)
+	for _, p := range []string{"///", "//!", "//", "#"} {
+		if strings.HasPrefix(t, p) {
+			return "line"
+		}
+	}
+	return "prose"
 }

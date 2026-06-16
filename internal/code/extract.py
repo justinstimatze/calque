@@ -45,6 +45,10 @@ class _BodyVisitor(ast.NodeVisitor):
         self.ret_keys = set()
         self.calls = set()
         self.delegates = False
+        # Attribute nodes that are a call's callee (road.compute in
+        # self.road.compute()), keyed by id(); the read pass skips them so a call
+        # name does not masquerade as a field read. Mirrors the Go calleeSkip map.
+        self.callee_skip = set()
 
     def visit_Constant(self, node):
         if isinstance(node.value, str) and len(node.value.strip()) >= 4:
@@ -54,9 +58,12 @@ class _BodyVisitor(ast.NodeVisitor):
     def visit_Attribute(self, node):
         # A field-path read in a value position. ctx distinguishes read (Load) from
         # write (Store/Del), so the plain-`=` LHS is excluded for free — no
-        # subtraction needed. Method-receiver paths (self.road.width()) appear too;
-        # acceptable recall noise, symmetric across twins.
-        if isinstance(node.ctx, ast.Load):
+        # subtraction needed. A call's own callee attribute (road.compute in
+        # self.road.compute()) is skipped — a call name is not a field read — but
+        # its receiver is still visited via generic_visit, so the domain object
+        # (road) still contributes. Method-receiver paths are acceptable recall
+        # noise, symmetric across twins.
+        if isinstance(node.ctx, ast.Load) and id(node) not in self.callee_skip:
             p = _attr_path(node)
             if p:
                 self.reads.add(p)
@@ -105,6 +112,11 @@ class _BodyVisitor(ast.NodeVisitor):
         f = node.func
         if isinstance(f, ast.Attribute):
             self.calls.add(f.attr)
+            # The callee attribute itself is a CALL, not a field read — skip it for
+            # reads (visit_Attribute checks callee_skip before generic_visit reaches
+            # it). Its receiver stays visited, so self.road.compute() still yields
+            # the receiver field "road".
+            self.callee_skip.add(id(f))
             p = _attr_path(f)
             if p and p.split(".")[0] in _DELEGATION_ROOTS:
                 self.delegates = True

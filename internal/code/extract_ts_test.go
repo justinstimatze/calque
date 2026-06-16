@@ -98,6 +98,44 @@ function plain() { return 42; }
 	}
 }
 
+// TestExtractTSReadsSkipsCallee pins the read-set callee rule on the TS extractor:
+// a method call's leaf name (this.road.compute in this.road.compute()) must NOT
+// appear in reads, while the call's receiver (this.road) and a genuine field read
+// (this.terrain.height) still contribute. Mirrors the Go calleeSkip behavior.
+func TestExtractTSReadsSkipsCallee(t *testing.T) {
+	dir := t.TempDir()
+	if !tsToolchainAvailable(t, dir) {
+		t.Skip("node + typescript not available")
+	}
+	src := `class Vehicle {
+  derive() {
+    const w = this.road.compute();
+    const h = this.terrain.height;
+    return { w, h };
+  }
+}
+`
+	f := filepath.Join(dir, "vehicle.ts")
+	if err := os.WriteFile(f, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sigs, err := extractTSBatch([]string{f}, dir)
+	if err != nil {
+		t.Fatalf("extractTSBatch: %v", err)
+	}
+	d := sigByQual(sigs, "Vehicle.derive")
+	if d == nil {
+		t.Fatalf("Vehicle.derive not extracted; got %d sigs", len(sigs))
+	}
+	assertHas(t, "derive.reads", d.Reads, []string{"this.road", "this.terrain", "this.terrain.height"})
+	for _, r := range d.Reads {
+		if r == "this.road.compute" {
+			t.Errorf("derive.reads must exclude the callee 'this.road.compute', got %v", d.Reads)
+		}
+	}
+	assertHas(t, "derive.calls", d.Calls, []string{"compute"})
+}
+
 // A .tsx file with JSX must parse (the extractor selects ScriptKind.TSX).
 func TestExtractTSXParses(t *testing.T) {
 	dir := t.TempDir()

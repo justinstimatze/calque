@@ -200,6 +200,10 @@ class BodyVisitor {
     this.retKeys = new Set();
     this.calls = new Set();
     this.delegates = false;
+    // PropertyAccess nodes that are a call's callee (this.road.compute in
+    // this.road.compute()); the read pass skips them so a call name does not
+    // masquerade as a field read. Mirrors the Go calleeSkip map.
+    this.calleeSkip = new Set();
   }
 
   sorted(s) { return [...s].sort(); }
@@ -226,8 +230,11 @@ class BodyVisitor {
     }
 
     // Field-path reads (value positions). Plain-`=` LHS removed later via pureWrites;
-    // call-receiver paths (this.road.width) appear too — acceptable recall noise.
-    if (ts.isPropertyAccessExpression(node)) {
+    // call-receiver paths (this.road.width) appear too — acceptable recall noise. A
+    // call's own callee (this.road.compute in this.road.compute()) is skipped — a
+    // call name is not a field read — but its receiver is still visited, so the
+    // domain object (this.road) still contributes.
+    if (ts.isPropertyAccessExpression(node) && !this.calleeSkip.has(node)) {
       const p = accessPath(ts, node);
       if (p) this.readsRaw.add(p);
     }
@@ -256,6 +263,10 @@ class BodyVisitor {
       const callee = node.expression;
       if (ts.isPropertyAccessExpression(callee)) {
         this.calls.add(callee.name.text);
+        // The callee is a CALL, not a field read — skip it for reads (the
+        // PropertyAccess branch checks calleeSkip before recursing). Its receiver
+        // stays visited, so this.road.compute() still yields "this.road".
+        this.calleeSkip.add(callee);
         const rootName = accessRoot(ts, callee);
         if (rootName && DELEGATION_ROOTS.has(rootName)) this.delegates = true;
       } else if (ts.isIdentifier(callee)) {

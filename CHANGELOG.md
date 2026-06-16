@@ -32,6 +32,17 @@ All notable changes to calque. The version string itself comes from the git tag
   package's key-normalizer (trim whitespace + backticks), neither delegating — the "fix one,
   the twin still has the bug" shape. Exported it as `registry.CleanKey` (the one authority)
   and routed the pruner through it; the duplicate is gone.
+- **Python/TS read-sets no longer count a call's leaf name as a field read.** The
+  derivation read-set is meant to be the *domain-field footprint* a function reads, but the
+  Python and TypeScript extractors recorded a method call's callee path (`road.compute` in
+  `self.road.compute()`) as a read — so call vocabulary polluted the signal. The Go extractor
+  already skipped this (`calleeSkip`); Python (`callee_skip` keyed by `id(node)`) and TS
+  (a `calleeSkip` node set) now match it: the callee is dropped from reads while its receiver
+  (`road`) and genuine field reads (`terrain.height`) are kept. Rust was already clean (method
+  calls are a distinct AST node, never a field). On a 628-file Python repo this *un-diluted*
+  the read-set — removing call-name overlap that was depressing jaccard surfaced 5 additional
+  domain-field derivation candidates that sat below the 0.5 threshold (7 → 12) with zero churn
+  to the existing pairs, so the fix is a recall gain on Python, not just noise removal.
 
 ### Changed
 - **`propose-deriv` gates same-op bare-mutator (`mutate/mutate`) pairs by default.** Two

@@ -101,6 +101,9 @@ Usage:
                          functions deriving a value from the SAME input field-set
                          without a shared authority (implementation drift: "fix one
                          path, the twin still has the bug"). generator only; --judge
+  calque confess         comment axis: surface drift-confessing comments ("mirrors
+                         X", "keep in sync", "copy of") — a function's own source
+                         self-witnessing it's one side of a twin (generator only)
   calque hook            spine: wire check into a git pre-commit / Stop hook
                          (calque hook install — auto-installs pre-commit)
   calque doctor          spine: calibration rollup (fire-rate, hit-rate)
@@ -145,6 +148,8 @@ func main() {
 		runProposeCross(os.Args[2:])
 	case "propose-deriv":
 		runProposeDeriv(os.Args[2:])
+	case "confess":
+		runConfess(os.Args[2:])
 	case "hook":
 		runHook(os.Args[2:])
 	case "doctor":

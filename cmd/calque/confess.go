@@ -5,7 +5,9 @@ package main
 // self-witness that the function is one side of a twin. Cheap (regex over source),
 // high precision, and it catches the twin class whose data-flow shape has drifted
 // far enough that the reads / signature passes miss it. GENERATOR + audit: stdout
-// only, no writes, no exit code.
+// only, no writes, no exit code. --judge adjudicates the directed twin candidates
+// (the comment names a resolvable function) and records each verdict to the Layer D
+// label store under the `confession` detector.
 
 import (
 	"flag"
@@ -13,17 +15,28 @@ import (
 	"os"
 
 	"github.com/justinstimatze/calque/internal/code"
+	"github.com/justinstimatze/calque/internal/pairkey"
+	"github.com/justinstimatze/calque/internal/registry"
 )
 
 func runConfess(args []string) {
 	fs := flag.NewFlagSet("confess", flag.ContinueOnError)
 	repo := fs.String("repo", ".", "repo root to scan")
-	exclude := fs.String("exclude", "", "comma-separated glob(s) to skip entirely (e.g. node_modules/**)")
+	exclude := fs.String("exclude", "", "comma-separated glob(s) to skip entirely (e.g. node_modules/**); test files are excluded by default")
+	includeTests := fs.Bool("include-tests", false, "scan test files too (excluded by default — a confession in a test fixture rarely names a production twin)")
+	regPath := fs.String("registry", ".calque/registry.md", "registry file (dedup directed candidates vs already-adjudicated pairs)")
+	top := fs.Int("top", 40, "max directed candidates to judge/print")
+	judge := fs.Bool("judge", false, "adjudicate each directed twin candidate with the LLM oracle (needs ANTHROPIC_API_KEY; the precision half)")
+	twinsOnly := fs.Bool("twins-only", false, "with --judge, print only candidates the oracle confirms as twins")
 	if err := fs.Parse(args); err != nil {
 		return
 	}
 
-	sigs, st, err := code.Extract(*repo, splitCSV(*exclude))
+	excl := splitCSV(*exclude)
+	if !*includeTests {
+		excl = append(excl, testGlobs...)
+	}
+	sigs, st, err := code.Extract(*repo, excl)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque confess: walking %s: %v\n", *repo, err)
 		os.Exit(1)
@@ -31,10 +44,32 @@ func runConfess(args []string) {
 	confs := code.FindConfessions(sigs, *repo)
 	cands := code.ConfessionCandidates(confs, sigs)
 
+	// Dedup the directed candidates vs the registry so --judge never re-pays for an
+	// already-adjudicated pair (the census stays whole — every confession shows).
+	reg, err := registry.Load(joinRepo(*repo, *regPath))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "calque confess: reading registry: %v\n", err)
+		os.Exit(1)
+	}
+	seen := map[string]bool{}
+	var fresh []code.SigCandidate
+	for _, c := range cands {
+		pk := pairkey.Key(c.A.Key(), c.B.Key())
+		if seen[pk] || reg.Has(c.A.Key(), c.B.Key()) {
+			continue
+		}
+		seen[pk] = true
+		fresh = append(fresh, c)
+	}
+
 	fmt.Println("# calque — drift-confessing comments (self-witnessed twins)")
 	fmt.Println()
-	fmt.Printf("scanned %d func(s) in %d file(s); %d confession(s); %d directed twin candidate(s)\n",
-		st.Funcs, st.Files, len(confs), len(cands))
+	testNote := " · tests excluded (--include-tests to scan them)"
+	if *includeTests {
+		testNote = " · tests included"
+	}
+	fmt.Printf("scanned %d func(s) in %d file(s); %d confession(s); %d fresh directed twin candidate(s)%s\n",
+		st.Funcs, st.Files, len(confs), len(fresh), testNote)
 	if len(confs) == 0 {
 		fmt.Println("\nno drift-confessing comments. (Looking for \"mirrors X\", \"keep in sync\", \"must match\", \"copy of\", …)")
 		return
@@ -44,11 +79,19 @@ func runConfess(args []string) {
 	fmt.Println("self-witness of a twin. Verify each is actually in sync — or collapse to one")
 	fmt.Println("authority. Directed candidates name a resolvable twin; the census lists every confession.")
 
-	if len(cands) > 0 {
+	if len(fresh) > 0 {
 		fmt.Println("\n## Directed twin candidates (the comment names a resolvable function)")
 		fmt.Println()
-		for i, c := range cands {
-			printCandidate(i+1, c, nil)
+		if len(fresh) > *top {
+			fmt.Printf("(showing top %d of %d)\n\n", *top, len(fresh))
+			fresh = fresh[:*top]
+		}
+		if *judge {
+			runJudge(*repo, fresh, *twinsOnly)
+		} else {
+			for i, c := range fresh {
+				printCandidate(i+1, c, nil)
+			}
 		}
 	}
 

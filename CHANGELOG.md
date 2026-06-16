@@ -5,6 +5,23 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+### Added
+- **`calque confess --judge` — adjudicate the directed twin candidates.** The comment axis
+  now has a precision half: `--judge` sends each *directed* candidate (a drift-confessing
+  comment that names a resolvable function) to the LLM oracle, prints the verdict, and records
+  it to the Layer D label store under a `confession` detector — so the comment axis earns its
+  own column in the `doctor --ablate` matrix. Mirrors `propose-deriv`: registry dedup (the
+  census still lists every confession), `--top` to bound cost, `--twins-only` to print only
+  confirmed twins, and test files excluded by default (`--include-tests` opts back in). The
+  bare `confess` (no `--judge`) is unchanged — generator-only, stdout, no exit code.
+
+### Fixed
+- **Collapsed a real key-cleaning twin the new `confess --judge` caught on calque's own
+  code.** `cmd/calque`'s registry pruner had its own byte-identical copy of the registry
+  package's key-normalizer (trim whitespace + backticks), neither delegating — the "fix one,
+  the twin still has the bug" shape. Exported it as `registry.CleanKey` (the one authority)
+  and routed the pruner through it; the duplicate is gone.
+
 ### Changed
 - **`propose-deriv` excludes test files by default.** Two test cases intentionally
   exercise the same code and share a read-set (often a reused mock/setup fixture), so they

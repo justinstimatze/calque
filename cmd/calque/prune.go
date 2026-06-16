@@ -27,6 +27,7 @@ import (
 
 	"github.com/justinstimatze/calque/internal/code"
 	"github.com/justinstimatze/calque/internal/pairkey"
+	"github.com/justinstimatze/calque/internal/registry"
 )
 
 // confidentlyDead reports whether a registry key references source code calque OWNS
@@ -192,7 +193,7 @@ func pruneRegistry(text string, stalePairs, staleClusters map[string]bool) (stri
 		case strings.HasPrefix(t, "- pair:"):
 			v := strings.TrimSpace(strings.TrimPrefix(t, "- pair:"))
 			if k1, k2, ok := strings.Cut(v, "|"); ok {
-				if key := pairkey.Key(cleanRegKey(k1), cleanRegKey(k2)); stalePairs[key] {
+				if key := pairkey.Key(registry.CleanKey(k1), registry.CleanKey(k2)); stalePairs[key] {
 					staleHit, desc = key, "pair: "+v
 				}
 			}
@@ -200,7 +201,7 @@ func pruneRegistry(text string, stalePairs, staleClusters map[string]bool) (stri
 			v := strings.TrimSpace(strings.TrimPrefix(t, "- cluster:"))
 			var keys []string
 			for _, part := range strings.Split(v, "|") {
-				if k := cleanRegKey(part); k != "" {
+				if k := registry.CleanKey(part); k != "" {
 					keys = append(keys, k)
 				}
 			}

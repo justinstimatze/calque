@@ -160,14 +160,14 @@ func Load(path string) (*Registry, error) {
 			flush()
 			v := strings.TrimSpace(strings.TrimPrefix(line, "- pair:"))
 			if k1, k2, ok := strings.Cut(v, "|"); ok {
-				curPair = &Entry{Key1: cleanKey(k1), Key2: cleanKey(k2)}
+				curPair = &Entry{Key1: CleanKey(k1), Key2: CleanKey(k2)}
 			}
 		case strings.HasPrefix(line, "- cluster:"):
 			flush()
 			v := strings.TrimSpace(strings.TrimPrefix(line, "- cluster:"))
 			var keys []string
 			for _, part := range strings.Split(v, "|") {
-				if k := cleanKey(part); k != "" {
+				if k := CleanKey(part); k != "" {
 					keys = append(keys, k)
 				}
 			}
@@ -176,7 +176,7 @@ func Load(path string) (*Registry, error) {
 			}
 		case strings.HasPrefix(line, "- role:"):
 			flush()
-			curRole = &RoleEntry{Name: cleanKey(strings.TrimPrefix(line, "- role:")), Expected: -1}
+			curRole = &RoleEntry{Name: CleanKey(strings.TrimPrefix(line, "- role:")), Expected: -1}
 		case strings.HasPrefix(line, "- predicate:"):
 			if curRole != nil {
 				curRole.Predicate = strings.TrimSpace(strings.TrimPrefix(line, "- predicate:"))
@@ -191,18 +191,18 @@ func Load(path string) (*Registry, error) {
 			if curRole != nil {
 				v := strings.TrimSpace(strings.TrimPrefix(line, "- baseline:"))
 				for _, part := range strings.Split(v, ",") {
-					if k := cleanKey(part); k != "" {
+					if k := CleanKey(part); k != "" {
 						curRole.Baseline = append(curRole.Baseline, k)
 					}
 				}
 			}
 		case strings.HasPrefix(line, "- canonical:"):
 			if curPair != nil {
-				curPair.Canonical = cleanKey(strings.TrimPrefix(line, "- canonical:"))
+				curPair.Canonical = CleanKey(strings.TrimPrefix(line, "- canonical:"))
 			}
 		case strings.HasPrefix(line, "- do-not-resync:"):
 			if curPair != nil {
-				curPair.DoNotResync = cleanKey(strings.TrimPrefix(line, "- do-not-resync:"))
+				curPair.DoNotResync = CleanKey(strings.TrimPrefix(line, "- do-not-resync:"))
 			}
 		case strings.HasPrefix(line, "- verdict:"):
 			setVerdict(strings.TrimSpace(strings.TrimPrefix(line, "- verdict:")))
@@ -214,7 +214,11 @@ func Load(path string) (*Registry, error) {
 	return r, sc.Err()
 }
 
-func cleanKey(s string) string { return strings.TrimSpace(strings.Trim(strings.TrimSpace(s), "`")) }
+// CleanKey normalizes a registry symbol key: trim surrounding whitespace and the
+// markdown backticks that wrap keys in `- pair:`/`- cluster:` lines. It is the one
+// authority for this — cmd/calque's registry pruner routes through it rather than
+// re-implementing the trim (the prior twin was real drift the confess axis caught).
+func CleanKey(s string) string { return strings.TrimSpace(strings.Trim(strings.TrimSpace(s), "`")) }
 
 // Has reports whether the unordered pair {k1,k2} is adjudicated.
 func (r *Registry) Has(k1, k2 string) bool {

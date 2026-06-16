@@ -958,3 +958,26 @@ self-scan fires, all false-alarm:
 - cluster: internal/code/score.go::nameSim | internal/code/sigcluster.go::KeySetCandidates | internal/code/sigcluster.go::NameStemCandidates | internal/code/sigcluster.go::SharedDerivationCandidates
 - verdict: false-alarm
 - reviewed: 2026-06-16
+
+## Run — 2026-06-16 (confess --judge — comment axis precision half)
+
+Wiring `--judge`/`--top`/`--twins-only`/`--include-tests` + registry-dedup into
+`runConfess` makes it structurally mirror its sibling `run*`-`--judge` subcommands.
+All three fires are intentional parity, not drift — every CLI subcommand parses flags,
+excludes tests, dedups vs the registry, and routes through the ONE shared `runJudge`
+authority (delegation, the opposite of duplicated logic):
+
+- `runConfess` ≟ `runProposeCross` / `runProposeDeep` — siblings share the flag-parse +
+  judge-dispatch shape; the judging logic lives once in `runJudge`, called by all.
+- The 5-member cluster (the four `run*` commands + `NewJudge`) is the shared-judge seam:
+  every subcommand delegating to one oracle constructor is correct shared infrastructure.
+
+- pair: cmd/calque/confess.go::runConfess | cmd/calque/propose_cross.go::runProposeCross
+- verdict: false-alarm
+- reviewed: 2026-06-16
+- pair: cmd/calque/confess.go::runConfess | cmd/calque/propose_deep.go::runProposeDeep
+- verdict: false-alarm
+- reviewed: 2026-06-16
+- cluster: cmd/calque/confess.go::runConfess | cmd/calque/propose_cross.go::runProposeCross | cmd/calque/propose_deep.go::runProposeDeep | cmd/calque/propose_deriv.go::runProposeDeriv | internal/llm/judge.go::NewJudge
+- verdict: false-alarm
+- reviewed: 2026-06-16

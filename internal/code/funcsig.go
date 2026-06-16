@@ -34,6 +34,7 @@ type FuncSig struct {
 	Reads     []string `json:"reads"`     // dotted attribute/field READ paths (derivation inputs)
 	RetKeys   []string `json:"ret_keys"`  // keys of a returned map/struct literal
 	Calls     []string `json:"calls"`     // called function/method leaf names
+	Consts    []string `json:"consts"`    // referenced SCREAMING_SNAKE domain constants (V_BELOW, GRID)
 	Delegates bool     `json:"delegates"` // body forwards to a wrapped impl
 
 	// Kind tags non-function entities the CROSS-SUBSTRATE axis extracts: "" = a

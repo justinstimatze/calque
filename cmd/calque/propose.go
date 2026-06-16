@@ -18,7 +18,7 @@ import (
 type proposal struct {
 	Cluster   code.Cluster
 	Name      string   // kebab role id derived from the synthesized seam
-	Predicate string   // synthesized single-term predicate (calls:/emits:)
+	Predicate string   // synthesized single-term predicate (calls:/consts:/emits:)
 	Approx    bool     // no seam cleanly re-selects all members; predicate is best-effort
 	Baseline  []string // sorted member Key()s — the frozen ratchet baseline
 	Matched   []string // Implementers(Predicate) keys — the self-verification
@@ -141,16 +141,18 @@ func computeProposals(sigs []*code.FuncSig, clusters []code.Cluster, reg *regist
 }
 
 // synthPredicate picks the single predicate term that best re-selects a cluster's
-// members. Only `calls:`/`emits:` are synthesizable: they test exact membership in
-// f.Calls / f.Strings, the same channels seamSymbols pools from. (`writes:` matches
-// the full dotted write target, but seamSymbols splits writes into components, so a
-// write-component seam has no exact `writes:` term — we don't synthesize from it.)
-// Preference: a seam fully covered by Calls, else fully by Strings, else a best-effort
-// term on the strongest seam (approx=true; the verify line surfaces the imprecision).
+// members. `calls:`/`emits:`/`consts:` are synthesizable: they test exact membership
+// in f.Calls / f.Strings / f.Consts, the same channels seamSymbols pools from.
+// (`writes:` matches the full dotted write target, but seamSymbols splits writes into
+// components, so a write-component seam has no exact `writes:` term — we don't
+// synthesize from it.) Preference: a seam fully covered by Calls, else Consts, else
+// Strings, else a best-effort term on the strongest seam in its best channel
+// (approx=true; the verify line surfaces the imprecision).
 func synthPredicate(c code.Cluster) (pred string, approx bool) {
 	n := len(c.Members)
 	calls := func(f *code.FuncSig) []string { return f.Calls }
 	strs := func(f *code.FuncSig) []string { return f.Strings }
+	consts := func(f *code.FuncSig) []string { return f.Consts }
 
 	for _, s := range c.Shared { // rarest-first
 		if channelCoverage(c.Members, s.Name, calls) == n {
@@ -158,15 +160,28 @@ func synthPredicate(c code.Cluster) (pred string, approx bool) {
 		}
 	}
 	for _, s := range c.Shared {
+		if channelCoverage(c.Members, s.Name, consts) == n {
+			return "consts:" + s.Name, false
+		}
+	}
+	for _, s := range c.Shared {
 		if channelCoverage(c.Members, s.Name, strs) == n {
 			return "emits:" + s.Name, false
 		}
 	}
+	// Best-effort: the strongest seam in whichever channel covers the most members.
 	s := c.Shared[0]
-	if channelCoverage(c.Members, s.Name, strs) > channelCoverage(c.Members, s.Name, calls) {
+	cc := channelCoverage(c.Members, s.Name, calls)
+	ce := channelCoverage(c.Members, s.Name, strs)
+	co := channelCoverage(c.Members, s.Name, consts)
+	switch {
+	case cc >= ce && cc >= co:
+		return "calls:" + s.Name, true
+	case ce >= co:
 		return "emits:" + s.Name, true
+	default:
+		return "consts:" + s.Name, true
 	}
-	return "calls:" + s.Name, true
 }
 
 // channelCoverage counts how many members carry seam in the given channel.

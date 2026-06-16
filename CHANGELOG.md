@@ -6,6 +6,21 @@ All notable changes to calque. The version string itself comes from the git tag
 ## [Unreleased]
 
 ### Added
+- **Const-set recall axis — cluster functions sharing a domain constant (the "same
+  computation, different access pattern" twin).** The N-ary touchpoint pass gains a fourth
+  seam channel: referenced SCREAMING_SNAKE domain constants (`V_BELOW`, `STRAIGHT_EPS`). Two
+  functions that derive one concept through *inverted* access patterns share no read-set,
+  call-set, or write-set — the reads axis is blind to them by construction — but both reference
+  the same named magic values, and that shared constant is the only positive signal linking
+  them. Extracted across all four substrates (Go, Python, Rust, TypeScript); strongest on
+  Rust/Python/TS where UPPER_SNAKE is the const convention (Go's MixedCaps makes its constants
+  indistinguishable from types without type resolution, so the channel stays quiet there — an
+  intentional asymmetry). A `commonConsts` stop-list drops universal std/library values
+  (`TAU`/`NAN`/`MAX`) whose sharing is incidental, mirroring `commonIdents` on the call channel,
+  and a first-class `consts:` predicate term lets `propose-roles` re-select const clusters
+  exactly. Live on a sibling Rust codebase it cleanly surfaced the cross-crate geometry-split
+  twin family (`pose_at` ≟ `pose_at` ≟ `easement_length`, keyed on `STRAIGHT_EPS`). Flows into
+  `propose-roles`, `scan`, and `check` for free.
 - **`calque confess --judge` — adjudicate the directed twin candidates.** The comment axis
   now has a precision half: `--judge` sends each *directed* candidate (a drift-confessing
   comment that names a resolvable function) to the LLM oracle, prints the verdict, and records

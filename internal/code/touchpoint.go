@@ -11,14 +11,21 @@ package code
 // Jaccard scores them below threshold and, being pairwise, can't express a trio
 // at all.
 //
-// This pass inverts the problem. It builds an index of *private seam symbols*
-// (leading-underscore / unexported call, write, or getattr-string names) ->
-// the set of functions that touch each. A symbol touched by a SMALL number of
-// functions (2..MaxFanout) is a shared internal seam: those functions do the
-// same internal job. This is presence-based, so it survives the dilution that
+// This pass inverts the problem. It builds an index of *seam symbols* (leading-
+// underscore / unexported call, write, or getattr-string names, plus SCREAMING_SNAKE
+// domain constants) -> the set of functions that touch each. A symbol touched by a
+// SMALL number of functions (2..MaxFanout) is a shared internal seam: those functions
+// do the same internal job. This is presence-based, so it survives the dilution that
 // defeats Jaccard, and it needs no naming convention beyond "private" — strictly
 // more robust than the name-stem signal. Output is a CLUSTER {members, shared
 // seam symbols}, the N-ary generalization of a suspect pair.
+//
+// The domain-constant channel (isDomainConst) is orthogonal to the call/string/write
+// channels: it catches the "same computation, different access pattern" twin — two
+// functions deriving one concept through inverted broadphases share NO read-set or
+// call-set, but both reference the same named magic values (V_BELOW, V_ROOF). That
+// twin is invisible to the reads axis by construction; the shared constant is the
+// only positive signal linking them.
 
 import (
 	"regexp"
@@ -110,7 +117,36 @@ func (f *FuncSig) seamSymbols(projectDefs set) set {
 			add(comp)
 		}
 	}
+	// Domain constants are a fourth seam channel: a SCREAMING_SNAKE name fails the
+	// lower-first/underscore isSeam test, but a magic value like V_BELOW shared by a
+	// few functions is exactly the rare touchpoint this pass clusters on — and it
+	// catches the "same computation, different access pattern" twin that reads (and
+	// the call/string/write channels) miss because the shared signal is the constant,
+	// not the field-path. commonConsts drops universal std/library values (TAU, NAN,
+	// MAX) whose sharing is incidental, mirroring commonIdents on the call channel.
+	for _, c := range f.Consts {
+		if isDomainConst(c) && !commonConsts.has(c) {
+			out[c] = struct{}{}
+		}
+	}
 	return out
+}
+
+// commonConsts are language-universal std/library constants that pass the
+// SCREAMING_SNAKE shape test but are NOT domain vocabulary — every codebase touches
+// TAU/NAN/MAX incidentally, so clustering on them is noise (the const analog of
+// commonIdents). Kept tight + std-only; grows via dogfood the way commonIdents did.
+var commonConsts = set{
+	// Float math / sentinels (Rust std::f64::consts, JS Math, Python math/float)
+	"TAU": {}, "NAN": {}, "INF": {}, "INFINITY": {}, "NEG_INFINITY": {},
+	"EPSILON": {}, "SQRT_2": {}, "LN_2": {}, "LN_10": {}, "LOG2_E": {}, "LOG10_E": {},
+	"FRAC_PI_2": {}, "FRAC_PI_3": {}, "FRAC_PI_4": {}, "FRAC_PI_6": {}, "FRAC_PI_8": {},
+	"FRAC_1_PI": {}, "FRAC_1_SQRT_2": {},
+	// Numeric limits
+	"MIN": {}, "MAX": {}, "MIN_VALUE": {}, "MAX_VALUE": {},
+	"MAX_SAFE_INTEGER": {}, "MIN_SAFE_INTEGER": {}, "MIN_POSITIVE": {},
+	// Generic enum/flag conventions (not domain vocabulary)
+	"ALL": {}, "NONE": {}, "DEFAULT": {}, "EMPTY": {},
 }
 
 // commonIdents are language builtins, predeclared types, and ubiquitous helpers
@@ -157,6 +193,19 @@ func isSeam(s string) bool {
 }
 
 func isPrivate(s string) bool { return strings.HasPrefix(s, "_") }
+
+var screamingSnake = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
+
+// isDomainConst reports whether s is a SCREAMING_SNAKE domain constant name
+// (V_BELOW, MAX_RETRIES, GRID) — the cross-language convention for a named domain
+// magic value. Two functions that compute the same concept through different access
+// patterns (an inverted broadphase) share NO read-set yet both reference the same
+// domain constants, so this is an N-ary seam channel orthogonal to reads. Go's
+// MixedCaps const convention yields few of these without type resolution, so the
+// channel is strongest on Rust/Python/TS; that asymmetry is intentional.
+func isDomainConst(s string) bool {
+	return len(s) >= 3 && screamingSnake.MatchString(s)
+}
 
 // ClusterByTouchpoint finds N-ary suspect clusters: sets of functions sharing
 // one or more rare private seam symbols. See the package doc for why.
@@ -288,7 +337,7 @@ func (c Cluster) Reason() string {
 	for _, s := range c.Shared {
 		bits = append(bits, s.Name)
 	}
-	return "shared private seam(s): " + strings.Join(bits, ", ")
+	return "shared seam(s): " + strings.Join(bits, ", ")
 }
 
 func dedupSigs(fs []*FuncSig) []*FuncSig {

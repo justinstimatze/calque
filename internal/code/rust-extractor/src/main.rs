@@ -45,6 +45,7 @@ struct Record {
     reads: Vec<String>,
     ret_keys: Vec<String>,
     calls: Vec<String>,
+    consts: Vec<String>,
     delegates: bool,
 }
 
@@ -59,6 +60,7 @@ struct Body {
     pure_writes: BTreeSet<String>,
     ret_keys: BTreeSet<String>,
     calls: BTreeSet<String>,
+    consts: BTreeSet<String>,
     delegates: bool,
 }
 
@@ -170,12 +172,32 @@ impl<'ast> Visit<'ast> for Body {
                     self.collect_struct_keys(e);
                 }
             }
+            Expr::Path(p) => {
+                // A referenced SCREAMING_SNAKE path leaf is a domain constant: bare
+                // V_BELOW or qualified geom::V_BELOW (last segment). Rust's UPPER_SNAKE
+                // const convention makes this channel strongest here. Powers the
+                // const-set touchpoint channel.
+                if let Some(seg) = p.path.segments.last() {
+                    let id = seg.ident.to_string();
+                    if is_domain_const(&id) {
+                        self.consts.insert(id);
+                    }
+                }
+            }
             _ => {}
         }
         // Recurse into children (closures/nested exprs are conflated into the
         // enclosing fn, matching extract.py's whole-body visitor).
         visit::visit_expr(self, node);
     }
+}
+
+// is_domain_const mirrors the Go/Python/TS predicate: a SCREAMING_SNAKE name >= 3
+// chars (V_BELOW, MAX_RETRIES, GRID). Keys the const-set touchpoint channel.
+fn is_domain_const(s: &str) -> bool {
+    s.len() >= 3
+        && s.chars().next().map_or(false, |c| c.is_ascii_uppercase())
+        && s.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
 }
 
 fn is_assign_op(op: &BinOp) -> bool {
@@ -252,6 +274,7 @@ fn emit_fn(ident: &Ident, block: &Block, rel: &str, impl_type: Option<&str>, out
         writes: body.writes.into_iter().collect(),
         ret_keys: body.ret_keys.into_iter().collect(),
         calls: body.calls.into_iter().collect(),
+        consts: body.consts.into_iter().collect(),
         delegates: body.delegates,
     });
 }

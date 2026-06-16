@@ -113,6 +113,42 @@ fn log_event(_msg: &str) {}
 	}
 }
 
+// TestExtractRustConsts pins the const-set channel on the Rust extractor (where the
+// UPPER_SNAKE const convention makes it strongest): a bare V_BELOW and a qualified
+// geom::V_ROOF path leaf land in consts; lowercase locals do not.
+func TestExtractRustConsts(t *testing.T) {
+	dir := t.TempDir()
+	if !rustToolchainAvailable(t, dir) {
+		t.Skip("cargo / syn toolchain not available")
+	}
+	src := `const V_BELOW: f64 = -1.0;
+
+fn span_test(h: f64) -> bool {
+    let limit = V_BELOW;
+    let roof = geom::V_ROOF;
+    h > limit && h < roof
+}
+`
+	f := filepath.Join(dir, "span.rs")
+	if err := os.WriteFile(f, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sigs, err := extractRustBatch([]string{f}, dir)
+	if err != nil {
+		t.Fatalf("extractRustBatch: %v", err)
+	}
+	st := sigByQual(sigs, "span_test")
+	if st == nil {
+		t.Fatalf("span_test not extracted; got %d sigs", len(sigs))
+	}
+	assertHas(t, "span_test.consts", st.Consts, []string{"V_BELOW", "V_ROOF"})
+	for _, c := range st.Consts {
+		if c == "limit" || c == "geom" {
+			t.Errorf("span_test.consts must exclude locals, got %v", st.Consts)
+		}
+	}
+}
+
 // A syntactically broken file must be skipped, not abort the batch.
 func TestExtractRustSkipsBroken(t *testing.T) {
 	dir := t.TempDir()

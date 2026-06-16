@@ -14,7 +14,17 @@ Go binary shells out here for .py targets rather than embedding a parser.
 import ast
 import json
 import os
+import re
 import sys
+
+# A referenced SCREAMING_SNAKE identifier is a domain constant (V_BELOW, GRID).
+# Mirrors the Go isDomainConst / Rust is_domain_const / TS isDomainConst predicates
+# so the const-set touchpoint channel keys on the same convention cross-substrate.
+_CONST_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+
+def _is_const(s):
+    return len(s) >= 3 and bool(_CONST_RE.match(s))
 
 # Wrapper attributes marking a method as forwarding to a wrapped impl
 # (self._engine.step(...)) — an adapter, not a reimplementation. (Mirrors the Go
@@ -44,6 +54,7 @@ class _BodyVisitor(ast.NodeVisitor):
         self.reads = set()
         self.ret_keys = set()
         self.calls = set()
+        self.consts = set()
         self.delegates = False
         # Attribute nodes that are a call's callee (road.compute in
         # self.road.compute()), keyed by id(); the read pass skips them so a call
@@ -67,6 +78,16 @@ class _BodyVisitor(ast.NodeVisitor):
             p = _attr_path(node)
             if p:
                 self.reads.add(p)
+        # A qualified domain constant (mod.V_BELOW) — the leaf, not the path.
+        if isinstance(node.ctx, ast.Load) and _is_const(node.attr):
+            self.consts.add(node.attr)
+        self.generic_visit(node)
+
+    def visit_Name(self, node):
+        # A bare SCREAMING_SNAKE reference is a domain constant (V_BELOW). Mirrors the
+        # Go *ast.Ident case; powers the const-set touchpoint channel.
+        if isinstance(node.ctx, ast.Load) and _is_const(node.id):
+            self.consts.add(node.id)
         self.generic_visit(node)
 
     def _record_target(self, tgt):
@@ -157,6 +178,7 @@ def _extract(path, root):
                     "reads": sorted(bv.reads),
                     "ret_keys": sorted(bv.ret_keys),
                     "calls": sorted(bv.calls),
+                    "consts": sorted(bv.consts),
                     "delegates": bv.delegates,
                 })
                 # nested defs are usually closures — skip

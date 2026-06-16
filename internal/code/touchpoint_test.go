@@ -147,6 +147,89 @@ func TestExternalCallNotSeam(t *testing.T) {
 	}
 }
 
+// TestSharedConstClustered pins item 13 (the const-set axis): three functions that
+// compute one concept through DIFFERENT access patterns share no read-set, call-set,
+// or write-set, but all reference the same two domain constants (V_BELOW + V_ROOF).
+// The const channel is the only positive signal linking them — and it clusters.
+func TestSharedConstClustered(t *testing.T) {
+	mk := func(file, name string, consts []string) *FuncSig {
+		f := &FuncSig{File: file, Qualname: "T." + name, Name: name, NLines: 20, Consts: consts}
+		f.Prepare()
+		return f
+	}
+	// The motivating shape: a building-span audit, its auto-classify twin in a second
+	// module, and a third inverted-broadphase copy — no shared reads, same magic values.
+	span := []*FuncSig{
+		mk("audit.go", "buildingAudit", []string{"V_BELOW", "V_ROOF"}),
+		mk("classify.go", "autoClassify", []string{"V_BELOW", "V_ROOF"}),
+		mk("trim.go", "trimBuildings", []string{"V_BELOW", "V_ROOF"}),
+	}
+	clusters := ClusterByTouchpoint(span, DefaultClusterOptions())
+	if len(clusters) != 1 {
+		t.Fatalf("expected 1 const-set cluster, got %d: %+v", len(clusters), clusters)
+	}
+	if len(clusters[0].Members) != 3 {
+		t.Fatalf("expected 3 members, got %d", len(clusters[0].Members))
+	}
+	seams := map[string]bool{}
+	for _, s := range clusters[0].Shared {
+		seams[s.Name] = true
+	}
+	if !seams["V_BELOW"] || !seams["V_ROOF"] {
+		t.Fatalf("expected shared domain constants V_BELOW + V_ROOF, got %v", seams)
+	}
+}
+
+// TestConstSeamGates pins the two conservatism gates on the const channel: a
+// ubiquitous constant is plumbing (fanout-capped), and a SINGLE shared constant
+// among three is too weak to cluster by default (1/3 < MinScore 0.40).
+func TestConstSeamGates(t *testing.T) {
+	mk := func(name string, consts []string) *FuncSig {
+		f := &FuncSig{File: name + ".go", Qualname: "T." + name, Name: name, NLines: 20, Consts: consts}
+		f.Prepare()
+		return f
+	}
+	// (a) A constant touched by more than MaxFanout (8) functions is plumbing.
+	var ubiq []*FuncSig
+	for i := 0; i < 10; i++ {
+		ubiq = append(ubiq, mk("u"+string(rune('a'+i)), []string{"MAX_GRID"}))
+	}
+	if cl := ClusterByTouchpoint(ubiq, DefaultClusterOptions()); len(cl) != 0 {
+		t.Fatalf("ubiquitous constant MAX_GRID must fanout-cap, got %d: %+v", len(cl), cl)
+	}
+	// (b) A trio sharing a SINGLE constant scores 1/3 < 0.40 — one shared magic value
+	// among three is too weak (the V_BELOW+V_ROOF pair clears it precisely because two).
+	single := []*FuncSig{mk("a", []string{"V_ROOF"}), mk("b", []string{"V_ROOF"}), mk("c", []string{"V_ROOF"})}
+	if cl := ClusterByTouchpoint(single, DefaultClusterOptions()); len(cl) != 0 {
+		t.Fatalf("a single shared constant among 3 must not cluster (0.33 < 0.40), got %d", len(cl))
+	}
+	// (c) Universal std constants (TAU, NAN) are stop-listed: even two of them shared
+	// across a trio (which would otherwise clear MinScore) must not cluster — sharing
+	// TAU/NAN is incidental, not a domain twin.
+	std := []*FuncSig{
+		mk("a", []string{"TAU", "NAN"}), mk("b", []string{"TAU", "NAN"}), mk("c", []string{"TAU", "NAN"}),
+	}
+	if cl := ClusterByTouchpoint(std, DefaultClusterOptions()); len(cl) != 0 {
+		t.Fatalf("std constants TAU/NAN must be stop-listed (commonConsts), got %d: %+v", len(cl), cl)
+	}
+}
+
+// TestIsDomainConst pins the SCREAMING_SNAKE predicate: domain magic values qualify;
+// too-short all-caps, MixedCaps (Go's const convention — deliberately not captured),
+// and ordinary identifiers do not.
+func TestIsDomainConst(t *testing.T) {
+	for _, s := range []string{"V_BELOW", "MAX_RETRIES", "GRID", "V_ROOF", "ABC"} {
+		if !isDomainConst(s) {
+			t.Errorf("%q should be a domain constant", s)
+		}
+	}
+	for _, s := range []string{"PI", "ID", "vBelow", "VBelow", "_FOO", "road", "compute"} {
+		if isDomainConst(s) {
+			t.Errorf("%q should NOT be a domain constant", s)
+		}
+	}
+}
+
 func TestClusterKeyOrderIndependent(t *testing.T) {
 	x := &FuncSig{File: "a.go", Qualname: "T.x"}
 	y := &FuncSig{File: "b.go", Qualname: "T.y"}

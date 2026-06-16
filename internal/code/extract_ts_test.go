@@ -136,6 +136,41 @@ func TestExtractTSReadsSkipsCallee(t *testing.T) {
 	assertHas(t, "derive.calls", d.Calls, []string{"compute"})
 }
 
+// TestExtractTSConsts pins the const-set channel on the TS extractor: a bare
+// SCREAMING_SNAKE Identifier (V_BELOW) and a qualified property leaf (geom.V_ROOF)
+// land in consts; lowercase identifiers do not.
+func TestExtractTSConsts(t *testing.T) {
+	dir := t.TempDir()
+	if !tsToolchainAvailable(t, dir) {
+		t.Skip("node + typescript not available")
+	}
+	src := `import * as geom from "./geom";
+function spanTest(h: number): boolean {
+  const limit = V_BELOW;
+  const roof = geom.V_ROOF;
+  return h > limit && h < roof;
+}
+`
+	f := filepath.Join(dir, "span.ts")
+	if err := os.WriteFile(f, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sigs, err := extractTSBatch([]string{f}, dir)
+	if err != nil {
+		t.Fatalf("extractTSBatch: %v", err)
+	}
+	st := sigByQual(sigs, "spanTest")
+	if st == nil {
+		t.Fatalf("spanTest not extracted; got %d sigs", len(sigs))
+	}
+	assertHas(t, "spanTest.consts", st.Consts, []string{"V_BELOW", "V_ROOF"})
+	for _, c := range st.Consts {
+		if c == "limit" || c == "geom" {
+			t.Errorf("spanTest.consts must exclude locals, got %v", st.Consts)
+		}
+	}
+}
+
 // A .tsx file with JSX must parse (the extractor selects ScriptKind.TSX).
 func TestExtractTSXParses(t *testing.T) {
 	dir := t.TempDir()

@@ -992,3 +992,16 @@ comment line's register. False-alarm.
 - pair: internal/code/confess.go::ConfessionCandidates | internal/code/confess.go::confessionRegister
 - verdict: false-alarm
 - reviewed: 2026-06-16
+
+## Run — 2026-06-16 (const-set axis / item 13)
+
+Adding the `consts` seam channel (referenced SCREAMING_SNAKE domain constants) means
+the field-name string literals "consts" and "calls" now appear across the extractor
+plumbing — ParsePredicate/predTerm.matches list them as predicate kinds; goBody.Visit
+and the Python extractors emit a "consts" key. The five functions cluster on those
+incidental literals, not on a shared computation. False-alarm (channel-plumbing token
+coincidence, the same shape as prior extractor-mirror false-alarms).
+
+- cluster: internal/code/extract.py::_extract | internal/code/extract.py::_extract_symbols | internal/code/extract_go.go::goBody.Visit | internal/code/role.go::ParsePredicate | internal/code/role.go::predTerm.matches
+- verdict: false-alarm
+- reviewed: 2026-06-16

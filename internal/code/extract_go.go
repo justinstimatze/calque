@@ -35,7 +35,7 @@ func ExtractGoFile(path, root string) []*FuncSig {
 				qual = rt + "." + name
 			}
 		}
-		bv := &goBody{strs: set{}, writes: set{}, retKeys: set{}, calls: set{}, readsRaw: set{}, pureWrites: set{}, calleeSkip: map[ast.Expr]bool{}}
+		bv := &goBody{strs: set{}, writes: set{}, retKeys: set{}, calls: set{}, consts: set{}, readsRaw: set{}, pureWrites: set{}, calleeSkip: map[ast.Expr]bool{}}
 		ast.Walk(bv, fd.Body)
 		start := fset.Position(fd.Pos()).Line
 		end := fset.Position(fd.End()).Line
@@ -45,6 +45,7 @@ func ExtractGoFile(path, root string) []*FuncSig {
 			Strings: bv.strs.slice(), Writes: bv.writes.slice(),
 			Reads:   bv.reads(),
 			RetKeys: bv.retKeys.slice(), Calls: bv.calls.slice(),
+			Consts:    bv.consts.slice(),
 			Delegates: bv.delegates,
 		}
 		out = append(out, fs)
@@ -174,7 +175,7 @@ func isExportedName(name string) bool {
 }
 
 type goBody struct {
-	strs, writes, retKeys, calls set
+	strs, writes, retKeys, calls, consts set
 	// readsRaw is every dotted field-path seen in a value position; pureWrites is
 	// the LHS of plain `=` assignments. reads() returns readsRaw \ pureWrites (the
 	// derivation input footprint), mirroring writes on the read side.
@@ -235,6 +236,14 @@ func (b *goBody) Visit(n ast.Node) ast.Visitor {
 		}
 		if p := attrPath(t); p != "" {
 			b.readsRaw[p] = struct{}{}
+		}
+	case *ast.Ident:
+		// A referenced SCREAMING_SNAKE identifier is a domain constant (V_BELOW).
+		// Go's MixedCaps const convention means this fires rarely on Go, but the
+		// selector leaf of pkg.V_BELOW reaches this Ident node too, so cross-package
+		// constants are still caught. Powers the const-set touchpoint channel.
+		if isDomainConst(t.Name) {
+			b.consts[t.Name] = struct{}{}
 		}
 	case *ast.AssignStmt:
 		for _, lhs := range t.Lhs {

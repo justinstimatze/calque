@@ -138,6 +138,7 @@ function extractFile(ts, filePath, root) {
       reads: bv.reads(),
       ret_keys: bv.sorted(bv.retKeys),
       calls: bv.sorted(bv.calls),
+      consts: bv.sorted(bv.consts),
       delegates: bv.delegates,
       sig: signatureOf(node),
     });
@@ -199,6 +200,7 @@ class BodyVisitor {
     this.pureWrites = new Set();
     this.retKeys = new Set();
     this.calls = new Set();
+    this.consts = new Set();
     this.delegates = false;
     // PropertyAccess nodes that are a call's callee (this.road.compute in
     // this.road.compute()); the read pass skips them so a call name does not
@@ -237,6 +239,14 @@ class BodyVisitor {
     if (ts.isPropertyAccessExpression(node) && !this.calleeSkip.has(node)) {
       const p = accessPath(ts, node);
       if (p) this.readsRaw.add(p);
+    }
+
+    // Domain constants (SCREAMING_SNAKE): a bare V_BELOW (Identifier) or a qualified
+    // mod.V_BELOW (the property leaf). Powers the const-set touchpoint channel.
+    if (ts.isIdentifier(node) && isDomainConst(node.text)) {
+      this.consts.add(node.text);
+    } else if (ts.isPropertyAccessExpression(node) && isDomainConst(node.name.text)) {
+      this.consts.add(node.name.text);
     }
 
     // Assignment write targets:  a.b.c = …   /   a.b[i] = …
@@ -446,6 +456,12 @@ function literalKeys(ts, node) {
 // lowercase — so HANDLERS and _VERB_TEMPLATES qualify, camelCase/handlers do not.
 function isUpperName(name) {
   return /[A-Za-z]/.test(name) && name === name.toUpperCase();
+}
+
+// isDomainConst mirrors the Go/Python/Rust predicate: a SCREAMING_SNAKE name >= 3
+// chars (V_BELOW, MAX_RETRIES, GRID). Keys the const-set touchpoint channel.
+function isDomainConst(s) {
+  return s.length >= 3 && /^[A-Z][A-Z0-9_]*$/.test(s);
 }
 
 function uniqSorted(arr) {

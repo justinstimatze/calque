@@ -26,6 +26,7 @@ import (
 //	writes:<field>  f.Writes contains the dotted write target
 //	emits:<str>     f.Strings contains the emitted literal
 //	returns:<key>   f.RetKeys contains the returned map/struct key
+//	consts:<sym>    f.Consts contains the referenced SCREAMING_SNAKE domain constant
 //
 // Example: `name:/[Cc]onstruct/ calls:_dispatch` — every constructor-ish function that
 // reaches the dispatch seam.
@@ -69,7 +70,7 @@ func ParsePredicate(expr string) (*Predicate, error) {
 				return nil, fmt.Errorf("bad glob in %q: %w", f, err)
 			}
 			t.re = re
-		case "calls", "writes", "emits", "returns":
+		case "calls", "writes", "emits", "returns", "consts":
 			t.lit = arg
 		default:
 			return nil, fmt.Errorf("unknown predicate kind %q in %q", kind, f)
@@ -106,6 +107,8 @@ func (t predTerm) matches(f *FuncSig) bool {
 		return containsStr(f.Strings, t.lit)
 	case "returns":
 		return containsStr(f.RetKeys, t.lit)
+	case "consts":
+		return containsStr(f.Consts, t.lit)
 	}
 	return false
 }

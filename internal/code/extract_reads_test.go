@@ -50,6 +50,42 @@ func pickGear(w float64) int { return 1 }
 	assertHas(t, "ApplyThrottle.writes", at.Writes, []string{"speed", "gear"})
 }
 
+// TestExtractGoConsts pins the const-set channel on the always-available Go
+// extractor: a referenced SCREAMING_SNAKE identifier (bare V_BELOW or the leaf of a
+// qualified geom.V_ROOF) lands in consts; lowercase locals and MixedCaps do not.
+func TestExtractGoConsts(t *testing.T) {
+	dir := t.TempDir()
+	src := `package p
+
+const V_BELOW = -1.0
+
+func spanTest(h float64) bool {
+	limit := V_BELOW
+	roof := geom.V_ROOF
+	mixed := VRoof
+	return h > limit && h < roof && mixed > 0
+}
+`
+	f := filepath.Join(dir, "span.go")
+	if err := os.WriteFile(f, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sigs, err := extractGoBatch([]string{f}, dir)
+	if err != nil {
+		t.Fatalf("extractGoBatch: %v", err)
+	}
+	st := sigByQual(sigs, "spanTest")
+	if st == nil {
+		t.Fatalf("spanTest not extracted; got %d sigs", len(sigs))
+	}
+	assertHas(t, "spanTest.consts", st.Consts, []string{"V_BELOW", "V_ROOF"})
+	for _, c := range st.Consts {
+		if c == "VRoof" || c == "limit" || c == "geom" {
+			t.Errorf("spanTest.consts must exclude MixedCaps / locals, got %v", st.Consts)
+		}
+	}
+}
+
 func TestSharedDerivationCandidates(t *testing.T) {
 	mk := func(file, qual string, reads, writes, ret []string, delegates bool) *FuncSig {
 		f := &FuncSig{File: file, Qualname: qual, Name: qual, Reads: reads, Writes: writes, RetKeys: ret, Delegates: delegates}

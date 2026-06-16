@@ -147,6 +147,14 @@ fn span_test(h: f64) -> bool {
 			t.Errorf("span_test.consts must exclude locals, got %v", st.Consts)
 		}
 	}
+	// decl_consts (item 16): only `const V_BELOW` is DECLARED in this file; V_ROOF is
+	// referenced via geom::V_ROOF but declared elsewhere, so it must not appear.
+	assertHas(t, "span_test.decl_consts", st.DeclConsts, []string{"V_BELOW"})
+	for _, c := range st.DeclConsts {
+		if c == "V_ROOF" {
+			t.Errorf("decl_consts must exclude reference-only V_ROOF, got %v", st.DeclConsts)
+		}
+	}
 }
 
 // A syntactically broken file must be skipped, not abort the batch.

@@ -24,18 +24,25 @@ import (
 // extractor interchange format: any extractor (go/ast, python3, …) emits these;
 // the scorer consumes them. Derived set/stem forms are computed by Prepare.
 type FuncSig struct {
-	File      string   `json:"file"`
-	Qualname  string   `json:"qualname"` // "Type.Method" or "func"
-	Name      string   `json:"name"`
-	Line      int      `json:"line"`
-	NLines    int      `json:"n_lines"`
-	Strings   []string `json:"strings"`   // emitted string literals (≥4 chars)
-	Writes    []string `json:"writes"`    // dotted attribute/field write targets
-	Reads     []string `json:"reads"`     // dotted attribute/field READ paths (derivation inputs)
-	RetKeys   []string `json:"ret_keys"`  // keys of a returned map/struct literal
-	Calls     []string `json:"calls"`     // called function/method leaf names
-	Consts    []string `json:"consts"`    // referenced SCREAMING_SNAKE domain constants (V_BELOW, GRID)
-	Delegates bool     `json:"delegates"` // body forwards to a wrapped impl
+	File     string   `json:"file"`
+	Qualname string   `json:"qualname"` // "Type.Method" or "func"
+	Name     string   `json:"name"`
+	Line     int      `json:"line"`
+	NLines   int      `json:"n_lines"`
+	Strings  []string `json:"strings"`  // emitted string literals (≥4 chars)
+	Writes   []string `json:"writes"`   // dotted attribute/field write targets
+	Reads    []string `json:"reads"`    // dotted attribute/field READ paths (derivation inputs)
+	RetKeys  []string `json:"ret_keys"` // keys of a returned map/struct literal
+	Calls    []string `json:"calls"`    // called function/method leaf names
+	Consts   []string `json:"consts"`   // referenced SCREAMING_SNAKE domain constants (V_BELOW, GRID)
+	// DeclConsts is the SCREAMING_SNAKE constants DECLARED at module/file scope in
+	// THIS function's file (repeated across the file's functions). The touchpoint
+	// pass unions it across the corpus to gate the const seam channel on
+	// project-definition — exactly as project-defined call names gate the call
+	// channel — so std/library masqueraders (O_CREATE, RFC3339, JSON) that are
+	// referenced but never declared in-project don't form clusters.
+	DeclConsts []string `json:"decl_consts,omitempty"`
+	Delegates  bool     `json:"delegates"` // body forwards to a wrapped impl
 
 	// Kind tags non-function entities the CROSS-SUBSTRATE axis extracts: "" = a
 	// function (the default — the code axis; zero perturbation to existing callers),

@@ -87,7 +87,7 @@ var identShaped = regexp.MustCompile(`^_?[a-zA-Z][a-zA-Z0-9_]*$`)
 // across channels (a seam shows up as a call in one shell and a getattr-string
 // or write in another — pooling by name is exactly why this beats per-channel
 // Jaccard). Returns identifier-shaped, private symbols only.
-func (f *FuncSig) seamSymbols(projectDefs set) set {
+func (f *FuncSig) seamSymbols(projectDefs, projectConsts set) set {
 	out := set{}
 	add := func(s string) {
 		if isSeam(s) {
@@ -122,10 +122,19 @@ func (f *FuncSig) seamSymbols(projectDefs set) set {
 	// few functions is exactly the rare touchpoint this pass clusters on — and it
 	// catches the "same computation, different access pattern" twin that reads (and
 	// the call/string/write channels) miss because the shared signal is the constant,
-	// not the field-path. commonConsts drops universal std/library values (TAU, NAN,
-	// MAX) whose sharing is incidental, mirroring commonIdents on the call channel.
+	// not the field-path. The channel is gated on project-DECLARATION (projectConsts)
+	// so std/library constants that are referenced but never declared in-corpus drop
+	// out, mirroring the project-defined gate on the call channel; commonConsts is a
+	// second filter for project-declared but generically-named values (TAU, NAN, MAX).
 	for _, c := range f.Consts {
-		if isDomainConst(c) && !commonConsts.has(c) {
+		// A referenced SCREAMING_SNAKE name only counts as a domain seam if the
+		// project DECLARES it (projectConsts) — the const analog of requiring a call
+		// seam to resolve to a project def. This drops std/library constants
+		// (O_CREATE, RFC3339, JSON, os.O_*) that are referenced but never declared
+		// in-corpus, which the hand-maintained commonConsts stop-list was chasing
+		// case by case. commonConsts is kept as a second filter for project-declared
+		// but generically-named consts (a repo that declares its own MAX/DEFAULT).
+		if isDomainConst(c) && projectConsts.has(c) && !commonConsts.has(c) {
 			out[c] = struct{}{}
 		}
 	}
@@ -241,12 +250,27 @@ func ClusterByTouchpoint(sigs []*FuncSig, opts ClusterOptions) []Cluster {
 		}
 	}
 
+	// Project-declared SCREAMING_SNAKE constants (unioned from every file's
+	// module-scope const declarations, carried per-function in DeclConsts), so a
+	// referenced const can be required to resolve to a project declaration —
+	// excluding std/library constants that masquerade as domain vocabulary. Built
+	// from all sigs like projectDefs. KNOWN LIMIT: a constant declared in a file
+	// that has NO functions (a dedicated constants module) contributes no record,
+	// so it is absent here and its references won't cluster — a recall hole, not a
+	// precision one (the motivating V_BELOW/V_ROOF live beside their functions).
+	projectConsts := set{}
+	for _, f := range sigs {
+		for _, c := range f.DeclConsts {
+			projectConsts[c] = struct{}{}
+		}
+	}
+
 	// Inverted index: seam symbol -> functions touching it (deduped by Key, so a
 	// self-scan where a fn appears on both sides doesn't double-count).
 	index := map[string][]*FuncSig{}
 	for _, f := range pool {
 		seen := map[string]bool{}
-		for sym := range f.seamSymbols(projectDefs) {
+		for sym := range f.seamSymbols(projectDefs, projectConsts) {
 			k := f.Key()
 			if seen[sym+"\x00"+k] {
 				continue

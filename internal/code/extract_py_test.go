@@ -56,6 +56,8 @@ func TestExtractPyConsts(t *testing.T) {
 	dir := t.TempDir()
 	src := `import geom
 
+V_BELOW = -1.0
+
 def span_test(h):
     limit = V_BELOW
     roof = geom.V_ROOF
@@ -77,6 +79,14 @@ def span_test(h):
 	for _, c := range st.Consts {
 		if c == "limit" || c == "geom" {
 			t.Errorf("span_test.consts must exclude locals, got %v", st.Consts)
+		}
+	}
+	// decl_consts (item 16): the module-level `V_BELOW = -1.0` is DECLARED; V_ROOF is
+	// referenced via geom.V_ROOF but declared elsewhere, so it must not appear.
+	assertHas(t, "span_test.decl_consts", st.DeclConsts, []string{"V_BELOW"})
+	for _, c := range st.DeclConsts {
+		if c == "V_ROOF" {
+			t.Errorf("decl_consts must exclude reference-only V_ROOF, got %v", st.DeclConsts)
 		}
 	}
 }

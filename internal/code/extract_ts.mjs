@@ -107,6 +107,23 @@ function extractFile(ts, filePath, root) {
 
   const out = [];
 
+  // Module-scope declared SCREAMING_SNAKE constants (export const GRID = 60) — the
+  // const analog of project-defined call names. The touchpoint pass gates the const
+  // seam channel on these so library/global references (JSON, Math.PI) that are
+  // referenced but never declared in-corpus don't form clusters. Repeated on each
+  // function record; the Go side unions them across the corpus. `export const X` is
+  // still a VariableStatement at module scope, so it is covered.
+  const declConstSet = new Set();
+  for (const stmt of sf.statements) {
+    if (!ts.isVariableStatement(stmt)) continue;
+    for (const decl of stmt.declarationList.declarations) {
+      if (ts.isIdentifier(decl.name) && isDomainConst(decl.name.text)) {
+        declConstSet.add(decl.name.text);
+      }
+    }
+  }
+  const declConsts = [...declConstSet].sort();
+
   // line is 1-based to match go/ast + python ast.
   const lineOf = (pos) => sf.getLineAndCharacterOfPosition(pos).line + 1;
   const nLines = (node) => lineOf(node.getEnd()) - lineOf(node.getStart(sf)) + 1;
@@ -139,6 +156,7 @@ function extractFile(ts, filePath, root) {
       ret_keys: bv.sorted(bv.retKeys),
       calls: bv.sorted(bv.calls),
       consts: bv.sorted(bv.consts),
+      decl_consts: declConsts,
       delegates: bv.delegates,
       sig: signatureOf(node),
     });

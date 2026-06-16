@@ -84,6 +84,15 @@ func spanTest(h float64) bool {
 			t.Errorf("spanTest.consts must exclude MixedCaps / locals, got %v", st.Consts)
 		}
 	}
+	// decl_consts (item 16): only the file-scope `const V_BELOW` is DECLARED here;
+	// V_ROOF is referenced via geom.V_ROOF but declared elsewhere, so it must not
+	// appear — the gate keys on declaration, not reference.
+	assertHas(t, "spanTest.decl_consts", st.DeclConsts, []string{"V_BELOW"})
+	for _, c := range st.DeclConsts {
+		if c == "V_ROOF" {
+			t.Errorf("decl_consts must exclude reference-only V_ROOF, got %v", st.DeclConsts)
+		}
+	}
 }
 
 func TestSharedDerivationCandidates(t *testing.T) {

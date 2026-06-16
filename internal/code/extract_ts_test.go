@@ -145,6 +145,7 @@ func TestExtractTSConsts(t *testing.T) {
 		t.Skip("node + typescript not available")
 	}
 	src := `import * as geom from "./geom";
+export const V_BELOW = -1.0;
 function spanTest(h: number): boolean {
   const limit = V_BELOW;
   const roof = geom.V_ROOF;
@@ -167,6 +168,15 @@ function spanTest(h: number): boolean {
 	for _, c := range st.Consts {
 		if c == "limit" || c == "geom" {
 			t.Errorf("spanTest.consts must exclude locals, got %v", st.Consts)
+		}
+	}
+	// decl_consts (item 16): the module-level `export const V_BELOW` is DECLARED;
+	// V_ROOF is referenced via geom.V_ROOF but declared elsewhere, so it must not
+	// appear (the gate keys on declaration, not reference).
+	assertHas(t, "spanTest.decl_consts", st.DeclConsts, []string{"V_BELOW"})
+	for _, c := range st.DeclConsts {
+		if c == "V_ROOF" {
+			t.Errorf("decl_consts must exclude reference-only V_ROOF, got %v", st.DeclConsts)
 		}
 	}
 }

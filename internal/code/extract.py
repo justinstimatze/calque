@@ -158,6 +158,24 @@ def _extract(path, root):
         rel = path
     out = []
 
+    # Module-scope declared SCREAMING_SNAKE constants (DEFAULT_TIMEOUT = 30) — the
+    # const analog of project-defined call names. The touchpoint pass gates the const
+    # seam channel on these so library/std references (os.O_CREAT, re.IGNORECASE) that
+    # are referenced but never declared in-corpus don't form clusters. Repeated on each
+    # function record; the Go side unions them across the corpus.
+    decl_names = set()
+    for node in tree.body:  # module level only
+        if isinstance(node, ast.Assign):
+            targets = [t for t in node.targets if isinstance(t, ast.Name)]
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            targets = [node.target]
+        else:
+            continue
+        for t in targets:
+            if _is_const(t.id):
+                decl_names.add(t.id)
+    decl_consts = sorted(decl_names)
+
     def walk(node, prefix):
         for child in ast.iter_child_nodes(node):
             if isinstance(child, ast.ClassDef):
@@ -179,6 +197,7 @@ def _extract(path, root):
                     "ret_keys": sorted(bv.ret_keys),
                     "calls": sorted(bv.calls),
                     "consts": sorted(bv.consts),
+                    "decl_consts": decl_consts,
                     "delegates": bv.delegates,
                 })
                 # nested defs are usually closures — skip

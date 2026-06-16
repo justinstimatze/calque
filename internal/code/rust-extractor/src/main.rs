@@ -46,6 +46,12 @@ struct Record {
     ret_keys: Vec<String>,
     calls: Vec<String>,
     consts: Vec<String>,
+    // decl_consts: the file's module-scope SCREAMING_SNAKE const/static declarations
+    // (repeated on each record). The touchpoint pass gates the const seam channel on
+    // these project-DECLARED names so std/extern-crate constant references that are
+    // never declared in-corpus don't form clusters — the const analog of requiring a
+    // call seam to resolve to a project def.
+    decl_consts: Vec<String>,
     delegates: bool,
 }
 
@@ -246,7 +252,14 @@ fn type_name(ty: &Type) -> Option<String> {
     }
 }
 
-fn emit_fn(ident: &Ident, block: &Block, rel: &str, impl_type: Option<&str>, out: &mut Vec<Record>) {
+fn emit_fn(
+    ident: &Ident,
+    block: &Block,
+    rel: &str,
+    impl_type: Option<&str>,
+    decl_consts: &[String],
+    out: &mut Vec<Record>,
+) {
     let name = ident.to_string();
     let qualname = match impl_type {
         Some(t) => format!("{}.{}", t, name),
@@ -275,25 +288,54 @@ fn emit_fn(ident: &Ident, block: &Block, rel: &str, impl_type: Option<&str>, out
         ret_keys: body.ret_keys.into_iter().collect(),
         calls: body.calls.into_iter().collect(),
         consts: body.consts.into_iter().collect(),
+        decl_consts: decl_consts.to_vec(),
         delegates: body.delegates,
     });
 }
 
-fn walk_items(items: &[Item], rel: &str, out: &mut Vec<Record>) {
+// collect_decl_consts gathers file-scope SCREAMING_SNAKE const/static declaration
+// names, recursing into inline modules (mirroring walk_items' Mod descent). These
+// are the project-DECLARED domain constants the touchpoint pass gates on.
+fn collect_decl_consts(items: &[Item], out: &mut BTreeSet<String>) {
     for item in items {
         match item {
-            Item::Fn(f) => emit_fn(&f.sig.ident, &f.block, rel, None, out),
+            Item::Const(c) => {
+                let id = c.ident.to_string();
+                if is_domain_const(&id) {
+                    out.insert(id);
+                }
+            }
+            Item::Static(s) => {
+                let id = s.ident.to_string();
+                if is_domain_const(&id) {
+                    out.insert(id);
+                }
+            }
+            Item::Mod(m) => {
+                if let Some((_, items)) = &m.content {
+                    collect_decl_consts(items, out);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn walk_items(items: &[Item], rel: &str, decl_consts: &[String], out: &mut Vec<Record>) {
+    for item in items {
+        match item {
+            Item::Fn(f) => emit_fn(&f.sig.ident, &f.block, rel, None, decl_consts, out),
             Item::Impl(im) => {
                 let ty = type_name(&im.self_ty);
                 for ii in &im.items {
                     if let ImplItem::Fn(m) = ii {
-                        emit_fn(&m.sig.ident, &m.block, rel, ty.as_deref(), out);
+                        emit_fn(&m.sig.ident, &m.block, rel, ty.as_deref(), decl_consts, out);
                     }
                 }
             }
             Item::Mod(m) => {
                 if let Some((_, items)) = &m.content {
-                    walk_items(items, rel, out);
+                    walk_items(items, rel, decl_consts, out);
                 }
             }
             // Trait default methods are out of scope for v1.
@@ -327,7 +369,10 @@ fn main() {
             Err(_) => continue, // skip unparseable files (matches go/py)
         };
         let rel = rel_path(path, &root);
-        walk_items(&file.items, &rel, &mut out);
+        let mut decl_set = BTreeSet::new();
+        collect_decl_consts(&file.items, &mut decl_set);
+        let decl_consts: Vec<String> = decl_set.into_iter().collect();
+        walk_items(&file.items, &rel, &decl_consts, &mut out);
     }
 
     serde_json::to_writer(io::stdout(), &out).ok();

@@ -6,6 +6,20 @@ All notable changes to calque. The version string itself comes from the git tag
 ## [Unreleased]
 
 ### Added
+- **Const seam channel now gated on project-DECLARATION, not a hand-maintained stop-list.**
+  A referenced SCREAMING_SNAKE constant only forms a cluster if the corpus actually *declares*
+  it — the const analog of the project-defined gate already on the call channel. Std/library
+  constants (`O_CREATE`, `RFC3339`, `JSON`, `os.O_*`) are referenced but never declared
+  in-project, so they drop out structurally instead of being chased case-by-case in
+  `commonConsts`. Extractors now emit each file's module-scope declared constants
+  (`decl_consts`) across all four substrates; the touchpoint pass unions them and admits a
+  const seam only on a hit. `commonConsts` is kept as a second filter for project-declared but
+  generically-named values. Live A/B: two Go repos that previously clustered on std file/time
+  constants went to zero const candidates with no recall loss, the sibling Rust codebase's real
+  cross-crate geometry twins (`STRAIGHT_EPS`, `STRUCTURE_GROUP`) still surface, and every
+  surviving Python candidate resolves to a real in-project declaration. Known limit: a constant
+  declared in a file with no functions (a dedicated constants module) contributes no record, so
+  its references won't cluster — a recall hole, not a precision one.
 - **`propose-roles --judge` — Layer D measurement for the touchpoint detector.** The N-ary
   cluster pass could surface clusters but had no way to *grade* them, so the touchpoint
   detector (and the const-set axis on it) was invisible to `doctor --ablate`. `--judge` now

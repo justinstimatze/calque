@@ -1005,3 +1005,33 @@ coincidence, the same shape as prior extractor-mirror false-alarms).
 - cluster: internal/code/extract.py::_extract | internal/code/extract.py::_extract_symbols | internal/code/extract_go.go::goBody.Visit | internal/code/role.go::ParsePredicate | internal/code/role.go::predTerm.matches
 - verdict: false-alarm
 - reviewed: 2026-06-16
+
+## Run — 2026-06-16 (const declaration gate / item 16)
+
+Gating the const seam channel on project-declaration (`decl_consts`) makes
+`_is_const` a shared call seam across the three Python functions that validate
+const-shape: `visit_Attribute` and `visit_Name` (reference-side capture) and
+`_extract` (the new module-scope decl collection). They share a validation helper,
+not a derivation — channel-plumbing token coincidence, the same shape as the prior
+extractor-mirror false-alarms. The second cluster is the standing judge-wiring family:
+six command entrypoints share `runJudge`/`NewJudge` because they all wire up the LLM
+oracle — shared infrastructure, not a contract. Both false-alarm.
+
+Two name-noise pairs come with it: `goDeclConsts ≟ collect_decl_consts` is the
+deliberate cross-substrate extractor mirror (Go's go/ast vs Rust's syn collecting the
+same file-scope const declarations — zero shared footprint, name-only, test-pinned per
+substrate), and `judgeClusters ≟ runJudge` shares the judge-invocation plumbing over
+different candidate shapes (N-ary cluster reps vs pairs). Both false-alarm.
+
+- cluster: internal/code/extract.py::_BodyVisitor.visit_Attribute | internal/code/extract.py::_BodyVisitor.visit_Name | internal/code/extract.py::_extract
+- verdict: false-alarm
+- reviewed: 2026-06-16
+- cluster: cmd/calque/confess.go::runConfess | cmd/calque/propose.go::runProposeRoles | cmd/calque/propose_cross.go::runProposeCross | cmd/calque/propose_deep.go::runProposeDeep | cmd/calque/propose_deriv.go::runProposeDeriv | internal/llm/judge.go::NewJudge
+- verdict: false-alarm
+- reviewed: 2026-06-16
+- pair: internal/code/extract_go.go::goDeclConsts | internal/code/rust-extractor/src/main.rs::collect_decl_consts
+- verdict: false-alarm
+- reviewed: 2026-06-16
+- pair: cmd/calque/propose.go::judgeClusters | cmd/calque/propose_deep.go::runJudge
+- verdict: false-alarm
+- reviewed: 2026-06-16

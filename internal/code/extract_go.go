@@ -22,6 +22,14 @@ func ExtractGoFile(path, root string) []*FuncSig {
 		return nil
 	}
 	rel := corpus.RelPath(root, path)
+
+	// File-scope declared SCREAMING_SNAKE constants — the const analog of the
+	// project-defined call names the touchpoint pass keys on. Go's MixedCaps
+	// convention yields few of these, but a project that does name a domain magic
+	// value in SCREAMING_SNAKE (const GRID = 60) is admitted to the const seam
+	// channel; everything else (std/library refs) is gated out.
+	declConsts := goDeclConsts(f)
+
 	var out []*FuncSig
 	for _, decl := range f.Decls {
 		fd, ok := decl.(*ast.FuncDecl)
@@ -45,11 +53,42 @@ func ExtractGoFile(path, root string) []*FuncSig {
 			Strings: bv.strs.slice(), Writes: bv.writes.slice(),
 			Reads:   bv.reads(),
 			RetKeys: bv.retKeys.slice(), Calls: bv.calls.slice(),
-			Consts:    bv.consts.slice(),
-			Delegates: bv.delegates,
+			Consts:     bv.consts.slice(),
+			DeclConsts: declConsts,
+			Delegates:  bv.delegates,
 		}
 		out = append(out, fs)
 	}
+	return out
+}
+
+// goDeclConsts returns the SCREAMING_SNAKE constants declared at file scope in a
+// parsed Go file (top-level const/var blocks). These are the project-DECLARED
+// domain constants the touchpoint pass gates the const seam channel on.
+func goDeclConsts(f *ast.File) []string {
+	names := set{}
+	for _, decl := range f.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok || (gd.Tok != token.CONST && gd.Tok != token.VAR) {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for _, name := range vs.Names {
+				if isDomainConst(name.Name) {
+					names[name.Name] = struct{}{}
+				}
+			}
+		}
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	out := names.slice()
+	sort.Strings(out)
 	return out
 }
 

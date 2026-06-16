@@ -153,7 +153,10 @@ func TestExternalCallNotSeam(t *testing.T) {
 // The const channel is the only positive signal linking them — and it clusters.
 func TestSharedConstClustered(t *testing.T) {
 	mk := func(file, name string, consts []string) *FuncSig {
-		f := &FuncSig{File: file, Qualname: "T." + name, Name: name, NLines: 20, Consts: consts}
+		// DeclConsts == Consts: the magic values are declared beside the functions that
+		// use them (the real V_BELOW/V_ROOF case), so they pass the project-declaration
+		// gate the const channel now requires.
+		f := &FuncSig{File: file, Qualname: "T." + name, Name: name, NLines: 20, Consts: consts, DeclConsts: consts}
 		f.Prepare()
 		return f
 	}
@@ -185,7 +188,10 @@ func TestSharedConstClustered(t *testing.T) {
 // among three is too weak to cluster by default (1/3 < MinScore 0.40).
 func TestConstSeamGates(t *testing.T) {
 	mk := func(name string, consts []string) *FuncSig {
-		f := &FuncSig{File: name + ".go", Qualname: "T." + name, Name: name, NLines: 20, Consts: consts}
+		// DeclConsts == Consts so the referenced names pass the project-declaration
+		// gate; these tests isolate the fanout / MinScore / commonConsts gates, not the
+		// declaration gate (which TestUndeclaredConstNotSeam pins).
+		f := &FuncSig{File: name + ".go", Qualname: "T." + name, Name: name, NLines: 20, Consts: consts, DeclConsts: consts}
 		f.Prepare()
 		return f
 	}
@@ -211,6 +217,37 @@ func TestConstSeamGates(t *testing.T) {
 	}
 	if cl := ClusterByTouchpoint(std, DefaultClusterOptions()); len(cl) != 0 {
 		t.Fatalf("std constants TAU/NAN must be stop-listed (commonConsts), got %d: %+v", len(cl), cl)
+	}
+}
+
+// TestUndeclaredConstNotSeam pins item 16: a SCREAMING_SNAKE constant that is
+// REFERENCED but never DECLARED in the corpus (a std/library masquerader like
+// RFC3339, O_CREATE, or a third-party MAX_FRAME) must NOT form a cluster, even when
+// three functions share two of them and would otherwise clear MinScore. Declaring
+// the same constants in-corpus makes the identical trio cluster — so the project-
+// declaration gate, not the shape, is what differs (the const analog of item 1).
+func TestUndeclaredConstNotSeam(t *testing.T) {
+	mk := func(name string, consts, decl []string) *FuncSig {
+		f := &FuncSig{File: name + ".go", Qualname: "T." + name, Name: name, NLines: 20, Consts: consts, DeclConsts: decl}
+		f.Prepare()
+		return f
+	}
+	// Two non-stop-listed SCREAMING_SNAKE names referenced by a trio but declared
+	// nowhere — they look like domain vocab but are library constants. Gated out.
+	refs := []string{"MAX_FRAME", "CHUNK_SIZE"}
+	undeclared := []*FuncSig{
+		mk("a", refs, nil), mk("b", refs, nil), mk("c", refs, nil),
+	}
+	if cl := ClusterByTouchpoint(undeclared, DefaultClusterOptions()); len(cl) != 0 {
+		t.Fatalf("undeclared (library) constants must not cluster, got %d: %+v", len(cl), cl)
+	}
+	// Same trio, but now the constants are declared in-corpus (one carrier each) — the
+	// project-declaration gate opens and the identical shape clusters.
+	declared := []*FuncSig{
+		mk("a", refs, refs), mk("b", refs, nil), mk("c", refs, nil),
+	}
+	if cl := ClusterByTouchpoint(declared, DefaultClusterOptions()); len(cl) != 1 {
+		t.Fatalf("project-declared constants must cluster, got %d: %+v", len(cl), cl)
 	}
 }
 

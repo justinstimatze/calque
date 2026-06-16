@@ -8,25 +8,124 @@ import (
 	"github.com/justinstimatze/calque/internal/pairkey"
 )
 
-// weights: surface (strings) + effect (writes) + role (name) carry the most —
-// they survive a full rewrite; calls/ret corroborate. These are the STATIC
-// prior/default — the immutable fallback CalibrateWeights shrinks toward and
-// ResetWeights restores to. scorePair reads activeWeights, not this.
-var weights = map[string]float64{
-	"strings": 0.30, "writes": 0.30, "name": 0.22, "calls": 0.10, "ret": 0.08,
+// signalDef is one scoring channel — the SINGLE SOURCE OF TRUTH for calque's
+// signal taxonomy. surface (strings) + effect (writes) + role (name) carry the
+// most weight (they survive a full rewrite); calls/ret corroborate. Adding a
+// channel is one entry in `signals`: scorePair's weighted sum, Reason's evidence
+// rendering, the static prior, and the fixed summation order all derive from it,
+// so the taxonomy can't drift across those sites — it used to (a known, self-
+// flagged dual path: the list lived in `weights`, `channelOrder`, scorePair's
+// sig+avail maps, and Reason's switch). The anchor gate (hasAnchor / block.go
+// anchorChannels) is deliberately a SUBSET and stays defined separately.
+type signalDef struct {
+	key    string
+	weight float64                               // static prior weight
+	sim    func(a, b *FuncSig) float64           // similarity in [0,1]
+	avail  func(a, b *FuncSig) bool              // channel present on either side
+	render func(a, b *FuncSig, v float64) string // evidence phrase for Reason
 }
 
-// activeWeights is the weight vector scorePair actually sums over. It defaults
-// to a clone of the static `weights` prior; UseWeights swaps in a calibrated
-// vector (from .calque/weights.json) and ResetWeights restores the prior. Kept
-// separate from `weights` so the immutable default is always recoverable and so
-// calque's own repo (no weights.json) trivially stays on defaults.
+// signals — SLICE ORDER IS LOAD-BEARING. scorePair sums in this exact order so a
+// near-threshold score is reproducible: float addition is non-associative, so
+// ranging a map instead would yield run-dependent scores near minScore.
+var signals = []signalDef{
+	{
+		key: "strings", weight: 0.30,
+		sim:   func(a, b *FuncSig) float64 { return jaccard(a.sStr, b.sStr) },
+		avail: func(a, b *FuncSig) bool { return len(a.sStr) > 0 || len(b.sStr) > 0 },
+		render: func(a, b *FuncSig, _ float64) string {
+			return fmt.Sprintf("shared-strings=%d", len(intersect(a.sStr, b.sStr)))
+		},
+	},
+	{
+		key: "writes", weight: 0.30,
+		sim:   func(a, b *FuncSig) float64 { return jaccard(a.sWrite, b.sWrite) },
+		avail: func(a, b *FuncSig) bool { return len(a.sWrite) > 0 || len(b.sWrite) > 0 },
+		render: func(a, b *FuncSig, _ float64) string {
+			w := intersect(a.sWrite, b.sWrite)
+			sort.Strings(w)
+			return fmt.Sprintf("shared-writes=%v", w)
+		},
+	},
+	{
+		key: "name", weight: 0.22,
+		sim:   nameSim,
+		avail: func(a, b *FuncSig) bool { return len(a.stem) > 0 || len(b.stem) > 0 },
+		render: func(a, b *FuncSig, v float64) string {
+			shared := intersect(a.stem, b.stem)
+			sort.Strings(shared)
+			return fmt.Sprintf("name~%.2f(%s)", v, strings.Join(shared, "+"))
+		},
+	},
+	{
+		key: "calls", weight: 0.10,
+		sim:   func(a, b *FuncSig) float64 { return jaccard(a.sCall, b.sCall) },
+		avail: func(a, b *FuncSig) bool { return len(a.sCall) > 0 || len(b.sCall) > 0 },
+		render: func(a, b *FuncSig, _ float64) string {
+			return fmt.Sprintf("shared-calls=%d", len(intersect(a.sCall, b.sCall)))
+		},
+	},
+	{
+		key: "ret", weight: 0.08,
+		sim:   func(a, b *FuncSig) float64 { return jaccard(a.sRet, b.sRet) },
+		avail: func(a, b *FuncSig) bool { return len(a.sRet) > 0 || len(b.sRet) > 0 },
+		render: func(a, b *FuncSig, _ float64) string {
+			r := intersect(a.sRet, b.sRet)
+			sort.Strings(r)
+			return fmt.Sprintf("shared-ret-keys=%v", r)
+		},
+	},
+}
+
+// nameSim is the role-overlap similarity: full credit for an identical stem set,
+// jaccard otherwise, dampened 5x when either side is a forwarding adapter — its
+// name mirrors what it wraps, so a name match alone is a guaranteed false twin.
+func nameSim(a, b *FuncSig) float64 {
+	var raw float64
+	if len(a.stem) > 0 && setEqual(a.stem, b.stem) {
+		raw = 1.0
+	} else {
+		raw = jaccard(a.stem, b.stem)
+	}
+	if a.Delegates || b.Delegates {
+		return raw * 0.2
+	}
+	return raw
+}
+
+// weights is the static prior, DERIVED from signals so there is one source of
+// truth. The immutable fallback CalibrateWeights shrinks toward and ResetWeights
+// restores to; scorePair reads activeWeights, not this.
+var weights = signalWeights()
+
+// channelOrder is the fixed channel order, DERIVED from signals. The calibration
+// subsystem ranges it; scorePair sums over `signals` directly (same order).
+var channelOrder = signalKeys()
+
+// activeWeights is the weight vector scorePair actually sums over. It defaults to
+// a clone of the static prior; UseWeights swaps in a calibrated vector (from
+// .calque/weights.json) and ResetWeights restores the prior. Kept separate so the
+// immutable default is always recoverable and calque's own repo (no weights.json)
+// trivially stays on defaults.
 var activeWeights = cloneWeights(weights)
 
-// channelOrder fixes the order scorePair sums the weighted signals in. It exists
-// so the score is reproducible: ranging a map and accumulating non-associative
-// float adds otherwise yields run-dependent scores near the threshold.
-var channelOrder = []string{"strings", "writes", "name", "calls", "ret"}
+// signalKeys / signalWeights project the taxonomy onto the legacy shapes the
+// calibration code consumes, without duplicating the channel list.
+func signalKeys() []string {
+	ks := make([]string, len(signals))
+	for i, d := range signals {
+		ks[i] = d.key
+	}
+	return ks
+}
+
+func signalWeights() map[string]float64 {
+	w := make(map[string]float64, len(signals))
+	for _, d := range signals {
+		w[d.key] = d.weight
+	}
+	return w
+}
 
 // cloneWeights returns a fresh copy so callers can't alias the static prior.
 func cloneWeights(w map[string]float64) map[string]float64 {
@@ -69,37 +168,20 @@ type Suspicion struct {
 
 // Reason renders the fired signals, strongest first (matches the Python report).
 func (s Suspicion) Reason() string {
-	type kv struct {
-		k string
-		v float64
+	type fire struct {
+		def signalDef
+		v   float64
 	}
-	var fired []kv
-	for k, v := range s.Signals {
-		if v > 0 {
-			fired = append(fired, kv{k, v})
+	var fired []fire
+	for _, def := range signals {
+		if v := s.Signals[def.key]; v > 0 {
+			fired = append(fired, fire{def, v})
 		}
 	}
 	sort.Slice(fired, func(i, j int) bool { return fired[i].v > fired[j].v })
 	var bits []string
 	for _, f := range fired {
-		switch f.k {
-		case "name":
-			shared := intersect(s.Left.stem, s.Right.stem)
-			sort.Strings(shared)
-			bits = append(bits, fmt.Sprintf("name~%.2f(%s)", f.v, strings.Join(shared, "+")))
-		case "strings":
-			bits = append(bits, fmt.Sprintf("shared-strings=%d", len(intersect(s.Left.sStr, s.Right.sStr))))
-		case "writes":
-			w := intersect(s.Left.sWrite, s.Right.sWrite)
-			sort.Strings(w)
-			bits = append(bits, fmt.Sprintf("shared-writes=%v", w))
-		case "ret":
-			r := intersect(s.Left.sRet, s.Right.sRet)
-			sort.Strings(r)
-			bits = append(bits, fmt.Sprintf("shared-ret-keys=%v", r))
-		case "calls":
-			bits = append(bits, fmt.Sprintf("shared-calls=%d", len(intersect(s.Left.sCall, s.Right.sCall))))
-		}
+		bits = append(bits, f.def.render(s.Left, s.Right, f.v))
 	}
 	return strings.Join(bits, "; ")
 }
@@ -107,43 +189,24 @@ func (s Suspicion) Reason() string {
 // scorePair scores one pair, or returns (_, false) if it fails the noise gate.
 func scorePair(a, b *FuncSig) (Suspicion, bool) {
 	// A forwarding adapter is named after what it wraps, so a name match alone is
-	// a guaranteed false positive — keep a sliver of weight but bar it anchoring.
+	// a guaranteed false positive — nameSim keeps a sliver of weight, and the
+	// anchor gate below bars it from anchoring.
 	delegating := a.Delegates || b.Delegates
-	var nameRaw float64
-	if len(a.stem) > 0 && setEqual(a.stem, b.stem) {
-		nameRaw = 1.0
-	} else {
-		nameRaw = jaccard(a.stem, b.stem)
-	}
-	name := nameRaw
-	if delegating {
-		name = nameRaw * 0.2
-	}
-	sig := map[string]float64{
-		"strings": jaccard(a.sStr, b.sStr),
-		"writes":  jaccard(a.sWrite, b.sWrite),
-		"name":    name,
-		"calls":   jaccard(a.sCall, b.sCall),
-		"ret":     jaccard(a.sRet, b.sRet),
-	}
-	// Renormalize over signals available on both-or-either side, so a pair isn't
-	// penalized for, e.g., neither emitting strings.
-	avail := map[string]bool{
-		"strings": len(a.sStr) > 0 || len(b.sStr) > 0,
-		"writes":  len(a.sWrite) > 0 || len(b.sWrite) > 0,
-		"name":    len(a.stem) > 0 || len(b.stem) > 0,
-		"calls":   len(a.sCall) > 0 || len(b.sCall) > 0,
-		"ret":     len(a.sRet) > 0 || len(b.sRet) > 0,
-	}
-	// Sum in a FIXED channel order, not by ranging `avail` (a map): float addition
-	// is non-associative, so map-iteration order made a near-threshold score flip
-	// across minScore between runs — a non-reproducible gate, exactly the kind of
-	// bug calque exists to catch. Determinism here is correctness, not polish.
+
+	// Per-channel similarity, summing the weighted available ones in the FIXED
+	// `signals` order — NOT by ranging a map: float addition is non-associative,
+	// so map-iteration order made a near-threshold score flip across minScore
+	// between runs — exactly the kind of bug calque exists to catch. Determinism
+	// here is correctness, not polish. avail renormalizes so a pair isn't
+	// penalized for, e.g., neither side emitting strings.
+	sig := make(map[string]float64, len(signals))
 	var wsum, score float64
-	for _, k := range channelOrder {
-		if avail[k] {
-			wsum += activeWeights[k]
-			score += activeWeights[k] * sig[k]
+	for _, def := range signals {
+		s := def.sim(a, b)
+		sig[def.key] = s
+		if def.avail(a, b) {
+			wsum += activeWeights[def.key]
+			score += activeWeights[def.key] * s
 		}
 	}
 	if wsum == 0 {
@@ -153,8 +216,9 @@ func scorePair(a, b *FuncSig) (Suspicion, bool) {
 
 	// Gate: require a real role overlap OR a concrete surface/effect overlap. A
 	// pair sharing only generic call names is junk; a pure forwarder with no
-	// shared surface/effect drops out entirely.
-	hasAnchor := (name >= 0.34 && !delegating) || sig["strings"] > 0 || sig["writes"] > 0 || sig["ret"] > 0
+	// shared surface/effect drops out entirely. This SUBSET is mirrored by
+	// block.go's anchorChannels — keep them in lockstep.
+	hasAnchor := (sig["name"] >= 0.34 && !delegating) || sig["strings"] > 0 || sig["writes"] > 0 || sig["ret"] > 0
 	if !hasAnchor {
 		return Suspicion{}, false
 	}

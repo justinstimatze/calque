@@ -31,17 +31,21 @@ re-syncing the doomed one (DESIGN_NOTES §18.7).
 via unordered-pair dedup; the relTo ≟ corpus.RelPath dup caught live during the
 port → single-sourced, gone). Four standing pairs adjudicated below.
 
-## Suspicion.Reason ≟ scorePair — DRIFT (open: calque's own taxonomy bug, again)
+## Suspicion.Reason ≟ scorePair — RESOLVED 2026-06-16 (taxonomy collapsed to one table)
 - pair: internal/code/score.go::Suspicion.Reason | internal/code/score.go::scorePair
-- verdict: drift
-- reviewed: 2026-06-06
+- verdict: false-alarm
+- reviewed: 2026-06-16
 
-The signal taxonomy `{strings,writes,name,calls,ret}` is listed in four places:
-the `weights` map, the `sig` + `avail` maps in `scorePair`, and the `switch` in
-`Reason`. The Python version had this (PATTERN_CATALOG P2/P3); the port reproduced
-it. Registered as known so `check` doesn't re-flag it. **Fix:** make signals
-table-driven (`[]signalDef{key,weight,sim,avail,render}`) so a new signal is one
-entry.
+WAS drift (reviewed 2026-06-06, PATTERN_CATALOG P2/P3 inherited from the Python
+port): the signal taxonomy `{strings,writes,name,calls,ret}` lived in FOUR places —
+the `weights` map, scorePair's `sig`+`avail` maps, and Reason's `switch` — so adding
+a channel meant editing all four in lockstep. COLLAPSED into one `signals`
+`[]signalDef{key,weight,sim,avail,render}` table: scorePair (weighted sum), Reason
+(evidence render), `weights`, and `channelOrder` now all DERIVE from it, so a channel
+is a single entry and the sites can't drift. The pair still fires only because both
+range the shared `signals` table (shared infrastructure, no shared behavioral
+contract) → false-alarm. Static prior values and all scores are unchanged — the
+calibrate/score/block test suites pass untouched.
 
 ## runSynonymReport ≟ runVocabReport — CONTRACTED-TWIN-OK (latent; watch)
 - pair: cmd/calque/synonym_report.go::runSynonymReport | cmd/calque/vocab_report.go::runVocabReport
@@ -929,5 +933,28 @@ cohesive internals — no independent contract that can drift.
 - verdict: false-alarm
 - reviewed: 2026-06-16
 - cluster: cmd/calque/calib.go::logFires | cmd/calque/calib.go::runMarkFire | cmd/calque/labels.go::recordLabel
+- verdict: false-alarm
+- reviewed: 2026-06-16
+
+## Run — 2026-06-16 (table-driven scorer refactor fallout)
+
+Collapsing the signal taxonomy into `signals` (extracting `nameSim`) shifts three
+self-scan fires, all false-alarm:
+
+- `normalizeVerdict` ≟ `embed.normalize` share only the `normalize` name stem — one
+  reduces a free-form verdict to its token, the other L2-normalizes a vector.
+- The 8-member MCP/extract/role/score cluster is the recurring vocabulary cluster
+  (glued by FuncSig field names: `qualname`/`ret_keys`/`strings`/…); scorePair's
+  membership shifted when its `sig`/`avail` map literals collapsed into the table.
+- `nameSim` joins KeySet/NameStem/SharedDerivation candidates via the shared
+  `jaccard`/`sharedSetLabel` helpers — shared infrastructure, not a shared contract.
+
+- pair: cmd/calque/migrate.go::normalizeVerdict | internal/embed/embed.go::normalize
+- verdict: false-alarm
+- reviewed: 2026-06-16
+- cluster: cmd/calque/mcp.go::checkToolDefinition | cmd/calque/mcp.go::handleMCP | cmd/calque/mcp.go::vocabCheckToolDefinition | internal/code/extract.py::_extract | internal/code/extract.py::_extract_symbols | internal/code/role.go::ParsePredicate | internal/code/role.go::predTerm.matches | internal/code/score.go::scorePair
+- verdict: false-alarm
+- reviewed: 2026-06-16
+- cluster: internal/code/score.go::nameSim | internal/code/sigcluster.go::KeySetCandidates | internal/code/sigcluster.go::NameStemCandidates | internal/code/sigcluster.go::SharedDerivationCandidates
 - verdict: false-alarm
 - reviewed: 2026-06-16

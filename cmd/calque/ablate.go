@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/justinstimatze/calque/internal/llm"
 )
 
 const (
@@ -36,9 +38,9 @@ func (c ablateCell) precision() float64 {
 
 func (c *ablateCell) add(verdict string) {
 	switch verdict {
-	case "drift":
+	case llm.ClassDrift:
 		c.drift++
-	case "contracted-twin-ok":
+	case llm.ClassContractedTwinOK:
 		c.twinOK++
 	default:
 		c.falseAlarm++

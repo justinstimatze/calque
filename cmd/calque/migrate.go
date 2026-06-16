@@ -21,6 +21,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/justinstimatze/calque/internal/llm"
 )
 
 func runMigrateRegistry(args []string) {
@@ -134,7 +136,7 @@ func migrateRegistry(src string) (migrated string, nEntries int, alreadyNew bool
 // order matters: "was drift" must not match before "contracted-twin-ok".
 func normalizeVerdict(s string) string {
 	low := strings.ToLower(s)
-	for _, v := range []string{"contracted-twin-ok", "false-alarm", "drift"} {
+	for _, v := range []string{llm.ClassContractedTwinOK, llm.ClassFalseAlarm, llm.ClassDrift} {
 		if strings.Contains(low, v) {
 			return v
 		}

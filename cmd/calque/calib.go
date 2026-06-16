@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/justinstimatze/calque/internal/code"
+	"github.com/justinstimatze/calque/internal/llm"
 	"github.com/justinstimatze/calque/internal/pairkey"
 	"github.com/justinstimatze/calque/internal/registry"
 )
@@ -70,11 +71,11 @@ func clusterDisplayKey(c code.Cluster) string { return strings.Join(c.MemberKeys
 // verdictLabel maps a registry verdict class to a calibration label.
 func verdictLabel(vclass string) string {
 	switch vclass {
-	case "drift":
+	case llm.ClassDrift:
 		return "useful"
-	case "false-alarm":
+	case llm.ClassFalseAlarm:
 		return "not-useful"
-	case "contracted-twin-ok":
+	case llm.ClassContractedTwinOK:
 		return "mixed"
 	default:
 		return ""

@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/justinstimatze/calque/internal/code"
+	"github.com/justinstimatze/calque/internal/llm"
 	"github.com/justinstimatze/calque/internal/registry"
 )
 
@@ -263,7 +264,7 @@ func reviewedSuffix(e registry.Entry) string {
 func unresolvedDrift(entries []registry.Entry, live map[string]bool) []registry.Entry {
 	var out []registry.Entry
 	for _, e := range entries {
-		if e.VerdictClass() == "drift" && live[e.Key1] && live[e.Key2] {
+		if e.VerdictClass() == llm.ClassDrift && live[e.Key1] && live[e.Key2] {
 			out = append(out, e)
 		}
 	}

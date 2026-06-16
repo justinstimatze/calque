@@ -35,12 +35,22 @@ type Verdict struct {
 	Cached     bool   `json:"-"` // true if served from disk, not the API
 }
 
+// Verdict classes — calque's registry taxonomy, named once here (the judge owns
+// the vocabulary) so the ~half-dozen comparison sites across the CLI reference one
+// definition instead of bare literals. The judge SYSTEM PROMPT and the on-disk
+// registry strings are the wire format these mirror, so the values are fixed.
+const (
+	ClassDrift            = "drift"
+	ClassContractedTwinOK = "contracted-twin-ok"
+	ClassFalseAlarm       = "false-alarm"
+)
+
 // IsTwin reports whether the pair shares a contract at all (drift OR an intentional
 // twin) — i.e. anything but a false-alarm.
-func (v Verdict) IsTwin() bool { return v.Class == "drift" || v.Class == "contracted-twin-ok" }
+func (v Verdict) IsTwin() bool { return v.Class == ClassDrift || v.Class == ClassContractedTwinOK }
 
 // IsDrift reports the actionable case: two independent impls that can diverge.
-func (v Verdict) IsDrift() bool { return v.Class == "drift" }
+func (v Verdict) IsDrift() bool { return v.Class == ClassDrift }
 
 // PairInput is the two functions to judge.
 type PairInput struct {
@@ -306,9 +316,9 @@ func parseVerdict(blocks []apiContentText) (Verdict, error) {
 	// Conservative default: an unrecognized class is treated as not-a-twin rather
 	// than risk a false "drift" on a malformed verdict.
 	switch v.Class {
-	case "drift", "contracted-twin-ok", "false-alarm":
+	case ClassDrift, ClassContractedTwinOK, ClassFalseAlarm:
 	default:
-		v.Class = "false-alarm"
+		v.Class = ClassFalseAlarm
 	}
 	return v, nil
 }

@@ -196,9 +196,9 @@ func runJudge(repo string, cands []code.SigCandidate, twinsOnly bool) {
 		}
 		recordLabel(repo, c, *v) // Layer D: tag this verdict with detector+lang+variety
 		switch v.Class {
-		case "drift":
+		case llm.ClassDrift:
 			drift++
-		case "contracted-twin-ok":
+		case llm.ClassContractedTwinOK:
 			contracted++
 		default:
 			falseAlarm++

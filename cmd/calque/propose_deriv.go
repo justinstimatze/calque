@@ -47,6 +47,7 @@ func runProposeDeriv(args []string) {
 	minReads := fs.Int("min-reads", 3, "ignore functions reading fewer than this many field-paths (thin = non-discriminating)")
 	readJac := fs.Float64("read-jaccard", 0.5, "min read-set jaccard to pair (1.0 = identical input field-set)")
 	maxFanout := fs.Int("max-fanout", 8, "skip field-paths read by more than this many functions (plumbing, not a seam)")
+	includeMutators := fs.Bool("include-mutators", false, "also pair bare field-mutators (both sides write but neither constructs/measures/searches); gated by default — co-mutation of a shared field-set is the read-set's dominant false-twin variety (0.36 precision)")
 	top := fs.Int("top", 40, "max candidates to print")
 	judge := fs.Bool("judge", false, "adjudicate each candidate with the LLM oracle (needs ANTHROPIC_API_KEY; the precision half)")
 	twinsOnly := fs.Bool("twins-only", false, "with --judge, print only candidates the oracle confirms as twins")
@@ -69,7 +70,7 @@ func runProposeDeriv(args []string) {
 		os.Exit(1)
 	}
 
-	cands := code.SharedDerivationCandidates(sigs, *minReads, *readJac, *maxFanout)
+	cands := code.SharedDerivationCandidates(sigs, *minReads, *readJac, *maxFanout, *includeMutators)
 	seen := map[string]bool{}
 	var fresh []code.SigCandidate
 	for _, c := range cands {
@@ -88,8 +89,12 @@ func runProposeDeriv(args []string) {
 	if *includeTests {
 		testNote = " · tests included"
 	}
-	fmt.Printf("scanned %d func(s) in %d file(s); %d fresh candidate(s)  [min-reads=%d read-jaccard=%.2f max-fanout=%d]%s\n",
-		st.Funcs, st.Files, len(fresh), *minReads, *readJac, *maxFanout, testNote)
+	mutNote := " · bare-mutator pairs gated (--include-mutators to keep)"
+	if *includeMutators {
+		mutNote = " · bare-mutator pairs included"
+	}
+	fmt.Printf("scanned %d func(s) in %d file(s); %d fresh candidate(s)  [min-reads=%d read-jaccard=%.2f max-fanout=%d]%s%s\n",
+		st.Funcs, st.Files, len(fresh), *minReads, *readJac, *maxFanout, testNote, mutNote)
 	if len(fresh) == 0 {
 		fmt.Println("\nno candidates. (Looking for functions deriving a value from the same field-set without delegating to one authority — loosen --read-jaccard / --min-reads to widen.)")
 		return

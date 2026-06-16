@@ -363,7 +363,12 @@ func sharedSetLabel(as, bs set) string {
 // returns a record). The inverted read-path index keeps it near-linear; the fanout
 // cap drops ubiquitous fields (id/x/z) as JOIN paths only — jaccard is over the FULL
 // read-sets regardless. minReads filters thin (non-discriminating) functions.
-func SharedDerivationCandidates(sigs []*FuncSig, minReads int, minJaccard float64, maxFanout int) []SigCandidate {
+//
+// A pairwise op-type gate additionally drops provably-dual pairs (opposedOps) and,
+// unless includeMutators is set, same-op bare-mutator pairs (mutate/mutate) — the
+// read-set's dominant low-signal false-twin variety (0.36 precision across a 7-repo
+// corpus vs 0.50 for construct/construct).
+func SharedDerivationCandidates(sigs []*FuncSig, minReads int, minJaccard float64, maxFanout int, includeMutators bool) []SigCandidate {
 	idx := map[string][]*FuncSig{}
 	for _, f := range sigs {
 		if f.Kind != "" || f.Delegates || len(f.sRead) < minReads {
@@ -401,6 +406,14 @@ func SharedDerivationCandidates(sigs []*FuncSig, minReads int, minJaccard float6
 				// which read the same fields but perform opposite operations (not twins).
 				oa, ob := opType(a), opType(b)
 				if opposedOps(oa, ob) {
+					continue
+				}
+				// Same-op mutator gate: two bare field-mutators (write the same fields,
+				// no return, no name-role) sharing a read-set is incidental co-mutation,
+				// not value-derivation drift — the read-set's dominant false-twin variety
+				// (n=50 @ 0.36 across a 7-repo corpus, vs construct/construct @ 0.50). The
+				// read-set analog of the confession prose gate; --include-mutators opts in.
+				if !includeMutators && oa == "mutate" && ob == "mutate" {
 					continue
 				}
 				seen[pk] = true

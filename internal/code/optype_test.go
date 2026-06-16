@@ -36,17 +36,24 @@ func TestOpTypeGateSuppression(t *testing.T) {
 	continuity := mkOp("continuity", shared, nil, nil)                         // measure
 	build := mkOp("buildRibbon", shared, []string{"mesh"}, []string{"v", "u"}) // construct
 	sampleB := mkOp("sampleEdge", shared, nil, []string{"x", "y"})             // forward-map (twin of sample)
-	for _, f := range []*FuncSig{sample, project, continuity, build, sampleB} {
+	mutA := mkOp("applyDrift", shared, []string{"out"}, nil)                   // mutate (bare field-mutator)
+	mutB := mkOp("applyTrim", shared, []string{"out"}, nil)                    // mutate (twin of applyDrift)
+	all := []*FuncSig{sample, project, continuity, build, sampleB, mutA, mutB}
+	for _, f := range all {
 		f.Reads = shared
 		f.Prepare()
 	}
 
-	cands := SharedDerivationCandidates([]*FuncSig{sample, project, continuity, build, sampleB}, 2, 0.5, 8)
-	pairs := map[string]bool{}
-	for _, c := range cands {
-		pairs[c.A.Qualname+"|"+c.B.Qualname] = true
-		pairs[c.B.Qualname+"|"+c.A.Qualname] = true
+	pairSet := func(cands []SigCandidate) map[string]bool {
+		pairs := map[string]bool{}
+		for _, c := range cands {
+			pairs[c.A.Qualname+"|"+c.B.Qualname] = true
+			pairs[c.B.Qualname+"|"+c.A.Qualname] = true
+		}
+		return pairs
 	}
+
+	pairs := pairSet(SharedDerivationCandidates(all, 2, 0.5, 8, false))
 	// Provably-dual pairs suppressed.
 	if pairs["sample|project"] {
 		t.Error("forward-map ≟ inverse-search (sample ≟ project) should be suppressed")
@@ -57,5 +64,15 @@ func TestOpTypeGateSuppression(t *testing.T) {
 	// Same-operation twin kept.
 	if !pairs["sample|sampleEdge"] {
 		t.Error("two forward maps sharing the read-set (sample ≟ sampleEdge) should survive the gate")
+	}
+	// Bare mutator twin gated by default — the read-set's dominant false-twin variety.
+	if pairs["applyDrift|applyTrim"] {
+		t.Error("two bare mutators (applyDrift ≟ applyTrim) should be gated by default")
+	}
+
+	// ...and surfaced when the user opts back in with includeMutators=true.
+	withMut := pairSet(SharedDerivationCandidates(all, 2, 0.5, 8, true))
+	if !withMut["applyDrift|applyTrim"] {
+		t.Error("applyDrift ≟ applyTrim should surface with includeMutators=true")
 	}
 }

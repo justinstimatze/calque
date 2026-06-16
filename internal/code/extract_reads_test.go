@@ -50,23 +50,22 @@ func pickGear(w float64) int { return 1 }
 	assertHas(t, "ApplyThrottle.writes", at.Writes, []string{"speed", "gear"})
 }
 
-// TestSharedDerivationCandidates pins the three load-bearing gates: a real twin
-// (same read-set, derives a value, no delegation) is surfaced; a delegating twin and
-// a pure reader are excluded; a low-overlap pair is dropped by the jaccard floor.
 func TestSharedDerivationCandidates(t *testing.T) {
-	mk := func(file, qual string, reads, writes []string, delegates bool) *FuncSig {
-		f := &FuncSig{File: file, Qualname: qual, Name: qual, Reads: reads, Writes: writes, Delegates: delegates}
+	mk := func(file, qual string, reads, writes, ret []string, delegates bool) *FuncSig {
+		f := &FuncSig{File: file, Qualname: qual, Name: qual, Reads: reads, Writes: writes, RetKeys: ret, Delegates: delegates}
 		f.Prepare()
 		return f
 	}
 	shared := []string{"road.width", "road.pieces", "terrain.height"}
-	a := mk("worldgen/build.go", "buildRoad", shared, []string{"mesh"}, false)
-	b := mk("client/render.go", "renderRibbon", shared, []string{"verts"}, false)
-	d := mk("client/adapter.go", "adapt", shared, []string{"out"}, true)                               // delegates → excluded
-	r := mk("client/log.go", "logWidths", shared, nil, false)                                          // no writes/ret → not a derivation
-	e := mk("x/y.go", "unrelated", []string{"road.width", "foo.bar", "baz.qux"}, []string{"z"}, false) // jaccard < 0.5
+	// buildRoad/renderRibbon both CONSTRUCT a value (return a record) from the same
+	// input field-set — the strong derivation variety, surfaced by default.
+	a := mk("worldgen/build.go", "buildRoad", shared, []string{"mesh"}, []string{"mesh"}, false)
+	b := mk("client/render.go", "renderRibbon", shared, []string{"verts"}, []string{"verts"}, false)
+	d := mk("client/adapter.go", "adapt", shared, []string{"out"}, []string{"out"}, true)                             // delegates → excluded
+	r := mk("client/log.go", "logWidths", shared, nil, nil, false)                                                    // no writes/ret → not a derivation
+	e := mk("x/y.go", "unrelated", []string{"road.width", "foo.bar", "baz.qux"}, []string{"z"}, []string{"z"}, false) // jaccard < 0.5
 
-	cands := SharedDerivationCandidates([]*FuncSig{a, b, d, r, e}, 2, 0.5, 8)
+	cands := SharedDerivationCandidates([]*FuncSig{a, b, d, r, e}, 2, 0.5, 8, false)
 	if len(cands) != 1 {
 		t.Fatalf("want exactly 1 candidate (buildRoad≟renderRibbon), got %d: %+v", len(cands), cands)
 	}

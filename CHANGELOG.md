@@ -34,6 +34,14 @@ All notable changes to calque. The version string itself comes from the git tag
   and routed the pruner through it; the duplicate is gone.
 
 ### Changed
+- **`propose-deriv` gates same-op bare-mutator (`mutate/mutate`) pairs by default.** Two
+  functions that both only *write* a shared field-set — neither constructing, measuring, nor
+  searching — are co-mutating the same state incidentally, not deriving one value two ways.
+  A 7-repo judged corpus localized the read-set's noise to exactly this variety: `mutate/mutate`
+  ran 0.36 precision (n=50, the dominant false-twin generator) while `construct/construct` held
+  0.50. The pairwise op-type gate now drops `mutate/mutate` candidates unless `--include-mutators`
+  opts them back in — the read-set analog of the `confess` prose gate. On a large mixed corpus this
+  cut default candidates ~90% (97 → 7), surfacing only the stronger derivation varieties.
 - **`propose-deriv` excludes test files by default.** Two test cases intentionally
   exercise the same code and share a read-set (often a reused mock/setup fixture), so they
   cluster as false "twins" — the `doctor --ablate` matrix surfaced a degenerate Python

@@ -898,3 +898,36 @@ the CLI-command parity already recorded for the propose-* runners.
 - cluster: cmd/calque/confess.go::runConfess | cmd/calque/propose_cross.go::runProposeCross | cmd/calque/propose_deep.go::runJudge | cmd/calque/propose_deep.go::runProposeDeep | cmd/calque/propose_deriv.go::runProposeDeriv
 - verdict: contracted-twin-ok
 - reviewed: 2026-06-16
+
+## Run — 2026-06-16 (Layer D: label store + doctor --ablate)
+
+`labels.go` (recordLabel/labelStorePath) and `ablate.go` surface five new self-scan
+fires. All false-alarm: incidental shared vocabulary/helpers or one feature's own
+cohesive internals — no independent contract that can drift.
+
+- `ablateCell.add` ≟ `normalizeVerdict` share the verdict-class string vocabulary
+  ("drift"/"contracted-twin-ok"/"false-alarm") but do different jobs (tally vs free-form
+  normalize). NOTE: that vocabulary is now hardcoded in ~4 sites (here, normalizeVerdict,
+  verdictLabel, the judge parser) — a genuine Layer B shared-const candidate, tracked.
+- `ablateVerdict` ≟ `runAblate` and the precision/total cluster are one feature's helper
+  + caller (a layering relationship), glued by the `ablate`/`precision`/`total` stems.
+- The buildVersion/version/`calque` 7-member cluster is glued by the `"calque"` cache-dir
+  literal + version symbols across unrelated funcs (labelStorePath just joined it).
+- logFires/runMarkFire/recordLabel all DELEGATE to the shared `appendJSONL`+`nowTs`
+  helpers, each writing its own JSONL schema — shared infrastructure, not duplicated logic.
+
+- pair: cmd/calque/ablate.go::ablateCell.add | cmd/calque/migrate.go::normalizeVerdict
+- verdict: false-alarm
+- reviewed: 2026-06-16
+- pair: cmd/calque/ablate.go::ablateVerdict | cmd/calque/ablate.go::runAblate
+- verdict: false-alarm
+- reviewed: 2026-06-16
+- cluster: cmd/calque/hook.go::buildCheckCmd | cmd/calque/hook.go::installPreCommit | cmd/calque/labels.go::labelStorePath | cmd/calque/main.go::main | cmd/calque/mcp.go::handleMCP | internal/code/extract_rust.go::rustExtractorBin | internal/llm/judge.go::NewJudge
+- verdict: false-alarm
+- reviewed: 2026-06-16
+- cluster: cmd/calque/ablate.go::ablateCell.precision | cmd/calque/ablate.go::ablateVerdict | cmd/calque/ablate.go::runAblate
+- verdict: false-alarm
+- reviewed: 2026-06-16
+- cluster: cmd/calque/calib.go::logFires | cmd/calque/calib.go::runMarkFire | cmd/calque/labels.go::recordLabel
+- verdict: false-alarm
+- reviewed: 2026-06-16

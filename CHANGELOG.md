@@ -32,6 +32,34 @@ All notable changes to calque. The version string itself comes from the git tag
   them is tracked in the precision backlog. Rust is already clean — its calls are
   structurally distinct from field access.)
 
+- **Confession axis (Layer C) — drift-confessing comments as a twin signal.** Some twins
+  announce themselves: a comment saying *"mirrors X"*, *"keep in sync with Y"*, *"must match
+  Z"*, *"copy of"*, *"cross-checked against"*. `calque confess` scans each function's body
+  **and its doc-comment block** for these self-witness phrases; a directed pair fires only
+  when the confessed name is an `identifierLike` token (has `_` or camelCase) that exactly
+  names another function — so prose like "drift" or "engine" can't trigger it. A census plus
+  directed pairs; cheap, deterministic, and complementary to the read-set recall (it catches
+  the copy a maintainer already flagged in a comment but never wired a test to).
+- **Operation-type gate (Layer A) — suppress provably-dual derivation candidates.** A coarse
+  method-stereotype classifier (`construct`/`measure`/`forward-map`/`inverse-search`/`mutate`,
+  from the function's name-role stem + writes/ret shape) gates the derivation pass: two
+  functions that read the same fields but perform *opposed* operations — a forward map vs its
+  inverse search, or a constructor vs a measure — are not twins, so the pair is dropped. Only
+  ever **suppresses** a provably-dual pair (never asserts a twin) and never fires when either
+  side is unclassified, so a weak signal can't drop a real twin. Lineage: method stereotypes
+  (Dragan/Collard/Maletic), pointed at twin discrimination. Ablatable — Layer D decides if it
+  earns its keep.
+- **Layer D — `calque doctor --ablate` + a global label store.** A `--judge` run now appends
+  each verdict to a global label store (`~/.cache/calque/labels.jsonl`, colocated with the
+  judge cache — never written into the scanned repo, so adopters stay read-only), tagging it
+  with the detector that surfaced it, the language, and the op-type variety. `doctor --ablate`
+  rolls that store into a **per-detector × language × variety matrix** and asks the one
+  question that matters: *does each detector pull its weight?* A cell is `pulls-weight`
+  (precision ≥ 0.50 with support ≥ 5), `prune?` (below threshold with support — gate harder or
+  drop on that slice), or `insufficient` (n < 5 — buy more labels before ruling). This turns
+  "which strategies are working" from a hunch into a measurement; re-runs are free (judge disk
+  cache), so growing the corpus costs API only on genuinely new pairs.
+
 ### Notes
 - The `reads` *score channel* (folding reads into the gated pairwise scorer) was
   prototyped and **deferred**: without type resolution, package-constant reads

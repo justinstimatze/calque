@@ -147,7 +147,13 @@ func runDoctor(args []string) {
 	clusterMinMembers := fs.Int("cluster-min-members", 3, "smallest N-ary cluster to consider")
 	clusterMaxFanout := fs.Int("cluster-max-fanout", 8, "private-symbol fanout ceiling for a seam")
 	noCalib := fs.Bool("no-calibrated-weights", false, "ignore .calque/weights.json; score on the static prior")
+	ablate := fs.Bool("ablate", false, "Layer D: report the per-detector × language × variety label matrix from the global label store (cross-repo; ignores --repo)")
 	if err := fs.Parse(args); err != nil {
+		return
+	}
+
+	if *ablate {
+		runAblate()
 		return
 	}
 

@@ -194,6 +194,7 @@ func runJudge(repo string, cands []code.SigCandidate, twinsOnly bool) {
 		if v == nil {
 			continue // errored — already reported to stderr
 		}
+		recordLabel(repo, c, *v) // Layer D: tag this verdict with detector+lang+variety
 		switch v.Class {
 		case "drift":
 			drift++

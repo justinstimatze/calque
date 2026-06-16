@@ -137,6 +137,24 @@ labels; extend it with per-layer ablation.
   regression baseline: **reads-alone = 40% precision / 100% recall-on-real; + op-type gate =
   100% / 100%.** That single row justifies Layer A and is the template for every later row.
 
+**Make-them-pull-their-weight: report a MATRIX, not a scalar (per detector × language ×
+variety).** A detector that's dead weight overall may be the *only* one that fires on a
+particular language or drift variety — so ablation must break down by cell, not collapse to a
+single number. The harness emits, for each detector (reads / const-set / confession / op-type
+gate / name-stem / signature):
+- × **language** (Go / Python / TS / Rust — `FuncSig.File` extension), and
+- × **variety** — the drift class it caught (value-derivation / shared-concept / self-witnessed
+  / role-name / signature), keyed off the candidate `Kind` and the registry verdict.
+
+The decision rule sharpens accordingly: **a detector is cut only if it has zero marginal true
+positives in EVERY cell** (no language, no variety needs it); a detector that's the sole
+fire-er in even one cell stays, scoped to that cell. Early hypotheses the matrix will test:
+the **confession** axis is language-agnostic (comments are universal) and uniquely catches the
+*shared-concept / inverted-data-flow* variety reads misses; the **reads** axis is strong on
+effectful Rust/Go geometry and thin on pure-functional libraries; **const-set** earns its keep
+only where domain constants exist. The matrix turns "which detector for which codebase" from a
+guess into a lookup — and tells a new adopter which axes to even run.
+
 ---
 
 ## Build order

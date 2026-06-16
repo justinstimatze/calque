@@ -35,7 +35,7 @@ func ExtractGoFile(path, root string) []*FuncSig {
 				qual = rt + "." + name
 			}
 		}
-		bv := &goBody{strs: set{}, writes: set{}, retKeys: set{}, calls: set{}}
+		bv := &goBody{strs: set{}, writes: set{}, retKeys: set{}, calls: set{}, readsRaw: set{}, pureWrites: set{}, calleeSkip: map[ast.Expr]bool{}}
 		ast.Walk(bv, fd.Body)
 		start := fset.Position(fd.Pos()).Line
 		end := fset.Position(fd.End()).Line
@@ -43,6 +43,7 @@ func ExtractGoFile(path, root string) []*FuncSig {
 			File: rel, Qualname: qual, Name: name,
 			Line: start, NLines: end - start + 1,
 			Strings: bv.strs.slice(), Writes: bv.writes.slice(),
+			Reads:   bv.reads(),
 			RetKeys: bv.retKeys.slice(), Calls: bv.calls.slice(),
 			Delegates: bv.delegates,
 		}
@@ -174,7 +175,26 @@ func isExportedName(name string) bool {
 
 type goBody struct {
 	strs, writes, retKeys, calls set
-	delegates                    bool
+	// readsRaw is every dotted field-path seen in a value position; pureWrites is
+	// the LHS of plain `=` assignments. reads() returns readsRaw \ pureWrites (the
+	// derivation input footprint), mirroring writes on the read side.
+	readsRaw, pureWrites set
+	// calleeSkip holds selector nodes that are a call's callee (exec.LookPath), so
+	// the read pass skips them — a call name is not a field read.
+	calleeSkip map[ast.Expr]bool
+	delegates  bool
+}
+
+// reads returns the derivation read-set: field-paths read in a value position,
+// excluding those that appear only as a plain-`=` assignment target.
+func (b *goBody) reads() []string {
+	out := make([]string, 0, len(b.readsRaw))
+	for r := range b.readsRaw {
+		if !b.pureWrites.has(r) {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 func (b *goBody) Visit(n ast.Node) ast.Visitor {
@@ -193,15 +213,37 @@ func (b *goBody) Visit(n ast.Node) ast.Visitor {
 			b.calls[fn.Name] = struct{}{}
 		case *ast.SelectorExpr:
 			b.calls[fn.Sel.Name] = struct{}{}
+			// The callee selector itself (exec.LookPath, fmt.Errorf) is a CALL, not a
+			// field read — skip it for reads so the leaf name doesn't pollute the
+			// derivation footprint. Its receiver (fn.X) is a separate node still
+			// visited, so a domain-object method call (self.road.compute()) still
+			// contributes the receiver field "road".
+			b.calleeSkip[fn] = true
 			if p := attrPath(fn); p != "" {
 				if root, _, ok := strings.Cut(p, "."); ok && IsDelegationRoot(root) {
 					b.delegates = true
 				}
 			}
 		}
+	case *ast.SelectorExpr:
+		// Every field-path read in a value position. The plain-`=` LHS is removed
+		// later via pureWrites (reads()); compound-assign / inc-dec targets stay
+		// (read-modify-write). A call's own callee selector is skipped (calleeSkip)
+		// so stdlib/method call names don't masquerade as field reads.
+		if b.calleeSkip[t] {
+			break
+		}
+		if p := attrPath(t); p != "" {
+			b.readsRaw[p] = struct{}{}
+		}
 	case *ast.AssignStmt:
 		for _, lhs := range t.Lhs {
 			b.recordTarget(lhs)
+			if t.Tok == token.ASSIGN {
+				if p := attrPath(lhs); p != "" {
+					b.pureWrites[p] = struct{}{}
+				}
+			}
 		}
 	case *ast.IncDecStmt:
 		b.recordTarget(t.X)

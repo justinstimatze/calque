@@ -135,6 +135,7 @@ function extractFile(ts, filePath, root) {
       n_lines: nLines(node),
       strings: bv.sorted(bv.strings),
       writes: bv.sorted(bv.writes),
+      reads: bv.reads(),
       ret_keys: bv.sorted(bv.retKeys),
       calls: bv.sorted(bv.calls),
       delegates: bv.delegates,
@@ -191,12 +192,19 @@ class BodyVisitor {
     this.ts = ts;
     this.strings = new Set();
     this.writes = new Set();
+    // readsRaw is every field-path seen in a value position; pureWrites is the
+    // plain-`=` LHS. reads() returns readsRaw \ pureWrites (the derivation input
+    // footprint), mirroring writes on the read side (same dotted convention).
+    this.readsRaw = new Set();
+    this.pureWrites = new Set();
     this.retKeys = new Set();
     this.calls = new Set();
     this.delegates = false;
   }
 
   sorted(s) { return [...s].sort(); }
+
+  reads() { return this.sorted(new Set([...this.readsRaw].filter((r) => !this.pureWrites.has(r)))); }
 
   visitBody(body) {
     const ts = this.ts;
@@ -217,9 +225,22 @@ class BodyVisitor {
       if (v.length >= 4) this.strings.add(v);
     }
 
+    // Field-path reads (value positions). Plain-`=` LHS removed later via pureWrites;
+    // call-receiver paths (this.road.width) appear too — acceptable recall noise.
+    if (ts.isPropertyAccessExpression(node)) {
+      const p = accessPath(ts, node);
+      if (p) this.readsRaw.add(p);
+    }
+
     // Assignment write targets:  a.b.c = …   /   a.b[i] = …
     if (ts.isBinaryExpression(node) && isAssignmentOp(ts, node.operatorToken.kind)) {
       this.recordTarget(node.left);
+      // Only a plain `=` LHS is a pure write (excluded from reads); compound (+=)
+      // is a read-modify-write and stays in readsRaw.
+      if (node.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isPropertyAccessExpression(node.left)) {
+        const p = accessPath(ts, node.left);
+        if (p) this.pureWrites.add(p);
+      }
     }
 
     // return { … }  → ret_keys
@@ -372,6 +393,7 @@ function extractSymbolsFile(ts, filePath, root) {
         n_lines: end - start + 1,
         strings: uniqSorted(vals).slice(0, maxKeys),
         writes: [],
+        reads: [],
         ret_keys: uniqSorted(keys).slice(0, maxKeys),
         calls: [],
         delegates: false,

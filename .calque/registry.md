@@ -825,3 +825,56 @@ Incidental coincidences (suppressed):
 - cluster: internal/code/rust-extractor/src/main.rs::Body.record_target | internal/code/rust-extractor/src/main.rs::Body.visit_expr | internal/code/rust-extractor/src/main.rs::field_members
 - verdict: false-alarm
 - reviewed: 2026-06-14
+
+## Run — 2026-06-15 (reads axis — value-derivation drift detection)
+
+Adding the `reads` signal + the `SharedDerivationCandidates` pass + `propose-deriv` extends
+the four extractors (a `reads` collector mirroring `writes`) and adds one CLI command. The
+new self-scan clusters are the same intentional-parity / shared-helper shapes already
+recorded above, now with the new members joined:
+
+- The `propose-*` CLI-flag-parsing cluster gains `runProposeDeriv` (same boilerplate as
+  `runProposeDeep`/`runProposeCross`) → `contracted-twin-ok` (matches the existing verdict).
+- The Python extractor visitors share the `_record_target` / `_attr_path` HELPERS — that
+  shared seam IS the single authority (the opposite of drift); my `visit_Attribute` /
+  `visit_AugAssign` edits joined those clusters → `false-alarm`.
+- The Rust extractor's own `read_set`/`emit_fn`/`main` share Rust-stdlib idioms
+  (`.collect()`/`.cloned()`) → `false-alarm` (same as the prior main.rs clusters).
+
+CLI-command parity (pinned):
+
+- cluster: cmd/calque/calib.go::runMarkFire | cmd/calque/cardinality.go::runCardinality | cmd/calque/mcp.go::checkToolDefinition | cmd/calque/propose.go::runProposeRoles | cmd/calque/propose_cross.go::runProposeCross | cmd/calque/propose_deep.go::runProposeDeep | cmd/calque/propose_deriv.go::runProposeDeriv | cmd/calque/scan.go::addBoundaryFlags
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-15
+
+Shared-helper usage + stdlib-idiom coincidences (suppressed):
+
+- cluster: internal/code/rust-extractor/src/main.rs::Body.read_set | internal/code/rust-extractor/src/main.rs::emit_fn | internal/code/rust-extractor/src/main.rs::main
+- verdict: false-alarm
+- reviewed: 2026-06-15
+- cluster: internal/code/extract.py::_BodyVisitor._record_target | internal/code/extract.py::_BodyVisitor.visit_Assign | internal/code/extract.py::_BodyVisitor.visit_AugAssign
+- verdict: false-alarm
+- reviewed: 2026-06-15
+- cluster: internal/code/extract.py::_BodyVisitor._record_target | internal/code/extract.py::_BodyVisitor.visit_Attribute | internal/code/extract.py::_BodyVisitor.visit_AugAssign | internal/code/extract.py::_BodyVisitor.visit_Call
+- verdict: false-alarm
+- reviewed: 2026-06-15
+
+Pairwise findings from the new code (one was a REAL dual path I introduced and collapsed —
+`sharedKeysLabel`/`sharedReadsLabel` are now one `sharedSetLabel(as, bs set)`; the rest are
+intentional CLI parity or incidental coincidence):
+
+- pair: cmd/calque/propose_cross.go::runProposeCross | cmd/calque/propose_deriv.go::runProposeDeriv
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-15
+- pair: cmd/calque/propose_deep.go::runProposeDeep | cmd/calque/propose_deriv.go::runProposeDeriv
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-15
+- pair: internal/code/extract.py::_BodyVisitor.visit_Assign | internal/code/extract.py::_BodyVisitor.visit_AugAssign
+- verdict: false-alarm
+- reviewed: 2026-06-15
+- pair: internal/code/funcsig.go::toSet | internal/code/rust-extractor/src/main.rs::Body.read_set
+- verdict: false-alarm
+- reviewed: 2026-06-15
+- cluster: internal/code/score.go::scorePair | internal/code/sigcluster.go::KeySetCandidates | internal/code/sigcluster.go::NameStemCandidates | internal/code/sigcluster.go::SharedDerivationCandidates
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-15

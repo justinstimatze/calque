@@ -31,6 +31,7 @@ type FuncSig struct {
 	NLines    int      `json:"n_lines"`
 	Strings   []string `json:"strings"`   // emitted string literals (≥4 chars)
 	Writes    []string `json:"writes"`    // dotted attribute/field write targets
+	Reads     []string `json:"reads"`     // dotted attribute/field READ paths (derivation inputs)
 	RetKeys   []string `json:"ret_keys"`  // keys of a returned map/struct literal
 	Calls     []string `json:"calls"`     // called function/method leaf names
 	Delegates bool     `json:"delegates"` // body forwards to a wrapped impl
@@ -56,7 +57,7 @@ type FuncSig struct {
 	// empty for functions and tables, which the line-based readFuncSource handles.
 	Source string `json:"-"`
 
-	sStr, sWrite, sRet, sCall, stem set
+	sStr, sWrite, sRead, sRet, sCall, stem set
 }
 
 // Key uniquely identifies a function within a scan.
@@ -66,6 +67,7 @@ func (f *FuncSig) Key() string { return f.File + "::" + f.Qualname }
 func (f *FuncSig) Prepare() {
 	f.sStr = toSet(f.Strings)
 	f.sWrite = toSet(f.Writes)
+	f.sRead = toSet(f.Reads)
 	f.sRet = toSet(f.RetKeys)
 	f.sCall = toSet(f.Calls)
 	f.stem = stemTokens(f.Name)

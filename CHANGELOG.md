@@ -3,6 +3,43 @@
 All notable changes to calque. The version string itself comes from the git tag
 (`git describe`), not this file — see `Makefile` / `cmd/calque/main.go`.
 
+## [Unreleased]
+
+### Added
+- **Value-derivation drift detection — the `reads` axis.** calque now extracts a
+  `reads` signal per function (the dotted field-paths a function consumes to derive its
+  output), mirroring `writes` on the read side across all four substrates (Go, Python,
+  TypeScript, Rust). This closes the dominant real-world miss: *the same physical
+  quantity (a height, width, offset, centerline) derived independently in ≥2 places that
+  silently diverge* — "fix one path, the twin still has the bug." The invariant tying the
+  twins is the **input field-set they both read**, which prior signals
+  (`writes`/`calls`/`strings`/`ret_keys`) didn't capture. Grounded in a 2026 prior-art
+  sweep (`docs/divergent-implementation-detection.md`) and an adopter's dual-path ledger.
+- **`calque propose-deriv`** — a boundary-free, whole-repo generator that surfaces
+  functions deriving a value from the same input field-set **without routing through a
+  shared authority** (the `SharedDerivationCandidates` pass). Three precision gates: a
+  function must read ≥ `--min-reads` fields, must **not delegate** (a twin that forwards
+  to a shared authority is the fix, not the drift — `delegates` already encodes that), and
+  must actually derive a value (writes or returns something). High recall / low precision;
+  `--judge` runs the LLM oracle, or adjudicate by hand. Each candidate carries a
+  **collapse-vs-pin lean** (same package → collapse to one authority; cross-package → lean
+  to a differential test). This is the standing-audit / batch-cleanup surface the
+  boundary-gated `scan`/`check` can't be.
+- **Go reads precision: call-callee selectors are excluded.** A package- or method-call
+  callee (`exec.LookPath`, `fmt.Errorf`) is a call, not a field read, so it no longer
+  pollutes the derivation footprint — only genuine field reads (and a method call's
+  *receiver* field) count. (Python/TS have the same call-name-in-reads noise; refining
+  them is tracked in the precision backlog. Rust is already clean — its calls are
+  structurally distinct from field access.)
+
+### Notes
+- The `reads` *score channel* (folding reads into the gated pairwise scorer) was
+  prototyped and **deferred**: without type resolution, package-constant reads
+  (`flag.ContinueOnError`) are indistinguishable from field reads, so it added
+  low-score false pairs to the `--strict` gate on every Go repo. The dedicated
+  `propose-deriv` pass is immune (high jaccard floor + fanout cap), so `reads` ships
+  powering that pass only; the score channel can return later behind a calibration pass.
+
 ## [0.4.0] - 2026-06-15
 
 ### Changed

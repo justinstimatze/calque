@@ -42,6 +42,7 @@ struct Record {
     n_lines: usize,
     strings: Vec<String>,
     writes: Vec<String>,
+    reads: Vec<String>,
     ret_keys: Vec<String>,
     calls: Vec<String>,
     delegates: bool,
@@ -51,6 +52,11 @@ struct Record {
 struct Body {
     strings: BTreeSet<String>,
     writes: BTreeSet<String>,
+    // reads_raw is every field-path seen in a value position; pure_writes is the
+    // plain-`=` LHS. read_set() returns reads_raw \ pure_writes (the derivation
+    // input footprint), mirroring writes on the read side.
+    reads_raw: BTreeSet<String>,
+    pure_writes: BTreeSet<String>,
     ret_keys: BTreeSet<String>,
     calls: BTreeSet<String>,
     delegates: bool,
@@ -88,6 +94,16 @@ impl Body {
         }
     }
 
+    /// The derivation read-set: field-paths read in a value position, excluding
+    /// those that appear only as a plain-`=` assignment target.
+    fn read_set(&self) -> Vec<String> {
+        self.reads_raw
+            .iter()
+            .filter(|r| !self.pure_writes.contains(*r))
+            .cloned()
+            .collect()
+    }
+
     /// A returned struct literal contributes its field names as ret_keys (the
     /// analog of extract.py's returned-dict string keys).
     fn collect_struct_keys(&mut self, e: &Expr) {
@@ -111,7 +127,26 @@ impl<'ast> Visit<'ast> for Body {
                     }
                 }
             }
-            Expr::Assign(a) => self.record_target(&a.left),
+            Expr::Field(_) => {
+                // A field-path read in a value position. The plain-`=` LHS is
+                // removed later via pure_writes; compound-assign targets stay
+                // (read-modify-write). Recursion also captures path prefixes,
+                // matching the go/ast walk.
+                if let Some(m) = field_members(node) {
+                    if !m.is_empty() {
+                        self.reads_raw.insert(m.join("."));
+                    }
+                }
+            }
+            Expr::Assign(a) => {
+                self.record_target(&a.left);
+                // Only a plain `=` LHS is a pure write (excluded from reads).
+                if let Some(m) = field_members(&a.left) {
+                    if !m.is_empty() {
+                        self.pure_writes.insert(m.join("."));
+                    }
+                }
+            }
             Expr::Binary(b) if is_assign_op(&b.op) => self.record_target(&b.left),
             Expr::MethodCall(mc) => {
                 self.calls.insert(mc.method.to_string());
@@ -212,6 +247,7 @@ fn emit_fn(ident: &Ident, block: &Block, rel: &str, impl_type: Option<&str>, out
         name,
         line,
         n_lines,
+        reads: body.read_set(),
         strings: body.strings.into_iter().collect(),
         writes: body.writes.into_iter().collect(),
         ret_keys: body.ret_keys.into_iter().collect(),

@@ -41,6 +41,7 @@ class _BodyVisitor(ast.NodeVisitor):
     def __init__(self):
         self.strings = set()
         self.writes = set()
+        self.reads = set()
         self.ret_keys = set()
         self.calls = set()
         self.delegates = False
@@ -48,6 +49,17 @@ class _BodyVisitor(ast.NodeVisitor):
     def visit_Constant(self, node):
         if isinstance(node.value, str) and len(node.value.strip()) >= 4:
             self.strings.add(node.value.strip())
+        self.generic_visit(node)
+
+    def visit_Attribute(self, node):
+        # A field-path read in a value position. ctx distinguishes read (Load) from
+        # write (Store/Del), so the plain-`=` LHS is excluded for free — no
+        # subtraction needed. Method-receiver paths (self.road.width()) appear too;
+        # acceptable recall noise, symmetric across twins.
+        if isinstance(node.ctx, ast.Load):
+            p = _attr_path(node)
+            if p:
+                self.reads.add(p)
         self.generic_visit(node)
 
     def _record_target(self, tgt):
@@ -74,6 +86,12 @@ class _BodyVisitor(ast.NodeVisitor):
 
     def visit_AugAssign(self, node):
         self._record_target(node.target)
+        # `x += y` reads x too (read-modify-write); its target has Store ctx so
+        # visit_Attribute skips it — record it explicitly to match the read rule.
+        if isinstance(node.target, ast.Attribute):
+            p = _attr_path(node.target)
+            if p:
+                self.reads.add(p)
         self.generic_visit(node)
 
     def visit_Return(self, node):
@@ -124,6 +142,7 @@ def _extract(path, root):
                     "n_lines": end - child.lineno + 1,
                     "strings": sorted(bv.strings),
                     "writes": sorted(bv.writes),
+                    "reads": sorted(bv.reads),
                     "ret_keys": sorted(bv.ret_keys),
                     "calls": sorted(bv.calls),
                     "delegates": bv.delegates,
@@ -195,6 +214,7 @@ def _extract_symbols(path, root, min_keys=3, max_keys=400):
                 "n_lines": end - node.lineno + 1,
                 "strings": sorted(set(vals))[:max_keys],
                 "writes": [],
+                "reads": [],
                 "ret_keys": sorted(set(keys))[:max_keys],
                 "calls": [],
                 "delegates": False,

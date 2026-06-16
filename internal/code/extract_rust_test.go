@@ -77,6 +77,14 @@ fn log_event(_msg: &str) {}
 		t.Fatalf("Vehicle.apply_throttle not extracted; got %d sigs", len(sigs))
 	}
 	assertHas(t, "apply_throttle.writes", ap.Writes, []string{"speed", "gear"})
+	// reads = derivation inputs: `self.speed` (a `+=` target and a call arg) is read;
+	// `self.gear` is a plain-`=` LHS (pure write) and must NOT appear in reads.
+	assertHas(t, "apply_throttle.reads", ap.Reads, []string{"speed"})
+	for _, r := range ap.Reads {
+		if r == "gear" {
+			t.Errorf("apply_throttle.reads must exclude the plain-= LHS 'gear', got %v", ap.Reads)
+		}
+	}
 	assertHas(t, "apply_throttle.calls", ap.Calls, []string{"pick_gear", "log_event"})
 	assertHas(t, "apply_throttle.strings", ap.Strings, []string{"throttle applied to vehicle"})
 	if ap.Delegates {

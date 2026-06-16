@@ -310,7 +310,7 @@ func KeySetCandidates(entities []*FuncSig, minKeys int, minJaccard float64, maxF
 				seen[pk] = true
 				out = append(out, SigCandidate{
 					A: a, B: b, Kind: "key-set",
-					Sig:       fmt.Sprintf("keys≈%.2f {%s}", kj, sharedKeysLabel(a, b)),
+					Sig:       fmt.Sprintf("keys≈%.2f {%s}", kj, sharedSetLabel(a.sRet, b.sRet)),
 					GroupSize: 2, Jaccard: kj, CrossFile: a.File != b.File,
 				})
 			}
@@ -332,12 +332,14 @@ func KeySetCandidates(entities []*FuncSig, minKeys int, minJaccard float64, maxF
 	return out
 }
 
-// sharedKeysLabel renders up to 4 shared RetKeys (sorted) for a candidate's human
-// label — what the two entities have in common at a glance.
-func sharedKeysLabel(a, b *FuncSig) string {
+// sharedSetLabel renders up to 4 shared members (sorted) of two derived sets for a
+// candidate's human label — what the two entities have in common at a glance. One
+// authority for both the key-set (RetKeys) and read-set passes, so the label can't
+// drift between them.
+func sharedSetLabel(as, bs set) string {
 	var shared []string
-	for k := range a.sRet {
-		if b.sRet.has(k) {
+	for k := range as {
+		if bs.has(k) {
 			shared = append(shared, k)
 		}
 	}
@@ -346,4 +348,74 @@ func sharedKeysLabel(a, b *FuncSig) string {
 		shared = append(shared[:4], "…")
 	}
 	return strings.Join(shared, ",")
+}
+
+// SharedDerivationCandidates surfaces VALUE-DERIVATION DRIFT: functions that derive
+// an output from the SAME input field-set without routing through a shared authority
+// — the dual-path shape where one physical quantity (a height, width, offset) is
+// computed independently in >=2 places and silently diverges. Boundary-free
+// (whole-corpus), so it serves the standing-audit / batch-cleanup use case the gated
+// pairwise scorer cannot. High recall, low precision; the judge is the filter.
+//
+// Three load-bearing gates: a function qualifies only if it (a) reads >= minReads
+// field-paths, (b) does NOT delegate (a twin that forwards to a shared authority is
+// the FIX, not the drift), and (c) actually derives a value (writes something or
+// returns a record). The inverted read-path index keeps it near-linear; the fanout
+// cap drops ubiquitous fields (id/x/z) as JOIN paths only — jaccard is over the FULL
+// read-sets regardless. minReads filters thin (non-discriminating) functions.
+func SharedDerivationCandidates(sigs []*FuncSig, minReads int, minJaccard float64, maxFanout int) []SigCandidate {
+	idx := map[string][]*FuncSig{}
+	for _, f := range sigs {
+		if f.Kind != "" || f.Delegates || len(f.sRead) < minReads {
+			continue
+		}
+		if len(f.sWrite) == 0 && len(f.sRet) == 0 {
+			continue // must DERIVE a value, not merely read (a pure reader isn't a derivation)
+		}
+		for r := range f.sRead {
+			idx[r] = append(idx[r], f)
+		}
+	}
+	var out []SigCandidate
+	seen := map[string]bool{}
+	for _, fs := range idx {
+		if len(fs) < 2 || len(fs) > maxFanout {
+			continue // a field read by >maxFanout funcs is plumbing, not a derivation seam
+		}
+		for i := 0; i < len(fs); i++ {
+			for j := i + 1; j < len(fs); j++ {
+				a, b := fs[i], fs[j]
+				if a.Key() == b.Key() {
+					continue
+				}
+				pk := pairkey.Key(a.Key(), b.Key())
+				if seen[pk] {
+					continue
+				}
+				rj := jaccard(a.sRead, b.sRead)
+				if rj < minJaccard {
+					continue
+				}
+				seen[pk] = true
+				out = append(out, SigCandidate{
+					A: a, B: b, Kind: "read-set",
+					Sig:       fmt.Sprintf("reads≈%.2f {%s}", rj, sharedSetLabel(a.sRead, b.sRead)),
+					GroupSize: 2, Jaccard: rj, CrossFile: a.File != b.File,
+				})
+			}
+		}
+	}
+	// Strongest shared derivation first (highest read-set jaccard), then cross-file,
+	// then deterministic — mirrors KeySetCandidates (these never enter scorePair, so
+	// Jaccard ranks descending by match strength).
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Jaccard != out[j].Jaccard {
+			return out[i].Jaccard > out[j].Jaccard
+		}
+		if out[i].CrossFile != out[j].CrossFile {
+			return out[i].CrossFile
+		}
+		return pairkey.Key(out[i].A.Key(), out[i].B.Key()) < pairkey.Key(out[j].A.Key(), out[j].B.Key())
+	})
+	return out
 }

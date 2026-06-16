@@ -5,6 +5,46 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-16
+
+### Added
+- **Operation-type gate (Layer A) — suppress provably-dual derivation candidates.** A coarse
+  method-stereotype classifier (`construct`/`measure`/`forward-map`/`inverse-search`/`mutate`,
+  from the function's name-role stem + writes/ret shape) gates the derivation pass: two
+  functions that read the same fields but perform *opposed* operations — a forward map vs its
+  inverse search, or a constructor vs a measure — are not twins, so the pair is dropped. Only
+  ever **suppresses** a provably-dual pair (never asserts a twin) and never fires when either
+  side is unclassified, so a weak signal can't drop a real twin. Lineage: method stereotypes
+  (Dragan/Collard/Maletic), pointed at twin discrimination. Ablatable — Layer D decides if it
+  earns its keep.
+- **Layer D — `calque doctor --ablate` + a global label store.** A `--judge` run now appends
+  each verdict to a global label store (`~/.cache/calque/labels.jsonl`, colocated with the
+  judge cache — never written into the scanned repo, so adopters stay read-only), tagging it
+  with the detector that surfaced it, the language, and the op-type variety. `doctor --ablate`
+  rolls that store into a **per-detector × language × variety matrix** and asks the one
+  question that matters: *does each detector pull its weight?* A cell is `pulls-weight`
+  (precision ≥ 0.50 with support ≥ 5), `prune?` (below threshold with support — gate harder or
+  drop on that slice), or `insufficient` (n < 5 — buy more labels before ruling). This turns
+  "which strategies are working" from a hunch into a measurement; re-runs are free (judge disk
+  cache), so growing the corpus costs API only on genuinely new pairs.
+
+### Changed
+- **Signal taxonomy is table-driven.** The five scoring channels
+  (`strings`/`writes`/`name`/`calls`/`ret`) lived in four parallel places — the weight map,
+  `scorePair`'s similarity/availability maps, and `Reason`'s render switch — so a new channel
+  meant editing all four and `Reason` could silently skip one. They now derive from a single
+  `signals` table (`[]signalDef{key,weight,sim,avail,render}`): a channel is one entry.
+  Behavior-preserving — the static prior, the fixed (determinism-critical) summation order, and
+  every score are unchanged, with the calibration/score/blocking test suites passing untouched.
+  Resolves calque's longest-standing self-flagged drift (`Reason ≟ scorePair`).
+- **Verdict-class vocabulary named once.** The registry taxonomy
+  `drift`/`contracted-twin-ok`/`false-alarm` is now `llm.ClassDrift` / `ClassContractedTwinOK` /
+  `ClassFalseAlarm`, referenced at every comparison site instead of bare literals (calque's own
+  `doctor --ablate` self-scan flagged the duplication). The judge system prompt and on-disk
+  registry strings stay literal — they're the wire format the consts mirror.
+
+## [0.5.0] - 2026-06-15
+
 ### Added
 - **Value-derivation drift detection — the `reads` axis.** calque now extracts a
   `reads` signal per function (the dotted field-paths a function consumes to derive its
@@ -40,25 +80,9 @@ All notable changes to calque. The version string itself comes from the git tag
   names another function — so prose like "drift" or "engine" can't trigger it. A census plus
   directed pairs; cheap, deterministic, and complementary to the read-set recall (it catches
   the copy a maintainer already flagged in a comment but never wired a test to).
-- **Operation-type gate (Layer A) — suppress provably-dual derivation candidates.** A coarse
-  method-stereotype classifier (`construct`/`measure`/`forward-map`/`inverse-search`/`mutate`,
-  from the function's name-role stem + writes/ret shape) gates the derivation pass: two
-  functions that read the same fields but perform *opposed* operations — a forward map vs its
-  inverse search, or a constructor vs a measure — are not twins, so the pair is dropped. Only
-  ever **suppresses** a provably-dual pair (never asserts a twin) and never fires when either
-  side is unclassified, so a weak signal can't drop a real twin. Lineage: method stereotypes
-  (Dragan/Collard/Maletic), pointed at twin discrimination. Ablatable — Layer D decides if it
-  earns its keep.
-- **Layer D — `calque doctor --ablate` + a global label store.** A `--judge` run now appends
-  each verdict to a global label store (`~/.cache/calque/labels.jsonl`, colocated with the
-  judge cache — never written into the scanned repo, so adopters stay read-only), tagging it
-  with the detector that surfaced it, the language, and the op-type variety. `doctor --ablate`
-  rolls that store into a **per-detector × language × variety matrix** and asks the one
-  question that matters: *does each detector pull its weight?* A cell is `pulls-weight`
-  (precision ≥ 0.50 with support ≥ 5), `prune?` (below threshold with support — gate harder or
-  drop on that slice), or `insufficient` (n < 5 — buy more labels before ruling). This turns
-  "which strategies are working" from a hunch into a measurement; re-runs are free (judge disk
-  cache), so growing the corpus costs API only on genuinely new pairs.
+- **Windows portability for the Rust extractor.** The cached Rust helper binary is now
+  `.exe`-suffixed on Windows (`exeSuffix()` via `runtime.GOOS`), so `.rs` scans work on a
+  Windows box, and the `Makefile` gains `windows` (→ `bin/calque.exe`) and `cross` targets.
 
 ### Notes
 - The `reads` *score channel* (folding reads into the gated pairwise scorer) was

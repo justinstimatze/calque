@@ -396,10 +396,17 @@ func SharedDerivationCandidates(sigs []*FuncSig, minReads int, minJaccard float6
 				if rj < minJaccard {
 					continue
 				}
+				// Operation-type gate (Layer A): suppress provably-DUAL pairs — a
+				// forward map and its inverse search, or a constructor and a measure —
+				// which read the same fields but perform opposite operations (not twins).
+				oa, ob := opType(a), opType(b)
+				if opposedOps(oa, ob) {
+					continue
+				}
 				seen[pk] = true
 				out = append(out, SigCandidate{
 					A: a, B: b, Kind: "read-set",
-					Sig:       fmt.Sprintf("reads≈%.2f {%s}", rj, sharedSetLabel(a.sRead, b.sRead)),
+					Sig:       fmt.Sprintf("reads≈%.2f [%s/%s] {%s}", rj, opLabel(oa), opLabel(ob), sharedSetLabel(a.sRead, b.sRead)),
 					GroupSize: 2, Jaccard: rj, CrossFile: a.File != b.File,
 				})
 			}

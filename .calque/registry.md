@@ -878,3 +878,23 @@ intentional CLI parity or incidental coincidence):
 - cluster: internal/code/score.go::scorePair | internal/code/sigcluster.go::KeySetCandidates | internal/code/sigcluster.go::NameStemCandidates | internal/code/sigcluster.go::SharedDerivationCandidates
 - verdict: contracted-twin-ok
 - reviewed: 2026-06-15
+
+## Run — 2026-06-16 (confession axis + operation-type gate)
+
+The confession axis (`confess.go`) adds a line-reader; the op-type gate (`optype.go`)
+adds a classifier; the `confess` command joins the propose-* CLI family. New self-scan
+pairs are file-read boilerplate (no behavioral contract that can drift → false-alarm) or
+the CLI-command parity already recorded for the propose-* runners.
+
+- pair: cmd/calque/propose_deep.go::readFuncSource | internal/code/confess.go::readSourceLines
+- verdict: false-alarm
+- reviewed: 2026-06-16
+- pair: cmd/calque/propose_cross.go::readEntitySource | internal/code/confess.go::readSourceLines
+- verdict: false-alarm
+- reviewed: 2026-06-16
+- pair: internal/code/optype.go::opType | internal/code/optype.go::opposedOps
+- verdict: false-alarm
+- reviewed: 2026-06-16
+- cluster: cmd/calque/confess.go::runConfess | cmd/calque/propose_cross.go::runProposeCross | cmd/calque/propose_deep.go::runJudge | cmd/calque/propose_deep.go::runProposeDeep | cmd/calque/propose_deriv.go::runProposeDeriv
+- verdict: contracted-twin-ok
+- reviewed: 2026-06-16

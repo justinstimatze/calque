@@ -5,6 +5,8 @@ __pycache__/
 
 # Go
 /calque
+/calque.exe
+/bin/
 *.test
 
 # Secrets — the API key for the LLM judge (propose-deep --judge). NEVER commit.

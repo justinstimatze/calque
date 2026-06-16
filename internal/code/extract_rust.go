@@ -10,9 +10,20 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 )
+
+// exeSuffix is ".exe" on Windows, "" elsewhere — cargo names the built helper
+// calque-rust-extractor.exe on Windows, and exec.Command needs the suffix to find
+// and run it, so both the cache path and the cargo output path carry it.
+func exeSuffix() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
+	}
+	return ""
+}
 
 // rustExtractorFS carries the syn-based Rust extractor crate's SOURCE (not its
 // deps) inside the Go binary, so `go install …@latest` ships it. Unlike .py/.ts
@@ -80,7 +91,7 @@ func rustExtractorBin() (string, error) {
 			rustBinErr = fmt.Errorf("locating user cache dir for the Rust extractor: %w", err)
 			return
 		}
-		bin := filepath.Join(cache, "calque", "rust-extractor-"+hash[:16], "calque-rust-extractor")
+		bin := filepath.Join(cache, "calque", "rust-extractor-"+hash[:16], "calque-rust-extractor"+exeSuffix())
 		if _, err := os.Stat(bin); err == nil {
 			rustBinPath = bin
 			return
@@ -134,7 +145,7 @@ func buildRustExtractor(binPath string) error {
 		return fmt.Errorf("building Rust extractor: %v: %s", err, strings.TrimSpace(errb.String()))
 	}
 
-	built := filepath.Join(tmp, "target", "release", "calque-rust-extractor")
+	built := filepath.Join(tmp, "target", "release", "calque-rust-extractor"+exeSuffix())
 	if err := os.MkdirAll(filepath.Dir(binPath), 0o755); err != nil {
 		return err
 	}

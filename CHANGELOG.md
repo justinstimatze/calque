@@ -5,6 +5,16 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+### Changed
+- **`propose-deriv` excludes test files by default.** Two test cases intentionally
+  exercise the same code and share a read-set (often a reused mock/setup fixture), so they
+  cluster as false "twins" — the `doctor --ablate` matrix surfaced a degenerate Python
+  test-vs-test cluster that dragged read-set precision to 0.32. The pass now skips the four
+  substrates' test conventions by default (`*_test.go`; `test_*.py`/`*_test.py`;
+  `*.test.*`/`*.spec.*`; and `tests/`/`test/`/`__tests__/` dirs); `--include-tests` opts back
+  in. On a large Go+Python corpus this cut candidates ~55% (215 → 97) and lifted read-set
+  precision from 0.32 to 0.81.
+
 ## [0.6.0] - 2026-06-16
 
 ### Added

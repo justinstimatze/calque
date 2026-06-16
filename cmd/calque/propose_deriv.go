@@ -24,10 +24,25 @@ import (
 	"github.com/justinstimatze/calque/internal/registry"
 )
 
+// testGlobs are excluded from the derivation pass by default. Two test cases
+// INTENTIONALLY exercise the same code, so they share a read-set (often a mock/
+// setup fixture the whole suite reuses) and cluster hard as "twins" — pure noise
+// for drift detection, and a precision sink the ablation matrix surfaced (a
+// degenerate test-vs-test cluster dragged read-set precision down). Opt back in
+// with --include-tests. Covers the four substrates' file-level test conventions;
+// inline test modules (Rust `#[cfg(test)]`) are a separate, deeper exclusion.
+var testGlobs = []string{
+	"**/*_test.go",                 // Go
+	"**/test_*.py", "**/*_test.py", // Python (pytest / unittest)
+	"**/*.test.*", "**/*.spec.*", // JS/TS/JSX (jest / vitest / jasmine)
+	"**/tests/**", "**/test/**", "**/__tests__/**", // dir conventions (py & rust integration, ts)
+}
+
 func runProposeDeriv(args []string) {
 	fs := flag.NewFlagSet("propose-deriv", flag.ContinueOnError)
 	repo := fs.String("repo", ".", "repo root to scan")
-	exclude := fs.String("exclude", "", "comma-separated glob(s) to skip entirely (e.g. node_modules/**,dist/**)")
+	exclude := fs.String("exclude", "", "comma-separated glob(s) to skip entirely (e.g. node_modules/**,dist/**); test files are excluded by default")
+	includeTests := fs.Bool("include-tests", false, "scan test files too (excluded by default — twin test cases share mock/setup reads and cluster as false twins)")
 	regPath := fs.String("registry", ".calque/registry.md", "registry file (dedup vs already-adjudicated pairs)")
 	minReads := fs.Int("min-reads", 3, "ignore functions reading fewer than this many field-paths (thin = non-discriminating)")
 	readJac := fs.Float64("read-jaccard", 0.5, "min read-set jaccard to pair (1.0 = identical input field-set)")
@@ -39,7 +54,11 @@ func runProposeDeriv(args []string) {
 		return
 	}
 
-	sigs, st, err := code.Extract(*repo, splitCSV(*exclude))
+	excl := splitCSV(*exclude)
+	if !*includeTests {
+		excl = append(excl, testGlobs...)
+	}
+	sigs, st, err := code.Extract(*repo, excl)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque propose-deriv: walking %s: %v\n", *repo, err)
 		os.Exit(1)
@@ -65,8 +84,12 @@ func runProposeDeriv(args []string) {
 
 	fmt.Println("# calque — value-derivation drift (shared input field-set, no shared authority)")
 	fmt.Println()
-	fmt.Printf("scanned %d func(s) in %d file(s); %d fresh candidate(s)  [min-reads=%d read-jaccard=%.2f max-fanout=%d]\n",
-		st.Funcs, st.Files, len(fresh), *minReads, *readJac, *maxFanout)
+	testNote := " · tests excluded (--include-tests to scan them)"
+	if *includeTests {
+		testNote = " · tests included"
+	}
+	fmt.Printf("scanned %d func(s) in %d file(s); %d fresh candidate(s)  [min-reads=%d read-jaccard=%.2f max-fanout=%d]%s\n",
+		st.Funcs, st.Files, len(fresh), *minReads, *readJac, *maxFanout, testNote)
 	if len(fresh) == 0 {
 		fmt.Println("\nno candidates. (Looking for functions deriving a value from the same field-set without delegating to one authority — loosen --read-jaccard / --min-reads to widen.)")
 		return

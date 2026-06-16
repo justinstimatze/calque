@@ -147,6 +147,14 @@ var commonConsts = set{
 	"MAX_SAFE_INTEGER": {}, "MIN_SAFE_INTEGER": {}, "MIN_POSITIVE": {},
 	// Generic enum/flag conventions (not domain vocabulary)
 	"ALL": {}, "NONE": {}, "DEFAULT": {}, "EMPTY": {},
+	// Go std: os open-flags + time layout names + format/encoding tags surface as
+	// SCREAMING references but are library plumbing, not domain vocabulary (recon: they
+	// clustered file-opening / timestamp / serialization helpers across unrelated repos).
+	"O_RDONLY": {}, "O_WRONLY": {}, "O_RDWR": {}, "O_APPEND": {}, "O_CREATE": {},
+	"O_EXCL": {}, "O_SYNC": {}, "O_TRUNC": {},
+	"RFC3339": {}, "RFC3339NANO": {}, "RFC1123": {}, "RFC822": {}, "ANSIC": {},
+	// JS/TS global objects that match SCREAMING_SNAKE when referenced (JSON.parse, …)
+	"JSON": {}, "YAML": {}, "TOML": {}, "CSV": {}, "XML": {}, "HTML": {}, "UTF8": {},
 }
 
 // commonIdents are language builtins, predeclared types, and ubiquitous helpers

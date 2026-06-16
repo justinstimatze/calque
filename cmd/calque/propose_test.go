@@ -136,3 +136,19 @@ func TestComputeProposals_DedupDeclaredRole(t *testing.T) {
 		t.Fatalf("a cluster already covered by a declared role must not be re-proposed, got %d", len(props))
 	}
 }
+
+// TestPredChannel pins the seam-channel extraction that becomes a touchpoint label's
+// variety — so the ablation matrix can separate touchpoint·consts from touchpoint·calls.
+func TestPredChannel(t *testing.T) {
+	cases := map[string]string{
+		"consts:STRAIGHT_EPS": "consts",
+		"calls:_seam":         "calls",
+		"emits:ready":         "emits",
+		"bare":                "bare",
+	}
+	for pred, want := range cases {
+		if got := predChannel(pred); got != want {
+			t.Errorf("predChannel(%q) = %q, want %q", pred, got, want)
+		}
+	}
+}

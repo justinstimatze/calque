@@ -6,6 +6,16 @@ All notable changes to calque. The version string itself comes from the git tag
 ## [Unreleased]
 
 ### Added
+- **`propose-roles --judge` — Layer D measurement for the touchpoint detector.** The N-ary
+  cluster pass could surface clusters but had no way to *grade* them, so the touchpoint
+  detector (and the const-set axis on it) was invisible to `doctor --ablate`. `--judge` now
+  adjudicates each cluster with the oracle on its two representative members and records a
+  Layer D label tagged `detector=touchpoint`, `variety=<seam channel>` — so the matrix gets
+  distinct `touchpoint·consts` vs `touchpoint·calls` cells. `--channel calls|consts|emits`
+  focuses a run on one slice; `--twins-only` prints only confirmed twins. Test files are now
+  excluded by default (mirroring `propose-deriv`) — test-vs-impl pairs share helper seams and
+  cluster as false twins, polluting the corpus. `commonConsts` grew to stop-list Go/JS std
+  constants (`O_CREATE`, `RFC3339`, `JSON`) that masquerade as domain vocabulary.
 - **Const-set recall axis — cluster functions sharing a domain constant (the "same
   computation, different access pattern" twin).** The N-ary touchpoint pass gains a fourth
   seam channel: referenced SCREAMING_SNAKE domain constants (`V_BELOW`, `STRAIGHT_EPS`). Two

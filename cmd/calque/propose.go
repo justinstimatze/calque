@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/justinstimatze/calque/internal/code"
+	"github.com/justinstimatze/calque/internal/llm"
 	"github.com/justinstimatze/calque/internal/pairkey"
 	"github.com/justinstimatze/calque/internal/registry"
 )
@@ -34,17 +36,25 @@ type proposal struct {
 func runProposeRoles(args []string) {
 	fs := flag.NewFlagSet("propose-roles", flag.ContinueOnError)
 	repo := fs.String("repo", ".", "repo root to scan")
-	exclude := fs.String("exclude", "", "comma-separated glob(s) to skip entirely (e.g. legacy/**,vendor/**)")
+	exclude := fs.String("exclude", "", "comma-separated glob(s) to skip entirely (e.g. legacy/**,vendor/**); test files are excluded by default")
+	includeTests := fs.Bool("include-tests", false, "cluster test files too (excluded by default — test-vs-impl pairs share helper seams and cluster as false twins, polluting the Layer D corpus)")
 	regPath := fs.String("registry", ".calque/registry.md", "registry file (dedup vs declared roles / adjudicated clusters)")
 	minLines := fs.Int("min-lines", 4, "ignore functions shorter than this many lines")
 	minMembers := fs.Int("cluster-min-members", 3, "smallest cluster to propose a role from (2 includes diluted pairs)")
 	maxFanout := fs.Int("cluster-max-fanout", 8, "a private symbol touched by more than this is plumbing, not a seam")
 	top := fs.Int("top", 30, "max candidate roles to propose")
+	judge := fs.Bool("judge", false, "adjudicate each cluster with the LLM oracle (needs ANTHROPIC_API_KEY; records Layer D labels tagged detector=touchpoint, variety=seam channel)")
+	twinsOnly := fs.Bool("twins-only", false, "with --judge, print only clusters the oracle confirms as twins")
+	channel := fs.String("channel", "", "judge/print only clusters keyed on this seam channel (calls|consts|emits) — focuses a Layer D run on one detector slice")
 	if err := fs.Parse(args); err != nil {
 		return
 	}
 
-	sigs, st, err := code.Extract(*repo, splitCSV(*exclude))
+	excl := splitCSV(*exclude)
+	if !*includeTests {
+		excl = append(excl, testGlobs...) // test-vs-impl pairs share helper seams → false clusters
+	}
+	sigs, st, err := code.Extract(*repo, excl)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque propose-roles: walking %s: %v\n", *repo, err)
 		os.Exit(1)
@@ -58,6 +68,19 @@ func runProposeRoles(args []string) {
 	copts := clusterOptsFrom(*minLines, *minMembers, *maxFanout, *top)
 	clusters := code.ClusterByTouchpoint(sigs, copts)
 	props := computeProposals(sigs, clusters, reg)
+	if *channel != "" {
+		var kept []proposal
+		for _, p := range props {
+			if predChannel(p.Predicate) == *channel {
+				kept = append(kept, p)
+			}
+		}
+		props = kept
+	}
+	if *judge {
+		judgeClusters(*repo, props, *twinsOnly)
+		return
+	}
 	fmt.Print(renderProposals(props, st, *regPath))
 }
 
@@ -281,4 +304,80 @@ func kebab(s string) string {
 		out = strings.ReplaceAll(out, "--", "-")
 	}
 	return strings.Trim(out, "-")
+}
+
+// predChannel returns the kind of a synthesized predicate term ("calls"/"consts"/
+// "emits") — the seam channel the cluster was keyed on. It becomes the Layer D
+// label's variety, so the ablation matrix separates the const-set slice
+// (touchpoint·consts) from the call-seam slice (touchpoint·calls).
+func predChannel(pred string) string {
+	if k, _, ok := strings.Cut(pred, ":"); ok {
+		return k
+	}
+	return pred
+}
+
+// judgeClusters adjudicates each proposed cluster with the LLM oracle and records a
+// Layer D label per cluster — the touchpoint detector's precision half (the matrix
+// can't measure a detector with no judged labels, so the const-set axis was invisible
+// until this path existed). The cluster is N-ary but the label store + judge are
+// pair-shaped, so each cluster is judged on its two representative members (the
+// shared seam links all members; two of them exercise it) and the label is tagged
+// detector=touchpoint, variety=<seam channel>. Disk-cached → re-runs are free.
+// Generator semantics preserved: stdout only, no registry writes, no exit code.
+func judgeClusters(repo string, props []proposal, twinsOnly bool) {
+	j, err := llm.NewJudge()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "calque propose-roles --judge: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("# calque — judged touchpoint clusters (Layer D labels: detector=touchpoint)\n\n")
+	fmt.Printf("oracle: judging %d cluster(s) with %s (cached results are free)...\n\n", len(props), j.Model())
+
+	var drift, contracted, falseAlarm, failed, shown int
+	for _, p := range props {
+		c := p.Cluster
+		if len(c.Members) < 2 {
+			continue
+		}
+		a, b := c.Members[0], c.Members[1] // two representatives of the shared-seam group
+		channel := predChannel(p.Predicate)
+		in := llm.PairInput{
+			AKey:    a.File + "::" + a.Qualname,
+			ASource: readFuncSource(repo, a, 200),
+			BKey:    b.File + "::" + b.Qualname,
+			BSource: readFuncSource(repo, b, 200),
+			Sig:     "[" + channel + "] " + c.Reason(),
+		}
+		v, err := j.JudgePair(context.Background(), in)
+		if err != nil {
+			failed++
+			fmt.Fprintf(os.Stderr, "  judge %s ≟ %s: %v\n", a.Qualname, b.Qualname, err)
+			continue
+		}
+		// Tag the label with detector=touchpoint and variety=seam channel via the Sig.
+		recordLabel(repo, code.SigCandidate{A: a, B: b, Kind: "touchpoint", Sig: "[" + channel + "]"}, v)
+		switch v.Class {
+		case llm.ClassDrift:
+			drift++
+		case llm.ClassContractedTwinOK:
+			contracted++
+		default:
+			falseAlarm++
+		}
+		if twinsOnly && !v.IsTwin() {
+			continue
+		}
+		shown++
+		fmt.Printf("## %d. [%s] %s   (%d members)\n", shown, channel, p.Name, len(p.Baseline))
+		fmt.Printf("- predicate: %s\n", p.Predicate)
+		fmt.Printf("- members: %s\n", strings.Join(p.Baseline, ", "))
+		fmt.Printf("  oracle: %s (%s) — %s\n", v.Class, v.Confidence, v.Reason)
+	}
+	fmt.Printf("\noracle: %d drift · %d contracted-twin-ok · %d false-alarm (of %d judged)",
+		drift, contracted, falseAlarm, len(props)-failed)
+	if failed > 0 {
+		fmt.Printf(" · %d errored", failed)
+	}
+	fmt.Println()
 }

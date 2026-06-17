@@ -77,7 +77,7 @@ recall (cheap, high-recall scan)  →  registry (adjudicated memory)  →  check
 - **calibrate** (`doctor`) rolls up whether the ranker actually discriminates
   real drift from false alarms.
 
-Only the recall extractor is per-substrate. Two axes ship today:
+Only the recall extractor is axis-specific. Two axes ship today:
 
 | axis | canonical unit | what it indexes |
 |------|----------------|-----------------|

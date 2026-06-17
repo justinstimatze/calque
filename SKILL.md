@@ -127,7 +127,7 @@ above, recording verdicts in the registry.
 - **Recall over precision.** Expect false alarms; that's the design. Pairs that
   only share generic callees are gated out, but name+surface coincidences slip
   through — your job is the filter.
-- **Four substrates today.** `scan`/`check` parse Go natively (`go/ast`), Python
+- **Four languages today.** `scan`/`check` parse Go natively (`go/ast`), Python
   via an embedded `python3` extractor, TypeScript/TSX via `node` + the TypeScript
   compiler, and Rust via an embedded `syn` helper (built once and cached on the
   first `.rs` scan). Each language needs its own toolchain present for that

@@ -91,6 +91,27 @@ calque vocab-check --seed-cmd '<proj seeder>'  # merge a project's own slug list
 calque synonym-report                        # embedding near-synonyms (needs local ollama)
 ```
 
+## Boundary-free audit (no `--left/--right`)
+
+Standing whole-repo generators for the drift the boundary scan can't frame. All
+print to stdout, write nothing, and never exit non-zero — safe to run on any repo:
+
+```
+calque propose-deriv --repo <path>   # value-derivation twins: the same quantity derived
+                                     # two ways from the same input field-set, no shared
+                                     # authority ("fix one path, the twin still has the bug")
+calque confess       --repo <path>   # functions whose own comment confesses a twin
+                                     # ("mirrors X", "keep in sync with Y", "copy of")
+calque propose-roles --repo <path>   # N-ary seam clusters → paste-ready cardinality roles
+calque propose-deep  --repo <path>   # Type-4 twins sharing a rare type signature, no tokens
+calque propose-cross --repo <path>   # non-function entities (tables, schemas, corpus shapes)
+```
+
+Add `--judge` to any of them to run the LLM equivalence oracle as the precision
+half automatically (needs `ANTHROPIC_API_KEY`); `--twins-only` prints only the
+confirmed twins. Without `--judge` you adjudicate by hand exactly as in the loop
+above, recording verdicts in the registry.
+
 ## Keeping it honest
 
 - `calque hook install` writes a git pre-commit hook running `check` (warn-only
@@ -106,9 +127,12 @@ calque synonym-report                        # embedding near-synonyms (needs lo
 - **Recall over precision.** Expect false alarms; that's the design. Pairs that
   only share generic callees are gated out, but name+surface coincidences slip
   through — your job is the filter.
-- **Go + Python today; TS later.** `scan`/`check` parse Go natively (`go/ast`)
-  and Python via an embedded `python3` extractor (needs `python3` on PATH). The
-  signals are language-agnostic in concept; only the extractor is per-language.
+- **Four substrates today.** `scan`/`check` parse Go natively (`go/ast`), Python
+  via an embedded `python3` extractor, TypeScript/TSX via `node` + the TypeScript
+  compiler, and Rust via an embedded `syn` helper (built once and cached on the
+  first `.rs` scan). Each language needs its own toolchain present for that
+  language's targets; the signals are language-agnostic in concept, only the
+  extractor is per-language.
 - **Tune the boundary, not the threshold.** A well-chosen `--left/--right` (two
   things that genuinely should agree) gives far better signal than scanning a
   whole repo against itself.

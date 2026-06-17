@@ -4,11 +4,12 @@
 silently diverged — so you can collapse the copies back to a single source.**
 Recall first; you (or an LLM) adjudicate; a registry remembers.
 
-> Status — early, in progress. Today it's a dual-path *code* nose (proven on a real
-> Python engine; promising-but-unconfirmed on other codebases) plus a prose
-> vocab-drift checker, on a shared registry → check → calibrate spine. The broader
-> multi-axis vision in `docs/DESIGN_NOTES.md` §16–17 is roadmap, not built yet. This
-> is shared as a work in progress, not a finished tool.
+> Status — early, in progress. Today it's a multi-signal *code* nose (effect-footprint
+> pairs, N-ary seam clusters, value-derivation reads, and drift-confessing comments —
+> validated on real Python, Go, and Rust codebases) plus a prose vocab-drift checker,
+> on a shared registry → check → calibrate spine. The broader multi-axis vision in
+> `docs/DESIGN_NOTES.md` §16–17 is roadmap, not built yet. This is shared as a work in
+> progress, not a finished tool.
 
 A *calque* is a structural copy carried across surfaces (English "skyscraper" →
 French "gratte-ciel": same structure, different words). This tool hunts the
@@ -80,7 +81,7 @@ Only the recall extractor is per-substrate. Two axes ship today:
 
 | axis | canonical unit | what it indexes |
 |------|----------------|-----------------|
-| **code** | a contract two paths implement | behavior-invariant signals (emitted strings, state writes, returned keys, callees, name-stem) + N-ary private-seam clusters |
+| **code** | a contract / value two paths implement | behavior-invariant signals (emitted strings, state writes, returned keys, callees, name-stem, **input field-sets read**) + N-ary private-seam clusters (call/string/write/domain-constant) + drift-confessing comments |
 | **prose** | a term/compound | hyphenated-compound frequency vs an allow-list; embedding near-synonyms |
 
 ## Install
@@ -112,6 +113,18 @@ calque vocab-check                        # gate: compounds not in .calque/vocab
 calque vocab-check --bootstrap            # seed the allow-list from the current tail
 calque vocab-check --seed-cmd '<proj seeder>'   # merge a project's own slug list
 ```
+
+**Standing audit (boundary-free)** — whole-repo generators that need no `--left/--right`:
+
+```bash
+calque propose-deriv --repo .          # value-derivation twins (same field-set, no shared authority)
+calque confess       --repo .          # functions whose own comments confess a twin
+calque propose-roles --repo .          # N-ary seam clusters → paste-ready cardinality roles
+calque propose-deriv --repo . --judge  # add --judge to adjudicate with the LLM oracle (needs ANTHROPIC_API_KEY)
+```
+
+These are generators — they print to stdout, never write or gate — so they're safe
+to run against any repo.
 
 `scan`/`check` work on Go (native `go/ast`), Python (embedded `python3`),
 TypeScript/TSX (embedded `node` + the TypeScript compiler), and Rust (an embedded
@@ -184,15 +197,30 @@ calque migrate-registry --in .calque/registry.md --write   # .bak backup first
 ## Status
 
 The spine is complete and dogfooded (calque scans its own source and stays
-clean) — code + prose axes, registry gate, git/MCP hooks, calibration. The newest
-axis is **role-cardinality** (`calque cardinality`): declare "this role should have
-one implementation; flag whenever it has two or more" (the multi-path case, N
-unbounded) and gate it — catching the dual paths that pairwise similarity can't,
-because counting needs no resemblance (see `docs/DESIGN_NOTES.md` §18). The MVP ships
-the explicit-declaration form (declare a predicate + expected count in the registry,
-`--strict` to gate); cluster-proposed candidates and a boundary-blind scan are the
-next slices. Further axes (config/env, catalog, narrative) are roadmapped in
-`docs/DESIGN_NOTES.md` §16–18. Apache-2.0; the prose axis, calibration, and
+clean) — code + prose axes, registry gate, git/MCP hooks, calibration. The code
+axis now carries several recall extractors beyond the original pairwise
+effect-footprint scorer:
+
+- **value-derivation (`reads`)** — the same quantity derived independently in ≥2
+  places that silently diverge ("fix one path, the twin still has the bug"), keyed
+  on the input field-set both sides read. The boundary-free `propose-deriv` is the
+  standing-audit surface.
+- **confession (comments)** — `calque confess` surfaces a function's own
+  self-witnessing comment ("mirrors X", "keep in sync with Y") that names another
+  function — the twin a maintainer already flagged but never pinned with a test.
+- **N-ary touchpoint clusters** — functions sharing a rare private seam (a call,
+  string, write, or domain constant) that pairwise scoring dilutes; `propose-roles`
+  turns a cluster into a paste-ready cardinality role.
+- **role-cardinality** (`calque cardinality`) — declare "this role should have one
+  implementation; flag whenever it has two or more" and gate it; counting needs no
+  resemblance (`docs/DESIGN_NOTES.md` §18).
+
+A `--judge` flag on the generators (`propose-deriv`/`confess`/`propose-roles`/
+`propose-deep`/`propose-cross`) runs an LLM equivalence oracle as the precision half,
+and `calque doctor --ablate` rolls every judged verdict into a per-detector × language
+× variety matrix so each detector has to earn its keep. Further axes (config/env,
+catalog, narrative) are roadmapped in `docs/DESIGN_NOTES.md` §16–18. Apache-2.0; the
+prose axis, calibration, and
 hook are consolidated from the sibling project `cupel` (MIT, attribution
 preserved) — which now consumes calque back: cupel retired its own vocabulary
 tooling and runs `calque vocab-check` as its pre-commit prose gate.

@@ -6,6 +6,21 @@ All notable changes to calque. The version string itself comes from the git tag
 ## [Unreleased]
 
 ### Added
+- **Asymmetric test-file awareness across every code pass — drop test↔test, keep test↔prod.**
+  Test code is now a first-class signal (`FuncSig.Test`), set by file convention (`IsTestPath`:
+  `*_test.go`, `tests.rs`, `test_*.py`, `*.test.ts`, a `tests/` dir, …) AND — the case no path
+  rule can see — by the Rust extractor flagging `#[cfg(test)]` / `#[test]` functions that live
+  inside an otherwise-production `.rs` file. Every recall pass (`scan`/`check` pairs + N-ary
+  clusters, `propose-deriv`, `propose-roles`, `confess`) now gates a pair/cluster when *both*
+  sides are test code — two test cases sharing a setup/mock fixture are the dominant false twin
+  — while always keeping a **test↔production** pair: a test that reimplements production
+  construction or recomputes a production quantity is real drift, not noise. `--include-tests`
+  opts the test↔test pairs back in on each command. This replaces the old whole-file glob
+  exclusion in `propose-deriv`/`propose-roles`/`confess` (one shared `testGlobs` list) with a
+  single definition of "what is a test" (`IsTestPath`) consulted everywhere, so calque can't
+  drift on its own test-handling — and, unlike the glob, it recovers the test↔prod twins the
+  blunt exclusion silently dropped. Dogfood on calque's own (test-heavy) corpus: `check` new
+  pairs fell 200 → 38 and new clusters 21 → 14, with the suppressed 162 all test↔test.
 - **Const seam channel now gated on project-DECLARATION, not a hand-maintained stop-list.**
   A referenced SCREAMING_SNAKE constant only forms a cluster if the corpus actually *declares*
   it — the const analog of the project-defined gate already on the call channel. Std/library

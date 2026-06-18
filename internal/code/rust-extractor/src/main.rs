@@ -23,7 +23,7 @@ use std::collections::BTreeSet;
 use std::io::{self, Read};
 use std::path::Path;
 use syn::visit::{self, Visit};
-use syn::{BinOp, Block, Expr, ImplItem, Item, Lit, Member, Stmt, Type};
+use syn::{Attribute, BinOp, Block, Expr, ImplItem, Item, Lit, Member, Meta, Stmt, Type};
 
 /// Field names marking a method as forwarding to a wrapped impl. Mirrors the Go
 /// side's delegationRoots (funcsig.go) + extract.py's _DELEGATION_ROOTS, plus the
@@ -53,6 +53,11 @@ struct Record {
     // call seam to resolve to a project def.
     decl_consts: Vec<String>,
     delegates: bool,
+    // test: this function is TEST code — it carries a #[test]-family attribute or
+    // lives inside a #[cfg(test)] module (the dominant Rust unit-test shape, where
+    // tests sit in the SAME .rs file as the production code they exercise, so no
+    // file-path rule can see them). The Go side gates test↔test pairs on this.
+    test: bool,
 }
 
 #[derive(Default)]
@@ -258,6 +263,7 @@ fn emit_fn(
     rel: &str,
     impl_type: Option<&str>,
     decl_consts: &[String],
+    is_test: bool,
     out: &mut Vec<Record>,
 ) {
     let name = ident.to_string();
@@ -290,7 +296,29 @@ fn emit_fn(
         consts: body.consts.into_iter().collect(),
         decl_consts: decl_consts.to_vec(),
         delegates: body.delegates,
+        test: is_test,
     });
+}
+
+/// has_cfg_test reports whether any attribute is `#[cfg(test)]` (or a cfg whose
+/// predicate mentions `test`, e.g. `#[cfg(all(test, …))]`) — the marker on the
+/// conventional `mod tests` unit-test module. Token-stream match keeps it robust to
+/// nested cfg predicates without re-implementing cfg parsing.
+fn has_cfg_test(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|a| {
+        a.path().is_ident("cfg")
+            && matches!(&a.meta, Meta::List(l) if l.tokens.to_string().contains("test"))
+    })
+}
+
+/// has_test_attr reports whether any attribute is a #[test]-family marker on the
+/// function itself — bare `#[test]`, `#[tokio::test]`, `#[async_std::test]`, etc.
+/// (last path segment == `test`). Backstops a #[test] fn not wrapped in a
+/// #[cfg(test)] module.
+fn has_test_attr(attrs: &[Attribute]) -> bool {
+    attrs
+        .iter()
+        .any(|a| a.path().segments.last().map_or(false, |s| s.ident == "test"))
 }
 
 // collect_decl_consts gathers file-scope SCREAMING_SNAKE const/static declaration
@@ -321,21 +349,27 @@ fn collect_decl_consts(items: &[Item], out: &mut BTreeSet<String>) {
     }
 }
 
-fn walk_items(items: &[Item], rel: &str, decl_consts: &[String], out: &mut Vec<Record>) {
+fn walk_items(items: &[Item], rel: &str, decl_consts: &[String], in_test: bool, out: &mut Vec<Record>) {
     for item in items {
         match item {
-            Item::Fn(f) => emit_fn(&f.sig.ident, &f.block, rel, None, decl_consts, out),
+            Item::Fn(f) => {
+                let t = in_test || has_test_attr(&f.attrs);
+                emit_fn(&f.sig.ident, &f.block, rel, None, decl_consts, t, out)
+            }
             Item::Impl(im) => {
                 let ty = type_name(&im.self_ty);
+                let impl_test = in_test || has_cfg_test(&im.attrs);
                 for ii in &im.items {
                     if let ImplItem::Fn(m) = ii {
-                        emit_fn(&m.sig.ident, &m.block, rel, ty.as_deref(), decl_consts, out);
+                        let t = impl_test || has_test_attr(&m.attrs);
+                        emit_fn(&m.sig.ident, &m.block, rel, ty.as_deref(), decl_consts, t, out);
                     }
                 }
             }
             Item::Mod(m) => {
                 if let Some((_, items)) = &m.content {
-                    walk_items(items, rel, decl_consts, out);
+                    // A #[cfg(test)] module marks everything beneath it as test code.
+                    walk_items(items, rel, decl_consts, in_test || has_cfg_test(&m.attrs), out);
                 }
             }
             // Trait default methods are out of scope for v1.
@@ -372,7 +406,7 @@ fn main() {
         let mut decl_set = BTreeSet::new();
         collect_decl_consts(&file.items, &mut decl_set);
         let decl_consts: Vec<String> = decl_set.into_iter().collect();
-        walk_items(&file.items, &rel, &decl_consts, &mut out);
+        walk_items(&file.items, &rel, &decl_consts, false, &mut out);
     }
 
     serde_json::to_writer(io::stdout(), &out).ok();

@@ -100,6 +100,12 @@ func Extract(repo string, exclude []string) ([]*FuncSig, ScanStats, error) {
 		}
 		for _, s := range sigs {
 			s.Prepare()
+			// Test attribution: union the file-path convention with whatever the
+			// extractor already flagged inline (Rust #[cfg(test)] / #[test]). The
+			// recall passes use this to gate test↔test pairs while keeping test↔prod.
+			if IsTestPath(s.File) {
+				s.Test = true
+			}
 		}
 		all = append(all, sigs...)
 		st.Files += len(paths)

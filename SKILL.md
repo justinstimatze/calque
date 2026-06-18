@@ -122,6 +122,38 @@ above, recording verdicts in the registry.
 - `calque doctor` rolls up calibration (does the ranker discriminate real drift
   from false alarms?); `calque migrate-registry` converts a Python-era registry.
 
+## Reading the output — signal vs. the common false alarms
+
+calque is recall-first: a ranked list to adjudicate, not a verdict. A handful of
+patterns recur as false alarms — recognize them so you mark `false-alarm` fast
+(record it in the registry so it doesn't re-surface) and don't "fix" a non-bug:
+
+- **Test fixtures (now auto-handled).** Two *test* functions sharing a setup/mock
+  read-set or helper seam are the single most common false twin. By default
+  calque **gates test↔test pairs and all-test clusters** across
+  `scan`/`check`/`propose-deriv`/`propose-roles`/`confess`. It deliberately
+  **keeps test↔production** pairs — a test that reimplements production
+  construction or recomputes a production quantity is *real* drift, not noise.
+  Pass `--include-tests` to any of those commands to see the test↔test pairs
+  anyway. (Test = `*_test.go`, `tests.rs`, `test_*.py`, `*.test.ts`, a `tests/`
+  dir, or a Rust `#[cfg(test)]` / `#[test]` function — including inline test
+  modules that sit in a production `.rs` file.)
+- **Field projections / conversions.** A DTO mapper or projection reads fields
+  off struct A and writes the same-named fields onto struct B. It shares a field
+  set with its siblings but isn't *deriving* anything — `false-alarm`.
+- **Same fields, different operation.** Functions over the same numeric struct
+  (`x`/`y`/`width`/…) that do *different* arithmetic share a read-set by
+  coincidence, not by contract. Lean on `--judge`, or mark `false-alarm`.
+- **Same-receiver methods.** Two methods on one type naturally share that type's
+  fields; that overlap is expected, not drift.
+
+What to **trust** over raw field-set or name overlap: shared **emitted strings**,
+shared **state writes**, and shared **domain-specific callees** — the
+effect-footprint signals. A pair that shares real behavioral machinery (the same
+emitted markers, the same mutations, the same validation calls) is a far stronger
+twin than one that merely touches the same field set, even when the latter ranks
+higher on name similarity. When in doubt, `--judge` is the precision half.
+
 ## Notes
 
 - **Recall over precision.** Expect false alarms; that's the design. Pairs that

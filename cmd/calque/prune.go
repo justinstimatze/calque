@@ -75,7 +75,7 @@ func runPrune(args []string) {
 		return
 	}
 
-	f, err := computeCheck(*repo, *left, *right, *exclude, *minScore, *minLines, *clusterMinMembers, *clusterMaxFanout, *regPath)
+	f, err := computeCheck(*repo, *left, *right, *exclude, *minScore, *minLines, *clusterMinMembers, *clusterMaxFanout, *regPath, false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque prune: %v\n", err)
 		os.Exit(1)

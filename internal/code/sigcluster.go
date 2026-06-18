@@ -409,7 +409,7 @@ func structuralShare(as, bs set) bool {
 // corpus vs 0.50 for construct/construct). Unless includeStructural is set, it also
 // drops pairs whose SHARED reads are a small whole-object field set (structuralShare)
 // — structural co-access of one struct, not derivation drift.
-func SharedDerivationCandidates(sigs []*FuncSig, minReads int, minJaccard float64, maxFanout int, includeMutators, includeStructural bool) []SigCandidate {
+func SharedDerivationCandidates(sigs []*FuncSig, minReads int, minJaccard float64, maxFanout int, includeMutators, includeStructural, includeTests bool) []SigCandidate {
 	idx := map[string][]*FuncSig{}
 	for _, f := range sigs {
 		if f.Kind != "" || f.Delegates || len(f.sRead) < minReads {
@@ -440,6 +440,14 @@ func SharedDerivationCandidates(sigs []*FuncSig, minReads int, minJaccard float6
 				}
 				rj := jaccard(a.sRead, b.sRead)
 				if rj < minJaccard {
+					continue
+				}
+				// Asymmetric test gate (mirrors Rank): two test functions sharing a
+				// read-set are reusing one setup/mock fixture, not deriving a value
+				// two ways — the read-set's degenerate test-vs-test cluster the
+				// ablation matrix flagged. A test↔prod derivation pair survives: a
+				// test recomputing a production quantity is exactly the drift to catch.
+				if !includeTests && a.Test && b.Test {
 					continue
 				}
 				// Operation-type gate (Layer A): suppress provably-DUAL pairs — a

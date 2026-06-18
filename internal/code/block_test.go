@@ -29,6 +29,9 @@ func naiveRank(left, right []*FuncSig, minLines int, minScore float64, top int) 
 			if a.Key() == b.Key() {
 				continue
 			}
+			if a.Test && b.Test { // mirror Rank's default test↔test gate (includeTests=false)
+				continue
+			}
 			if s, ok := scorePair(a, b); ok && s.Score >= minScore {
 				out = append(out, s)
 			}
@@ -93,7 +96,7 @@ func TestRankBlockingEquivalence(t *testing.T) {
 		fsig("j.go", "theta", nil, nil, nil, []string{"_shared_helper"}),
 	}
 
-	got := normalize(Rank(fixtures, fixtures, 4, 0.18, 1<<30))
+	got := normalize(Rank(fixtures, fixtures, 4, 0.18, 1<<30, false))
 	want := normalize(naiveRank(fixtures, fixtures, 4, 0.18, 1<<30))
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("blocking Rank != naive Rank on fixtures:\n got=%v\nwant=%v", got, want)
@@ -116,7 +119,7 @@ func TestRankBlockingEquivalenceCorpus(t *testing.T) {
 		t.Fatalf("corpus too small to be a meaningful test: %d funcs", len(sigs))
 	}
 
-	got := normalize(Rank(sigs, sigs, 4, 0.18, 1<<30))
+	got := normalize(Rank(sigs, sigs, 4, 0.18, 1<<30, false))
 	want := normalize(naiveRank(sigs, sigs, 4, 0.18, 1<<30))
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("blocking Rank != naive Rank on corpus: %d vs %d pairs", len(got), len(want))

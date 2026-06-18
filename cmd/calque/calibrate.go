@@ -113,7 +113,7 @@ func runCalibrate(args []string) {
 	code.ResetWeights()
 
 	copts := clusterOptsFrom(*minLines, 3, 8, 1<<30)
-	r, err := codeAxis(*repo, *left, *right, *exclude, *minScore, *minLines, 1<<30, copts, false)
+	r, err := codeAxis(*repo, *left, *right, *exclude, *minScore, *minLines, 1<<30, copts, false, false) // calibrate the gate's real behavior: test↔test excluded
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque calibrate: %v\n", err)
 		os.Exit(1)

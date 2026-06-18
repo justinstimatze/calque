@@ -175,3 +175,52 @@ func TestExtractRustSkipsBroken(t *testing.T) {
 		t.Error("good file's function dropped when batched with a broken file")
 	}
 }
+
+// Rust unit tests usually live in a #[cfg(test)] mod in the SAME file as the
+// production code, so no file-path rule can see them — the extractor must flag
+// them inline. A #[test] fn and an impl method under #[cfg(test)] are test code;
+// the production fn alongside them is not.
+func TestExtractRustCfgTest(t *testing.T) {
+	dir := t.TempDir()
+	if !rustToolchainAvailable(t, dir) {
+		t.Skip("cargo / syn toolchain not available")
+	}
+	src := `fn production(h: f64) -> f64 { h * 2.0 }
+
+#[cfg(test)]
+mod tests {
+    struct H;
+    impl H {
+        #[test]
+        fn checks_span() { let _ = production(1.0); }
+    }
+
+    #[test]
+    fn checks_root() { let _ = production(2.0); }
+}
+`
+	f := filepath.Join(dir, "span.rs")
+	if err := os.WriteFile(f, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sigs, err := extractRustBatch([]string{f}, dir)
+	if err != nil {
+		t.Fatalf("extractRustBatch: %v", err)
+	}
+	prod := sigByQual(sigs, "production")
+	if prod == nil {
+		t.Fatalf("production fn not extracted; got %d sigs", len(sigs))
+	}
+	if prod.Test {
+		t.Error("production fn must NOT be flagged test")
+	}
+	for _, qual := range []string{"checks_root", "H.checks_span"} {
+		s := sigByQual(sigs, qual)
+		if s == nil {
+			t.Fatalf("%s not extracted; got %d sigs", qual, len(sigs))
+		}
+		if !s.Test {
+			t.Errorf("%s under #[cfg(test)] must be flagged test", qual)
+		}
+	}
+}

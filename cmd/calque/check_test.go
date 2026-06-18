@@ -89,7 +89,7 @@ func TestComputeCheckStaleConfidentlyDead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	f, err := computeCheck(repo, "", "", "", 0.18, 4, 3, 8, ".calque/registry.md")
+	f, err := computeCheck(repo, "", "", "", 0.18, 4, 3, 8, ".calque/registry.md", false)
 	if err != nil {
 		t.Fatal(err)
 	}

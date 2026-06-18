@@ -167,6 +167,14 @@ functions equivalent; that's undecidable. Read the output with that in mind:
   ranked list you (or an LLM) adjudicate into the registry as `drift` /
   `contracted-twin-ok` / `false-alarm`. A run that's ~30% real but misses almost
   nothing beats a "sound" analyzer that finds nothing actionable.
+- **Know the recurring false alarms.** A few patterns are noise, not drift:
+  two *test* functions sharing a setup/mock fixture (calque **gates test↔test by
+  default** and keeps test↔prod; `--include-tests` to override); DTO/projection
+  mappers that copy the same field set between structs; functions over one numeric
+  struct doing *different* arithmetic; two methods on the same type sharing that
+  type's fields. Trust shared **emitted strings / state writes / domain callees**
+  (effect-footprint) over raw field-set or name overlap — `SKILL.md` has the full
+  adjudication guide.
 - **It's richest on effectful / stateful / text-emitting code** — game engines,
   CLIs, services, agent tooling: functions that mutate state, emit strings, and
   return records. On pure-functional, value-returning libraries the per-pair

@@ -22,8 +22,8 @@ import (
 func runConfess(args []string) {
 	fs := flag.NewFlagSet("confess", flag.ContinueOnError)
 	repo := fs.String("repo", ".", "repo root to scan")
-	exclude := fs.String("exclude", "", "comma-separated glob(s) to skip entirely (e.g. node_modules/**); test files are excluded by default")
-	includeTests := fs.Bool("include-tests", false, "scan test files too (excluded by default — a confession in a test fixture rarely names a production twin)")
+	exclude := fs.String("exclude", "", "comma-separated glob(s) to skip entirely (e.g. node_modules/**)")
+	includeTests := fs.Bool("include-tests", false, "keep test→test confessions too (gated by default — a confession in a test fixture rarely names a production twin; a test confessing it mirrors a PRODUCTION function is always kept)")
 	includeProse := fs.Bool("include-prose", false, "also emit directed candidates from the figurative \"prose\" register (docstring/block-comment narrative); by default only literal line-comment confessions become candidates (the high-precision register)")
 	regPath := fs.String("registry", ".calque/registry.md", "registry file (dedup directed candidates vs already-adjudicated pairs)")
 	top := fs.Int("top", 40, "max directed candidates to judge/print")
@@ -33,11 +33,9 @@ func runConfess(args []string) {
 		return
 	}
 
-	excl := splitCSV(*exclude)
-	if !*includeTests {
-		excl = append(excl, testGlobs...)
-	}
-	sigs, st, err := code.Extract(*repo, excl)
+	// Extract everything; the asymmetric gate below drops only test→test
+	// confessions, keeping a test that confesses it mirrors a production function.
+	sigs, st, err := code.Extract(*repo, splitCSV(*exclude))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque confess: walking %s: %v\n", *repo, err)
 		os.Exit(1)
@@ -55,6 +53,9 @@ func runConfess(args []string) {
 	seen := map[string]bool{}
 	var fresh []code.SigCandidate
 	for _, c := range cands {
+		if !*includeTests && c.A.Test && c.B.Test {
+			continue // test→test confession: a shared fixture, not a production twin
+		}
 		pk := pairkey.Key(c.A.Key(), c.B.Key())
 		if seen[pk] || reg.Has(c.A.Key(), c.B.Key()) {
 			continue

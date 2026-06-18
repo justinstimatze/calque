@@ -44,6 +44,16 @@ type FuncSig struct {
 	DeclConsts []string `json:"decl_consts,omitempty"`
 	Delegates  bool     `json:"delegates"` // body forwards to a wrapped impl
 
+	// Test marks a function as TEST code — either by file convention (IsTestPath:
+	// *_test.go, tests.rs, test_*.py, *.test.ts, a tests/ dir, …) or by an
+	// extractor's inline detection (the Rust extractor flags #[cfg(test)] / #[test]
+	// functions that live inside a production .rs file). The recall passes gate
+	// test↔test pairs/clusters by default — two test cases sharing a setup/mock
+	// fixture are the dominant false-twin variety — while KEEPING test↔prod pairs:
+	// a test that reimplements production construction/derivation is real drift, not
+	// noise. Set in Extract; --include-tests opts the test↔test pairs back in.
+	Test bool `json:"test,omitempty"`
+
 	// Kind tags non-function entities the CROSS-SUBSTRATE axis extracts: "" = a
 	// function (the default — the code axis; zero perturbation to existing callers),
 	// "table" = a module-level dict/set/list constant (its keys live in RetKeys),

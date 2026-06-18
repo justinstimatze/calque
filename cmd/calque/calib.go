@@ -162,7 +162,7 @@ func runDoctor(args []string) {
 		fmt.Fprintln(os.Stderr, "calque: calibrated weights active (.calque/weights.json)")
 	}
 	copts := clusterOptsFrom(*minLines, *clusterMinMembers, *clusterMaxFanout, 1<<30)
-	r, err := codeAxis(*repo, *left, *right, *exclude, *minScore, *minLines, 1<<30, copts, true)
+	r, err := codeAxis(*repo, *left, *right, *exclude, *minScore, *minLines, 1<<30, copts, true, false) // calibrate the gate's real behavior: test↔test excluded
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque doctor: %v\n", err)
 		os.Exit(1)

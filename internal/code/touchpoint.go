@@ -71,6 +71,10 @@ type ClusterOptions struct {
 	MaxFanout  int     // a symbol touched by more than this is plumbing, not a seam
 	MinScore   float64 // drop clusters below this combined rarity
 	Top        int     // cap the report
+	// IncludeTests keeps all-test clusters (a shared setup/fixture seam across test
+	// functions). Default false drops them — a cluster mixing test and production
+	// members always survives (a test re-deriving a production seam is real drift).
+	IncludeTests bool
 }
 
 // DefaultClusterOptions: report N>=3 clusters (the validated gap pairwise can't
@@ -340,6 +344,11 @@ func ClusterByTouchpoint(sigs []*FuncSig, opts ClusterOptions) []Cluster {
 	var out []Cluster
 	for _, c := range clusters {
 		if len(c.Members) < opts.MinMembers || c.Score < opts.MinScore {
+			continue
+		}
+		// Drop a cluster whose members are ALL test functions (a shared setup/mock
+		// seam, not production drift); a mixed test/prod cluster survives.
+		if !opts.IncludeTests && allTest(c.Members) {
 			continue
 		}
 		sort.Slice(c.Shared, func(i, j int) bool {

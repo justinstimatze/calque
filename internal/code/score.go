@@ -241,7 +241,7 @@ func setEqual(a, b set) bool {
 // deduped on the UNORDERED pair {left,right} — fixing the original Python's
 // symmetric-output bug (a self-scan, where left==right, otherwise emits both
 // A≟B and B≟A). calque must not carry the bug it detects.
-func Rank(left, right []*FuncSig, minLines int, minScore float64, top int) []Suspicion {
+func Rank(left, right []*FuncSig, minLines int, minScore float64, top int, includeTests bool) []Suspicion {
 	keep := func(fs []*FuncSig) []*FuncSig {
 		var out []*FuncSig
 		for _, f := range fs {
@@ -260,6 +260,12 @@ func Rank(left, right []*FuncSig, minLines int, minScore float64, top int) []Sus
 	var out []Suspicion
 	for _, p := range candidatePairs(L, R, anchorChannels) {
 		a, b := p[0], p[1]
+		// Asymmetric test gate: two test functions sharing signal is almost always
+		// a shared setup/mock fixture, not drift — dropped by default. A test↔prod
+		// pair survives: a test reimplementing production behavior IS the drift.
+		if !includeTests && a.Test && b.Test {
+			continue
+		}
 		if s, ok := scorePair(a, b); ok && s.Score >= minScore {
 			out = append(out, s)
 		}

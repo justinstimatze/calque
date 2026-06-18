@@ -139,7 +139,7 @@ func mcpCheck(rawArgs json.RawMessage) string {
 	if a.Repo == "" {
 		a.Repo = "."
 	}
-	f, err := computeCheck(a.Repo, a.Left, a.Right, a.Exclude, a.MinScore, a.MinLines, a.ClusterMinMembers, a.ClusterMaxFanout, a.Registry)
+	f, err := computeCheck(a.Repo, a.Left, a.Right, a.Exclude, a.MinScore, a.MinLines, a.ClusterMinMembers, a.ClusterMaxFanout, a.Registry, false)
 	if err != nil {
 		return "calque_check: " + err.Error()
 	}

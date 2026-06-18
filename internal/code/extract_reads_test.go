@@ -110,7 +110,7 @@ func TestSharedDerivationCandidates(t *testing.T) {
 	r := mk("client/log.go", "logWidths", shared, nil, nil, false)                                                    // no writes/ret → not a derivation
 	e := mk("x/y.go", "unrelated", []string{"road.width", "foo.bar", "baz.qux"}, []string{"z"}, []string{"z"}, false) // jaccard < 0.5
 
-	cands := SharedDerivationCandidates([]*FuncSig{a, b, d, r, e}, 2, 0.5, 8, false, false)
+	cands := SharedDerivationCandidates([]*FuncSig{a, b, d, r, e}, 2, 0.5, 8, false, false, false)
 	if len(cands) != 1 {
 		t.Fatalf("want exactly 1 candidate (buildRoad≟renderRibbon), got %d: %+v", len(cands), cands)
 	}
@@ -156,7 +156,7 @@ func TestStructuralShareGate(t *testing.T) {
 		return m
 	}
 
-	def := pairSet(SharedDerivationCandidates(all, 2, 0.5, 8, false, false))
+	def := pairSet(SharedDerivationCandidates(all, 2, 0.5, 8, false, false, false))
 	if def["distanceTo|headingError"] {
 		t.Error("whole-Pose field share (distanceTo ≟ headingError) should be gated by default")
 	}
@@ -164,7 +164,7 @@ func TestStructuralShareGate(t *testing.T) {
 		t.Error("dotted-domain-path twin (buildRoad ≟ renderRibbon) must survive the structural gate")
 	}
 
-	with := pairSet(SharedDerivationCandidates(all, 2, 0.5, 8, false, true))
+	with := pairSet(SharedDerivationCandidates(all, 2, 0.5, 8, false, true, false))
 	if !with["distanceTo|headingError"] {
 		t.Error("distanceTo ≟ headingError should surface with includeStructural=true")
 	}

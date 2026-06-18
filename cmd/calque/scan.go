@@ -43,6 +43,7 @@ func runScan(args []string) {
 	clusterMinMembers := fs.Int("cluster-min-members", 3, "smallest N-ary cluster to report (2 includes diluted pairs)")
 	clusterMaxFanout := fs.Int("cluster-max-fanout", 8, "a private symbol touched by more than this is plumbing, not a seam")
 	noCalib := fs.Bool("no-calibrated-weights", false, "ignore .calque/weights.json; score on the static prior")
+	includeTests := fs.Bool("include-tests", false, "rank test↔test pairs too (excluded by default — two test cases sharing a setup/mock fixture are the dominant false twin; test↔prod pairs are always kept)")
 	if err := fs.Parse(args); err != nil {
 		return
 	}
@@ -51,7 +52,7 @@ func runScan(args []string) {
 		fmt.Fprintln(os.Stderr, "calque: calibrated weights active (.calque/weights.json)")
 	}
 	copts := clusterOptsFrom(*minLines, *clusterMinMembers, *clusterMaxFanout, *top)
-	r, err := codeAxis(*repo, *left, *right, *exclude, *minScore, *minLines, *top, copts, !*noClusters)
+	r, err := codeAxis(*repo, *left, *right, *exclude, *minScore, *minLines, *top, copts, !*noClusters, *includeTests)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque scan: walking %s: %v\n", *repo, err)
 		os.Exit(1)
@@ -116,14 +117,15 @@ type codeAxisResult struct {
 // touchpoint cluster (N-ary) — single-sourced so scan, check, and doctor can't
 // drift on how they recall (the pipeline calque flagged duplicated across them).
 // withClusters lets a caller skip the N-ary pass.
-func codeAxis(repo, left, right, exclude string, minScore float64, minLines, top int, copts code.ClusterOptions, withClusters bool) (codeAxisResult, error) {
+func codeAxis(repo, left, right, exclude string, minScore float64, minLines, top int, copts code.ClusterOptions, withClusters, includeTests bool) (codeAxisResult, error) {
 	all, st, err := code.Extract(repo, splitCSV(exclude))
 	if err != nil {
 		return codeAxisResult{}, err
 	}
 	L := code.Filter(all, left)
 	R := code.Filter(all, right)
-	res := codeAxisResult{All: all, Stats: st, Pairs: code.Rank(L, R, minLines, minScore, top)}
+	copts.IncludeTests = includeTests // single-source the test gate across pairs + clusters
+	res := codeAxisResult{All: all, Stats: st, Pairs: code.Rank(L, R, minLines, minScore, top, includeTests)}
 	if withClusters {
 		res.Clusters = code.ClusterByTouchpoint(unionSigs(L, R), copts)
 	}

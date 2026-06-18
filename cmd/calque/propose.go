@@ -36,8 +36,8 @@ type proposal struct {
 func runProposeRoles(args []string) {
 	fs := flag.NewFlagSet("propose-roles", flag.ContinueOnError)
 	repo := fs.String("repo", ".", "repo root to scan")
-	exclude := fs.String("exclude", "", "comma-separated glob(s) to skip entirely (e.g. legacy/**,vendor/**); test files are excluded by default")
-	includeTests := fs.Bool("include-tests", false, "cluster test files too (excluded by default — test-vs-impl pairs share helper seams and cluster as false twins, polluting the Layer D corpus)")
+	exclude := fs.String("exclude", "", "comma-separated glob(s) to skip entirely (e.g. legacy/**,vendor/**)")
+	includeTests := fs.Bool("include-tests", false, "keep all-test clusters too (excluded by default — test functions sharing a helper/setup seam cluster as false twins, polluting the Layer D corpus; a cluster mixing test and production members is always kept)")
 	regPath := fs.String("registry", ".calque/registry.md", "registry file (dedup vs declared roles / adjudicated clusters)")
 	minLines := fs.Int("min-lines", 4, "ignore functions shorter than this many lines")
 	minMembers := fs.Int("cluster-min-members", 3, "smallest cluster to propose a role from (2 includes diluted pairs)")
@@ -50,11 +50,9 @@ func runProposeRoles(args []string) {
 		return
 	}
 
-	excl := splitCSV(*exclude)
-	if !*includeTests {
-		excl = append(excl, testGlobs...) // test-vs-impl pairs share helper seams → false clusters
-	}
-	sigs, st, err := code.Extract(*repo, excl)
+	// Whole-file test exclusion is replaced by the asymmetric cluster gate
+	// (ClusterByTouchpoint drops all-test clusters, keeps mixed test/prod ones).
+	sigs, st, err := code.Extract(*repo, splitCSV(*exclude))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque propose-roles: walking %s: %v\n", *repo, err)
 		os.Exit(1)
@@ -66,6 +64,7 @@ func runProposeRoles(args []string) {
 	}
 
 	copts := clusterOptsFrom(*minLines, *minMembers, *maxFanout, *top)
+	copts.IncludeTests = *includeTests
 	clusters := code.ClusterByTouchpoint(sigs, copts)
 	props := computeProposals(sigs, clusters, reg)
 	if *channel != "" {

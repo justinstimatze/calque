@@ -34,6 +34,7 @@ func runCheck(args []string) {
 	clusterMaxFanout := fs.Int("cluster-max-fanout", 8, "a private symbol touched by more than this is plumbing, not a seam")
 	noFireLog := fs.Bool("no-fire-log", false, "do not append NEW suspects to .calque/fires.jsonl (calibration telemetry)")
 	noCalib := fs.Bool("no-calibrated-weights", false, "ignore .calque/weights.json; score on the static prior")
+	includeTests := fs.Bool("include-tests", false, "gate test↔test pairs/clusters too (excluded by default; test↔prod is always kept)")
 	if err := fs.Parse(args); err != nil {
 		return
 	}
@@ -41,7 +42,7 @@ func runCheck(args []string) {
 	if applyCalibratedWeights(*repo, *noCalib) {
 		fmt.Fprintln(os.Stderr, "calque: calibrated weights active (.calque/weights.json)")
 	}
-	f, err := computeCheck(*repo, *left, *right, *exclude, *minScore, *minLines, *clusterMinMembers, *clusterMaxFanout, *regPath)
+	f, err := computeCheck(*repo, *left, *right, *exclude, *minScore, *minLines, *clusterMinMembers, *clusterMaxFanout, *regPath, *includeTests)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque check: %v\n", err)
 		os.Exit(1)
@@ -77,9 +78,9 @@ type checkFindings struct {
 // computeCheck runs the scan, diffs against the registry, and returns the
 // new/known/stale split — the shared core behind `calque check` (CLI) and the
 // calque_check MCP tool. No side effects (no print, no fire-log, no exit).
-func computeCheck(repo, left, right, exclude string, minScore float64, minLines, clusterMinMembers, clusterMaxFanout int, regPath string) (checkFindings, error) {
+func computeCheck(repo, left, right, exclude string, minScore float64, minLines, clusterMinMembers, clusterMaxFanout int, regPath string, includeTests bool) (checkFindings, error) {
 	copts := clusterOptsFrom(minLines, clusterMinMembers, clusterMaxFanout, 1<<30)
-	r, err := codeAxis(repo, left, right, exclude, minScore, minLines, 1<<30, copts, true)
+	r, err := codeAxis(repo, left, right, exclude, minScore, minLines, 1<<30, copts, true, includeTests)
 	if err != nil {
 		return checkFindings{}, err
 	}

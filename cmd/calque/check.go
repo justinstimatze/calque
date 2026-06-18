@@ -206,9 +206,9 @@ func renderCheck(f checkFindings, regPath string) string {
 	}
 
 	for _, s := range f.Fresh {
-		fmt.Fprintf(&b, "\nNEW  %.2f  [%s]  `%s` (%s:%d)  ≟  `%s` (%s:%d)\n     %s\n",
+		fmt.Fprintf(&b, "\nNEW  %.2f  [%s]  `%s` (%s:%d)  ≟  `%s` (%s:%d)\n     %s%s\n",
 			s.Score, pairID(s), s.Left.Qualname, s.Left.File, s.Left.Line,
-			s.Right.Qualname, s.Right.File, s.Right.Line, s.Reason())
+			s.Right.Qualname, s.Right.File, s.Right.Line, s.Reason(), falseAlarmSuffix(s))
 		fmt.Fprintf(&b, "     adjudicate in %s — add:  - pair: %s | %s\n", regPath, s.Left.Key(), s.Right.Key())
 	}
 	for _, c := range f.FreshC {

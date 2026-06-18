@@ -6,6 +6,15 @@ All notable changes to calque. The version string itself comes from the git tag
 ## [Unreleased]
 
 ### Added
+- **Inline structural false-alarm hints on `scan`/`check` suspects.** A suspect pair
+  that matches a usually-noise shape now carries an advisory tag on its output line:
+  `· structural: same-receiver` (both functions are methods on one type, so sharing
+  that type's fields is expected) or `· structural: field-copy` (both are
+  projection / DTO mappers that write back the fields they read rather than deriving
+  a value). `code.FalseAlarmHint` is deterministic, conservative, and purely
+  advisory — it never gates a pair, it just surfaces the structure inline so an
+  adjudicating agent or human triages faster (mapping the tag to the `SKILL.md`
+  "reading the output" guide). Shared by the CLI and the `calque_check` MCP tool.
 - **Asymmetric test-file awareness across every code pass — drop test↔test, keep test↔prod.**
   Test code is now a first-class signal (`FuncSig.Test`), set by file convention (`IsTestPath`:
   `*_test.go`, `tests.rs`, `test_*.py`, `*.test.ts`, a `tests/` dir, …) AND — the case no path

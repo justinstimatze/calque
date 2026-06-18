@@ -78,7 +78,7 @@ func runScan(args []string) {
 		fmt.Printf("## %d. %.2f  `%s` (%s:%d)  ≟  `%s` (%s:%d)\n",
 			i+1, s.Score, s.Left.Qualname, s.Left.File, s.Left.Line,
 			s.Right.Qualname, s.Right.File, s.Right.Line)
-		fmt.Printf("- %s\n", s.Reason())
+		fmt.Printf("- %s%s\n", s.Reason(), falseAlarmSuffix(s))
 	}
 
 	if !*noClusters {
@@ -94,6 +94,16 @@ func runScan(args []string) {
 			}
 		}
 	}
+}
+
+// falseAlarmSuffix renders the inline structural false-alarm hint for a suspect
+// pair (e.g. same-receiver / field-copy), or "" when none applies. Advisory only —
+// shared by scan and check so the annotation reads identically in both.
+func falseAlarmSuffix(s code.Suspicion) string {
+	if h := code.FalseAlarmHint(s.Left, s.Right); h != "" {
+		return "  ·  structural: " + h + " (often a false alarm — see SKILL.md)"
+	}
+	return ""
 }
 
 // clusterOptsFrom builds ClusterOptions from the common cluster flags — shared by

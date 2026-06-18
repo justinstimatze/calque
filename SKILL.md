@@ -147,6 +147,11 @@ patterns recur as false alarms — recognize them so you mark `false-alarm` fast
 - **Same-receiver methods.** Two methods on one type naturally share that type's
   fields; that overlap is expected, not drift.
 
+`scan` and `check` flag the last two shapes **inline**: a suspect line ending in
+`· structural: same-receiver` or `· structural: field-copy` is calque telling you
+it matched one of those usually-noise shapes. Advisory only — it never drops the
+pair; it just speeds your triage.
+
 What to **trust** over raw field-set or name overlap: shared **emitted strings**,
 shared **state writes**, and shared **domain-specific callees** — the
 effect-footprint signals. A pair that shares real behavioral machinery (the same

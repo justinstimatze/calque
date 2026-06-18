@@ -1035,3 +1035,19 @@ different candidate shapes (N-ary cluster reps vs pairs). Both false-alarm.
 - pair: cmd/calque/propose.go::judgeClusters | cmd/calque/propose_deep.go::runJudge
 - verdict: false-alarm
 - reviewed: 2026-06-16
+
+## Run — 2026-06-18 (test-awareness + false-alarm hints)
+
+Two name-stem coincidences from this session's new code, both false-alarm.
+`sameReceiver ≟ receiverOf` (falsealarm.go): sameReceiver merely CALLS receiverOf to
+extract the type prefix — a helper call, not a parallel contract. `has_cfg_test ≟
+has_test_attr` (rust-extractor): both are attribute predicates sharing a has/test
+stem and iter/any plumbing, but answer DIFFERENT questions (a #[cfg(test)] module vs
+a #[test]-family attribute on the fn) — no shared invariant to drift.
+
+- pair: internal/code/falsealarm.go::sameReceiver | internal/code/falsealarm.go::receiverOf
+- verdict: false-alarm
+- reviewed: 2026-06-18
+- pair: internal/code/rust-extractor/src/main.rs::has_cfg_test | internal/code/rust-extractor/src/main.rs::has_test_attr
+- verdict: false-alarm
+- reviewed: 2026-06-18

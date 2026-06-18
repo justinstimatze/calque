@@ -5,6 +5,8 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-18
+
 ### Added
 - **Inline structural false-alarm hints on `scan`/`check` suspects.** A suspect pair
   that matches a usually-noise shape now carries an advisory tag on its output line:
@@ -139,8 +141,8 @@ All notable changes to calque. The version string itself comes from the git tag
   struct), not value-derivation drift. With no type info, the proxy is: the shared (intersection)
   read-set is small (≤3) and every member is a whole-object field token (a bare leaf, or a TS
   `this.`-prefixed leaf), vs a dotted domain path (`road.width`) which names a specific quantity
-  and is kept. Camber dogfood found this single filter killed 3/3 read-set false alarms with no
-  loss to the real twins; `--include-structural` opts back in.
+  and is kept. Dogfood on a sibling Rust codebase found this single filter killed 3/3 read-set
+  false alarms with no loss to the real twins; `--include-structural` opts back in.
 
 ## [0.6.0] - 2026-06-16
 

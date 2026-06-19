@@ -5,6 +5,8 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-19
+
 ### Added
 - **Svelte (`.svelte`) extraction — `<script>` blocks are now first-class.** A
   `.svelte` file's `<script lang="ts">` / `<script module>` blocks are sliced out

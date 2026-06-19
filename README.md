@@ -127,12 +127,16 @@ These are generators — they print to stdout, never write or gate — so they'r
 to run against any repo.
 
 `scan`/`check` work on Go (native `go/ast`), Python (embedded `python3`),
-TypeScript/TSX (embedded `node` + the TypeScript compiler), and Rust (an embedded
-`syn` helper, built once and cached on the first `.rs` scan). Each language needs its
-own toolchain present for that language's targets — `python3` for `.py`,
-`node`+`typescript` for `.ts`, `cargo` for `.rs` (the same toolchain you already build
-that code with; `CALQUE_RUST_EXTRACTOR` can point at a prebuilt binary to skip the
-build).
+TypeScript/TSX (embedded `node` + the TypeScript compiler), Svelte (the
+`<script lang="ts">` block, masked out of the template and run through the same TS
+extractor), and Rust (an embedded `syn` helper, built once and cached on the first
+`.rs` scan). Each language needs its own toolchain present for that language's
+targets — `python3` for `.py`, `node`+`typescript` for `.ts`/`.svelte`, `cargo` for
+`.rs` (the same toolchain you already build that code with; `CALQUE_RUST_EXTRACTOR`
+can point at a prebuilt binary to skip the build). On a SvelteKit repo, use `**/`
+globs (`--left "**/*.svelte" --right "**/*.ts"`); template `{#if}`/`{#each}` branches
+and inline (non-function) assignments are out of scope — calque's unit is the named
+function, so guard sub-function twins with differential tests.
 
 ## The loop
 

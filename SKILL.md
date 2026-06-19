@@ -164,12 +164,16 @@ higher on name similarity. When in doubt, `--judge` is the precision half.
 - **Recall over precision.** Expect false alarms; that's the design. Pairs that
   only share generic callees are gated out, but name+surface coincidences slip
   through — your job is the filter.
-- **Four languages today.** `scan`/`check` parse Go natively (`go/ast`), Python
+- **Five languages today.** `scan`/`check` parse Go natively (`go/ast`), Python
   via an embedded `python3` extractor, TypeScript/TSX via `node` + the TypeScript
-  compiler, and Rust via an embedded `syn` helper (built once and cached on the
-  first `.rs` scan). Each language needs its own toolchain present for that
-  language's targets; the signals are language-agnostic in concept, only the
-  extractor is per-language.
+  compiler, Svelte by slicing the `<script lang="ts">` block (template masked out)
+  and running it through the same TS extractor, and Rust via an embedded `syn` helper
+  (built once and cached on the first `.rs` scan). Each language needs its own
+  toolchain present for that language's targets (`.svelte` uses the `.ts` toolchain);
+  the signals are language-agnostic in concept, only the extractor is per-language.
+  On SvelteKit, use `**/` globs (`--left "**/*.svelte" --right "**/*.ts"`); Svelte
+  template `{#if}`/`{#each}` branches and inline non-function assignments stay out of
+  scope (sub-function units) — guard those with differential tests.
 - **Tune the boundary, not the threshold.** A well-chosen `--left/--right` (two
   things that genuinely should agree) gives far better signal than scanning a
   whole repo against itself.

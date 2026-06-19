@@ -5,6 +5,21 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+### Added
+- **Svelte (`.svelte`) extraction — `<script>` blocks are now first-class.** A
+  `.svelte` file's `<script lang="ts">` / `<script module>` blocks are sliced out
+  (everything outside them masked to whitespace, newlines preserved so line numbers
+  stay exact) and run through the existing TypeScript extractor, so a Svelte
+  component's functions get the full effect-footprint interchange
+  (`writes`/`reads`/`strings`/`ret_keys`/`calls`/`consts`/`delegates`) at parity with
+  a plain `.ts` file — including the cross-substrate symbol axis. This closes the gap
+  where a SvelteKit boundary scan (`+page.svelte` × `+server.ts`) returned nothing
+  because the `.svelte` side was never parsed. Template markup (`{#if}`/`{#each}` and
+  mustache expressions) lives outside `<script>` and stays out of scope by design;
+  intra-function and inline-assignment twins remain sub-function units calque does
+  not score (guard those with differential tests). Needs the same `node` +
+  `typescript` toolchain as the `.ts` path.
+
 ## [0.7.0] - 2026-06-18
 
 ### Added

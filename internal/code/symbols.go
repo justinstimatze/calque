@@ -3,16 +3,17 @@ package code
 import "fmt"
 
 // symbolExtractors maps an extension to a NON-FUNCTION entity extractor: module-
-// level tables (.py / .go / .ts / .tsx) and JSON object field-sets (.json, pure Go).
+// level tables (.py / .go / .ts / .tsx / .svelte) and JSON object field-sets (.json).
 // These feed ONLY the generator-only cross-substrate axis (propose-cross) — never the
 // scoring gate — so the function corpus that Extract -> Rank -> check -> --strict sees
 // is provably unchanged.
 var symbolExtractors = map[string]func(paths []string, root string) ([]*FuncSig, error){
-	".py":   extractPySymbols,
-	".json": extractJSONBatch,
-	".go":   extractGoSymbols,
-	".ts":   extractTSSymbols,
-	".tsx":  extractTSSymbols,
+	".py":     extractPySymbols,
+	".json":   extractJSONBatch,
+	".go":     extractGoSymbols,
+	".ts":     extractTSSymbols,
+	".tsx":    extractTSSymbols,
+	".svelte": extractTSSymbols,
 }
 
 // extractPySymbols extracts module-level TABLES from .py paths (the cross-substrate

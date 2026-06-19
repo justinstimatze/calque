@@ -85,6 +85,36 @@ function require_fs() {
   return req('node:fs');
 }
 
+// maskSvelteScript returns src with every character OUTSIDE a <script>…</script>
+// block replaced by a space (newlines preserved), so the TypeScript parser sees only
+// the script content at its true line/column offsets and the surrounding Svelte
+// template markup parses to nothing. Handles both the instance and module
+// (<script module> / <script context="module">) blocks. Svelte 5 runes
+// ($state/$derived/$props) and reactive `$:` labels are syntactically valid TS, so no
+// further handling is needed. Template {#if}/{#each} branches live outside <script>
+// and are intentionally out of scope.
+function maskSvelteScript(src) {
+  const keep = new Uint8Array(src.length);
+  // Attribute-aware open-tag match: skip a `>` that sits inside a quoted attribute
+  // value — Svelte 5's `generics="T extends Foo<Bar>"` is the common case a naive
+  // [^>]* would mis-terminate on. The content offset is derived from the match
+  // lengths (opentag = m[0] − content − `</script>`), not indexOf('>'), so a quoted
+  // `>` can't throw it off. The close tag </script> is a fixed 9 chars (any case).
+  const re = /<script\b(?:"[^"]*"|'[^']*'|[^>])*>([\s\S]*?)<\/script>/gi;
+  const closeLen = 9; // '</script>'.length
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    const contentStart = m.index + m[0].length - m[1].length - closeLen;
+    const end = contentStart + m[1].length;
+    for (let i = contentStart; i < end; i++) keep[i] = 1;
+  }
+  const chars = src.split('');
+  for (let i = 0; i < chars.length; i++) {
+    if (!keep[i] && chars[i] !== '\n') chars[i] = ' ';
+  }
+  return chars.join('');
+}
+
 function extractFile(ts, filePath, root) {
   const fs = require_fs();
   let src;
@@ -93,6 +123,7 @@ function extractFile(ts, filePath, root) {
   } catch {
     return [];
   }
+  if (filePath.endsWith('.svelte')) src = maskSvelteScript(src);
   const isTSX = filePath.endsWith('.tsx') || filePath.endsWith('.jsx');
   const sf = ts.createSourceFile(
     filePath, src, ts.ScriptTarget.Latest, /*setParentNodes*/ true,
@@ -392,6 +423,7 @@ function extractSymbolsFile(ts, filePath, root) {
   } catch {
     return [];
   }
+  if (filePath.endsWith('.svelte')) src = maskSvelteScript(src);
   const isTSX = filePath.endsWith('.tsx') || filePath.endsWith('.jsx');
   const sf = ts.createSourceFile(
     filePath, src, ts.ScriptTarget.Latest, /*setParentNodes*/ true,

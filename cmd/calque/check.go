@@ -71,6 +71,7 @@ type checkFindings struct {
 	StaleC     []registry.ClusterEntry
 	Unresolved []registry.Entry // known drift, both paths still live — not yet collapsed
 	Warn       string           // non-empty when the registry exists but parsed to zero entries
+	Bite       []string         // boundary-cannot-bite warnings: a side's glob matched files but parsed zero funcs (a false clean)
 	Corpus     int              // count of extracted functions (liveness denominator; 0 ⇒ scan saw nothing)
 	StaleAmbig int              // entries referencing a symbol absent from the corpus but whose file still exists (not provably dead → not STALE)
 }
@@ -91,6 +92,7 @@ func computeCheck(repo, left, right, exclude string, minScore float64, minLines,
 
 	var f checkFindings
 	f.Corpus = len(r.All)
+	f.Bite = boundaryBiteWarnings(left, right, r.All, r.Stats.CodeFiles)
 	f.Warn = registryParseWarning(joinRepo(repo, regPath), len(reg.Entries), len(reg.Clusters))
 	for _, s := range r.Pairs {
 		if reg.Has(s.Left.Key(), s.Right.Key()) {
@@ -193,6 +195,12 @@ func renderCheck(f checkFindings, regPath string) string {
 	var b strings.Builder
 	if f.Warn != "" {
 		fmt.Fprintf(&b, "⚠ %s\n\n", f.Warn)
+	}
+	for _, w := range f.Bite {
+		fmt.Fprintf(&b, "%s\n", w)
+	}
+	if len(f.Bite) > 0 {
+		fmt.Fprintln(&b)
 	}
 	nStale := len(f.Stale) + len(f.StaleC)
 	fmt.Fprintf(&b, "calque check: pairs %d new · %d known | clusters %d new · %d known | %d stale registry entr%s\n",

@@ -12,6 +12,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/justinstimatze/calque/internal/code"
@@ -66,6 +68,9 @@ func runScan(args []string) {
 	fmt.Println("# calque — dual-path suspects")
 	fmt.Println()
 	fmt.Printf("boundary: `%s`  ×  `%s`\n", orAll(*left), orAll(*right))
+	for _, w := range boundaryBiteWarnings(*left, *right, r.All, r.Stats.CodeFiles) {
+		fmt.Println(w)
+	}
 	fmt.Printf("scanned %d func(s) in %d file(s); suspect pairs: %d\n", r.Stats.Funcs, r.Stats.Files, len(r.Pairs))
 	if r.Stats.Skipped > 0 {
 		fmt.Printf("note: %d code file(s) skipped (no extractor yet): %v\n", r.Stats.Skipped, r.Stats.SkippedExts)
@@ -104,6 +109,62 @@ func falseAlarmSuffix(s code.Suspicion) string {
 		return "  ·  structural: " + h + " (often a false alarm — see SKILL.md)"
 	}
 	return ""
+}
+
+// boundaryBiteWarnings returns prominent warnings when a boundary side's glob
+// matched code files ON DISK but the extractor produced ZERO functions from them —
+// a FALSE clean (zero suspects because nothing parsed, not because nothing
+// diverged), the failure mode a recall-first tool must never report as a clean
+// bill. The dominant cause is an unsupported / not-yet-implemented language on one
+// side (or a stale binary pointed at a newer repo). Returns nil for whole-repo
+// (no-glob) sides and for sides that bit normally. Shared by scan and check so the
+// wording reads identically in both.
+func boundaryBiteWarnings(left, right string, all []*code.FuncSig, codeFiles []string) []string {
+	var out []string
+	check := func(side, glob string) {
+		if strings.TrimSpace(glob) == "" {
+			return // whole-repo default for this side — can't under-bite
+		}
+		matched := code.MatchGlob(codeFiles, glob)
+		if len(matched) == 0 {
+			return // no code files on disk match this glob — a visibly empty side, not a false clean
+		}
+		parsed := len(code.Filter(all, glob))
+		noExt := unparsedExts(matched)
+		switch {
+		case parsed == 0:
+			reason := "no functions parsed"
+			if len(noExt) > 0 {
+				reason = "no extractor for " + strings.Join(noExt, ", ")
+			}
+			out = append(out, fmt.Sprintf(
+				"⚠ boundary cannot bite: %s `%s` matched %d file(s), 0 parsed (%s). Result is NOT a clean bill.",
+				side, glob, len(matched), reason))
+		case len(noExt) > 0:
+			out = append(out, fmt.Sprintf(
+				"⚠ partial coverage: %s `%s` matched %d file(s) but type(s) %s have no extractor — some files on this side were not scanned.",
+				side, glob, len(matched), strings.Join(noExt, ", ")))
+		}
+	}
+	check("left", left)
+	check("right", right)
+	return out
+}
+
+// unparsedExts returns the distinct extensions among files for which calque has no
+// function-axis extractor — the reason those files contributed nothing to the side.
+func unparsedExts(files []string) []string {
+	seen := map[string]bool{}
+	var exts []string
+	for _, f := range files {
+		ext := strings.ToLower(filepath.Ext(f))
+		if !code.HasExtractor(ext) && !seen[ext] {
+			seen[ext] = true
+			exts = append(exts, ext)
+		}
+	}
+	sort.Strings(exts)
+	return exts
 }
 
 // clusterOptsFrom builds ClusterOptions from the common cluster flags — shared by

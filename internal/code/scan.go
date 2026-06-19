@@ -39,14 +39,21 @@ type ScanStats struct {
 	Funcs       int
 	Skipped     int            // code files with no extractor yet
 	SkippedExts map[string]int // by extension
+	// CodeFiles is every code-file path the walk visited — both the files an
+	// extractor handled AND the skipped-for-want-of-an-extractor ones — in the same
+	// path form FuncSig.File uses. It lets a caller answer "did this boundary glob
+	// match files on disk that simply didn't parse?" — the input to the
+	// boundary-cannot-bite warning that turns a silent recall hole into a visible one.
+	CodeFiles []string
 }
 
 // walkExtractable walks repo and groups source files by extension, applying the
 // shared skip-dir/exclude rules. accept decides which extensions to collect; onSkip
-// (may be nil) sees every other code-file extension (Extract counts those as
-// skipped-for-want-of-an-extractor; ExtractSymbols ignores them). Single-sources
-// the tree walk shared by the function and symbol extractors.
-func walkExtractable(repo string, exclude []string, accept func(ext string) bool, onSkip func(ext string)) (map[string][]string, error) {
+// (may be nil) sees every other code-file extension and its path (Extract counts
+// those as skipped-for-want-of-an-extractor and records the paths; ExtractSymbols
+// ignores them). Single-sources the tree walk shared by the function and symbol
+// extractors.
+func walkExtractable(repo string, exclude []string, accept func(ext string) bool, onSkip func(ext, path string)) (map[string][]string, error) {
 	exRe := glob.Compile(exclude)
 	excluded := func(rel string) bool { return glob.MatchAny(exRe, rel) }
 	byExt := map[string][]string{}
@@ -68,7 +75,7 @@ func walkExtractable(repo string, exclude []string, accept func(ext string) bool
 		if accept(ext) {
 			byExt[ext] = append(byExt[ext], p)
 		} else if onSkip != nil {
-			onSkip(ext)
+			onSkip(ext, p)
 		}
 		return nil
 	})
@@ -83,10 +90,11 @@ func Extract(repo string, exclude []string) ([]*FuncSig, ScanStats, error) {
 	st := ScanStats{SkippedExts: map[string]int{}}
 	byExt, err := walkExtractable(repo, exclude,
 		func(ext string) bool { _, ok := extractors[ext]; return ok },
-		func(ext string) {
+		func(ext, path string) {
 			if codeExts.has(ext) {
 				st.Skipped++
 				st.SkippedExts[ext]++
+				st.CodeFiles = append(st.CodeFiles, path)
 			}
 		})
 	if err != nil {
@@ -111,6 +119,7 @@ func Extract(repo string, exclude []string) ([]*FuncSig, ScanStats, error) {
 		all = append(all, sigs...)
 		st.Files += len(paths)
 		st.Funcs += len(sigs)
+		st.CodeFiles = append(st.CodeFiles, paths...)
 	}
 	return all, st, nil
 }
@@ -134,6 +143,37 @@ func Filter(sigs []*FuncSig, globsCSV string) []*FuncSig {
 		}
 	}
 	return out
+}
+
+// MatchGlob returns the subset of file paths matching the glob CSV — the SAME
+// matcher Filter uses over FuncSig.File, so a boundary glob selects the same files
+// here as it does among parsed functions. An empty/whitespace CSV returns nil:
+// the whole-repo default (no boundary) can never under-bite, so callers skip the
+// warning for it.
+func MatchGlob(files []string, globsCSV string) []string {
+	globsCSV = strings.TrimSpace(globsCSV)
+	if globsCSV == "" {
+		return nil
+	}
+	res := glob.Compile(strings.Split(globsCSV, ","))
+	if len(res) == 0 {
+		return nil
+	}
+	var out []string
+	for _, f := range files {
+		if glob.MatchAny(res, f) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// HasExtractor reports whether calque has a function-axis extractor for ext
+// (lowercased, leading dot). Used to explain a zero-bite boundary: a matched file
+// whose extension has no extractor is why the side parsed nothing.
+func HasExtractor(ext string) bool {
+	_, ok := extractors[ext]
+	return ok
 }
 
 // SupportedExts returns the extensions calque can currently extract (for help/UX).

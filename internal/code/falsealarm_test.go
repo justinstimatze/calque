@@ -50,3 +50,44 @@ func TestFalseAlarmHint(t *testing.T) {
 		t.Error("only one side is a mapper — must not tag field-copy")
 	}
 }
+
+func TestFalseAlarmHintSvelteKit(t *testing.T) {
+	mk := func(file, name string) *FuncSig {
+		f := &FuncSig{File: file, Qualname: name, Name: name}
+		f.Prepare()
+		return f
+	}
+
+	// Two POST endpoints on different routes — the SvelteKit route-handler shape.
+	if got := FalseAlarmHint(
+		mk("src/routes/conversation/+server.ts", "POST"),
+		mk("src/routes/settings/+server.ts", "POST"),
+	); got != "sveltekit-handler" {
+		t.Errorf("two +server.ts POST handlers: got %q, want sveltekit-handler", got)
+	}
+
+	// A page load and a server load — both framework exports in +page(.server) modules.
+	if got := FalseAlarmHint(
+		mk("src/routes/a/+page.ts", "load"),
+		mk("src/routes/b/+page.server.ts", "load"),
+	); got != "sveltekit-handler" {
+		t.Errorf("two load() exports: got %q, want sveltekit-handler", got)
+	}
+
+	// Only one side is a framework export — must NOT tag (the other is an ordinary
+	// helper that merely happens to be named POST in a plain module).
+	if got := FalseAlarmHint(
+		mk("src/routes/conversation/+server.ts", "POST"),
+		mk("src/lib/http.ts", "POST"),
+	); got == "sveltekit-handler" {
+		t.Error("only one side is a SvelteKit route module — must not tag sveltekit-handler")
+	}
+
+	// Right file, but the export name isn't a framework handler — must NOT tag.
+	if got := FalseAlarmHint(
+		mk("src/routes/a/+server.ts", "helper"),
+		mk("src/routes/b/+server.ts", "helper"),
+	); got == "sveltekit-handler" {
+		t.Error("non-handler export name must not tag sveltekit-handler")
+	}
+}

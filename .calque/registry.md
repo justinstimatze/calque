@@ -1051,3 +1051,25 @@ a #[test]-family attribute on the fn) — no shared invariant to drift.
 - pair: internal/code/rust-extractor/src/main.rs::has_cfg_test | internal/code/rust-extractor/src/main.rs::has_test_attr
 - verdict: false-alarm
 - reviewed: 2026-06-18
+
+## Run — 2026-06-19 (boundary-bite warning + sveltekit-handler tag)
+
+Three incidental coincidences from this session's new code (the adopter-requested
+zero-parse boundary warning + the SvelteKit route-handler structural tag), all
+false-alarm. `HasExtractor ≟ Registry.Has`: a one-line map-membership predicate
+sharing only the "has" stem with the registry's pair lookup — unrelated maps, no
+contract. `Match ≟ MatchGlob`: role.Match (does a FuncSig fit a cardinality role)
+vs MatchGlob (which file paths match a glob) share the "match" stem and nothing
+else. The cluster `checkToolDefinition | addBoundaryFlags | boundaryBiteWarnings`
+fires only because all three name the boundary-flag params `left`/`right` — shared
+plumbing vocabulary, not a shared seam.
+
+- pair: internal/code/scan.go::HasExtractor | internal/registry/registry.go::Registry.Has
+- verdict: false-alarm
+- reviewed: 2026-06-19
+- pair: internal/code/role.go::Match | internal/code/scan.go::MatchGlob
+- verdict: false-alarm
+- reviewed: 2026-06-19
+- cluster: cmd/calque/mcp.go::checkToolDefinition | cmd/calque/scan.go::addBoundaryFlags | cmd/calque/scan.go::boundaryBiteWarnings
+- verdict: false-alarm
+- reviewed: 2026-06-19

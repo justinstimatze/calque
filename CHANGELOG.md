@@ -5,6 +5,26 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+### Added
+- **"Boundary cannot bite" warning — a false clean is now visible.** When a
+  `--left`/`--right` glob matches source files on disk but the extractor produces
+  **zero** functions from them (an unsupported / not-yet-implemented language on that
+  side, or a stale binary pointed at a newer repo), `scan` and `check` now emit a
+  prominent `⚠ boundary cannot bite: <side> <glob> matched N file(s), 0 parsed
+  (<reason>). Result is NOT a clean bill.` before the suspect count, plus a softer
+  `⚠ partial coverage` note when a side parsed some functions but also matched files
+  of an unsupported type. Previously a zero-parse side was indistinguishable in the
+  output from a genuine no-twins result — the silent recall hole that could read as
+  an all-clear. (`code.ScanStats.CodeFiles` now records every code file the walk saw;
+  `code.MatchGlob`/`code.HasExtractor` expose the matcher. Adopter-surfaced.)
+- **`sveltekit-handler` structural false-alarm tag.** Two SvelteKit framework route
+  exports (`GET`/`POST`/`PUT`/`PATCH`/`DELETE`/`OPTIONS`/`HEAD`/`load`/`actions`) in
+  `+server` / `+page.server` / `+layout` modules on different routes share the verb
+  name and the request/locals/params shape by construction. `scan`/`check` now tag
+  such a pair inline `· structural: sveltekit-handler` — advisory only, never gated —
+  joining the existing `same-receiver` / `field-copy` hints. (Adopter-surfaced from a
+  SvelteKit repo whose `POST` route handlers clustered as a false twin.)
+
 ## [0.8.0] - 2026-06-19
 
 ### Added

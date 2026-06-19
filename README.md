@@ -176,10 +176,17 @@ functions equivalent; that's undecidable. Read the output with that in mind:
   default** and keeps test↔prod; `--include-tests` to override); DTO/projection
   mappers that copy the same field set between structs; functions over one numeric
   struct doing *different* arithmetic; two methods on the same type sharing that
-  type's fields. `scan`/`check` flag the last two inline (`· structural:
-  same-receiver` / `field-copy`) — advisory, never gated. Trust shared **emitted
+  type's fields; two SvelteKit route handlers (`GET`/`POST`/`load`/… in
+  `+server.ts`/`+page.server.ts`) sharing the framework's request shape. `scan`/`check`
+  flag the structural shapes inline (`· structural: same-receiver` /
+  `sveltekit-handler` / `field-copy`) — advisory, never gated. Trust shared **emitted
   strings / state writes / domain callees** (effect-footprint) over raw field-set
   or name overlap — `SKILL.md` has the full adjudication guide.
+- **A zero-suspect run isn't always a clean bill.** If a `--left`/`--right` glob
+  matched files but parsed **zero** functions (unsupported language on that side, or
+  a stale binary on a newer repo), `scan`/`check` emit `⚠ boundary cannot bite … 0
+  parsed … Result is NOT a clean bill.` before the suspect count — a false clean to
+  fix, not an all-clear.
 - **It's richest on effectful / stateful / text-emitting code** — game engines,
   CLIs, services, agent tooling: functions that mutate state, emit strings, and
   return records. On pure-functional, value-returning libraries the per-pair

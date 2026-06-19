@@ -146,11 +146,24 @@ patterns recur as false alarms — recognize them so you mark `false-alarm` fast
   coincidence, not by contract. Lean on `--judge`, or mark `false-alarm`.
 - **Same-receiver methods.** Two methods on one type naturally share that type's
   fields; that overlap is expected, not drift.
+- **SvelteKit route handlers.** Two framework exports (`GET`/`POST`/`load`/
+  `actions`/…) in `+server.ts` / `+page.server.ts` / `+layout.server.ts` modules on
+  *different* routes share the verb name and the request/locals/params shape by
+  construction — a route-handler shape, not a contract twin.
 
-`scan` and `check` flag the last two shapes **inline**: a suspect line ending in
-`· structural: same-receiver` or `· structural: field-copy` is calque telling you
-it matched one of those usually-noise shapes. Advisory only — it never drops the
-pair; it just speeds your triage.
+`scan` and `check` flag the structural shapes **inline**: a suspect line ending in
+`· structural: same-receiver`, `· structural: sveltekit-handler`, or
+`· structural: field-copy` is calque telling you it matched one of those
+usually-noise shapes. Advisory only — it never drops the pair; it just speeds your
+triage.
+
+**Watch for a "boundary cannot bite" warning.** If a `--left`/`--right` glob
+matched files on disk but parsed **zero** functions from them — an unsupported
+language on that side, or a stale binary pointed at a newer repo — `scan`/`check`
+print `⚠ boundary cannot bite: … 0 parsed … Result is NOT a clean bill.` *before*
+the suspect count. A zero-suspect result under that warning is a **false clean**
+(nothing parsed, so nothing could fire), not a real all-clear — fix the glob or the
+toolchain and re-run.
 
 What to **trust** over raw field-set or name overlap: shared **emitted strings**,
 shared **state writes**, and shared **domain-specific callees** — the

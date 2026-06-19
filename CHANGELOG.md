@@ -5,6 +5,8 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-19
+
 ### Added
 - **"Boundary cannot bite" warning — a false clean is now visible.** When a
   `--left`/`--right` glob matches source files on disk but the extractor produces

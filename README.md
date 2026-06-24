@@ -152,9 +152,12 @@ function, so guard sub-function twins with differential tests.
      test).
    - **`false-alarm`** — coincidental signal; record to suppress.
 4. **Keep it honest** — `calque hook install` wires `check` into a git
-   pre-commit hook; `calque mcp` serves both gates over MCP (stdio JSON-RPC,
-   tools `calque_check` + `calque_vocab_check`) so an agent can ask "did my edit
-   introduce new drift?" inline.
+   pre-commit hook; add `--post-merge` to also install a post-merge hook that
+   scans the code a contributor just merged (fires on `git pull` and
+   fast-forward merges, which a pre-commit hook never sees — warn-only, it
+   reports without blocking). `calque mcp` serves both gates over MCP (stdio
+   JSON-RPC, tools `calque_check` + `calque_vocab_check`) so an agent can ask
+   "did my edit introduce new drift?" inline.
 
 calque is built to be driven by a coding agent as the equivalence oracle — see
 `SKILL.md` for the full agent-facing loop.

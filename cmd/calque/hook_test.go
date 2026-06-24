@@ -65,6 +65,24 @@ func TestPreCommitScriptGracefulWhenMissing(t *testing.T) {
 	}
 }
 
+// The post-merge scan must no-op when calque is absent, run the gate, and never
+// carry --strict (a merge is already done — there is nothing to block).
+func TestPostMergeScriptGracefulWhenMissing(t *testing.T) {
+	s := postMergeScript("calque check --exclude 'legacy/**'")
+	if !strings.HasPrefix(s, "#!/bin/sh\n") {
+		t.Errorf("hook must start with a shebang, got %q", s)
+	}
+	if !strings.Contains(s, "command -v calque") || !strings.Contains(s, "exit 0") {
+		t.Errorf("hook must skip gracefully when calque is absent, got:\n%s", s)
+	}
+	if !strings.Contains(s, "calque check --exclude 'legacy/**'") {
+		t.Errorf("hook must run the scan command, got:\n%s", s)
+	}
+	if strings.Contains(s, "--strict") {
+		t.Errorf("post-merge scan must be warn-only (no --strict), got:\n%s", s)
+	}
+}
+
 func TestShellQuote(t *testing.T) {
 	if got := shellQuote("legacy"); got != "legacy" {
 		t.Errorf("plain word should be unquoted, got %q", got)

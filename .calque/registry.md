@@ -1073,3 +1073,17 @@ plumbing vocabulary, not a shared seam.
 - cluster: cmd/calque/mcp.go::checkToolDefinition | cmd/calque/scan.go::addBoundaryFlags | cmd/calque/scan.go::boundaryBiteWarnings
 - verdict: false-alarm
 - reviewed: 2026-06-19
+
+## Run — 2026-06-19 (post-merge hook install)
+
+One incidental cluster from the post-merge hook work. The new `installGitHook`
+helper (shared by the pre-commit and post-merge installers) joined a coincidental
+seam keyed on the literal string `"calque"` plus `version`/`buildVersion` — every
+member just emits a user-facing `"calque …"` message or touches the version
+string. `buildCheckCmd`, `main`, `handleMCP`, `labelStorePath`, `rustExtractorBin`,
+and `NewJudge` share no contract with the hook installer or each other; it's the
+CLI's own brand string surfacing as a seam, not a dual path.
+
+- cluster: cmd/calque/hook.go::buildCheckCmd | cmd/calque/hook.go::installGitHook | cmd/calque/labels.go::labelStorePath | cmd/calque/main.go::main | cmd/calque/mcp.go::handleMCP | internal/code/extract_rust.go::rustExtractorBin | internal/llm/judge.go::NewJudge
+- verdict: false-alarm
+- reviewed: 2026-06-19

@@ -106,7 +106,8 @@ Usage:
                          self-witnessing it's one side of a twin (generator only;
                          --judge adjudicates the directed twin candidates)
   calque hook            spine: wire check into a git pre-commit / Stop hook
-                         (calque hook install — auto-installs pre-commit)
+                         (calque hook install — auto-installs pre-commit;
+                         add --post-merge to also scan pulled/merged code)
   calque doctor          spine: calibration rollup (fire-rate, hit-rate)
   calque mark-fire <id> <verdict>   spine: tag a finding  useful|mixed|not-useful
   calque calibrate       spine: reweight signal channels from adjudicated labels

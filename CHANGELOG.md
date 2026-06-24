@@ -5,6 +5,19 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+### Added
+- **`calque hook install --post-merge` — scan incoming merged code.** The
+  existing pre-commit gate only fires on *your own* commits, so code a
+  contributor lands via `git pull` or a fast-forward merge was never checked
+  until you remembered to run calque by hand. The new `--post-merge` flag also
+  installs a git `post-merge` hook that runs `calque check` after every
+  merge/pull — including fast-forward, which no pre-commit hook sees because no
+  commit of yours happens — surfacing dual-path drift the merged code
+  introduced vs `.calque/registry.md`. Always warn-only (the merge has already
+  happened; it reports without blocking) and no-ops when calque isn't on PATH.
+  Installs both hooks in one shot. (Pre-commit and post-merge installers now
+  share one `installGitHook` helper so the two can't drift apart.)
+
 ## [0.9.0] - 2026-06-19
 
 ### Added

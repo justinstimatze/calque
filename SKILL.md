@@ -115,7 +115,13 @@ above, recording verdicts in the registry.
 ## Keeping it honest
 
 - `calque hook install` writes a git pre-commit hook running `check` (warn-only
-  by default; `--strict` to block; no-ops when calque isn't on PATH).
+  by default; `--strict` to block; no-ops when calque isn't on PATH). Add
+  `--post-merge` to also install a post-merge hook that scans incoming code: it
+  fires after every `git pull`/merge — including fast-forward, which a
+  pre-commit hook never sees because no commit of yours happens — so a
+  contributor's merged code is checked for new dual-path drift before you build
+  on it. Always warn-only (the merge has already happened; it reports, never
+  blocks).
 - `calque mcp` serves both gates over MCP (stdio JSON-RPC) — tools
   `calque_check` + `calque_vocab_check` — so an agent can ask "did my edit
   introduce new drift?" inline, without shelling out.

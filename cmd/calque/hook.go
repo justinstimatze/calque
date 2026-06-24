@@ -27,6 +27,7 @@ func runHook(args []string) {
 	b := addBoundaryFlags(fs)
 	repo, left, right, exclude := b.repo, b.left, b.right, b.exclude
 	strict := fs.Bool("strict", false, "make the gate BLOCK the commit on new suspects (default: warn-only)")
+	postMerge := fs.Bool("post-merge", false, "also install a post-merge hook that scans pulled/merged code (closes the contributor-merge gap; always warn-only)")
 	if err := fs.Parse(args); err != nil {
 		return
 	}
@@ -36,6 +37,11 @@ func runHook(args []string) {
 	switch action {
 	case "install":
 		installPreCommit(*repo, checkCmd)
+		if *postMerge {
+			// A post-merge hook can't block an already-completed merge, so it
+			// runs warn-only regardless of --strict.
+			installPostMerge(*repo, buildCheckCmd(*exclude, false, *left, *right))
+		}
 	case "show":
 		showHookSnippets(*repo, checkCmd)
 	default:
@@ -73,7 +79,30 @@ func preCommitScript(checkCmd string) string {
 		checkCmd + "\n"
 }
 
-func installPreCommit(repo, checkCmd string) {
+// postMergeScript renders the post-merge hook body. Git runs post-merge after a
+// merge or pull updates the working tree — including fast-forward merges, which
+// no pre-commit hook ever sees (no commit of yours happens). It scans the code
+// that just landed for dual-path suspects vs .calque/registry.md, closing the
+// contributor-merge gap the pre-commit gate can't reach. Always warn-only: the
+// merge has already happened, so there is nothing to block — it only reports.
+// No-ops (exit 0) when calque isn't on PATH so a teammate without it can pull.
+func postMergeScript(checkCmd string) string {
+	return "#!/bin/sh\n" +
+		"# calque drift scan (post-merge) — added by `calque hook install --post-merge`.\n" +
+		"# After a pull/merge (incl. fast-forward), surfaces NEW dual-path suspects\n" +
+		"# the merged code introduced vs .calque/registry.md. Warn-only by nature\n" +
+		"# (the merge already happened). Remove this file to uninstall.\n" +
+		"command -v calque >/dev/null 2>&1 || { echo 'calque not on PATH; skipping drift scan'; exit 0; }\n" +
+		"echo 'calque: scanning merged code for new dual-path drift…'\n" +
+		checkCmd + "\n"
+}
+
+// installGitHook writes body to <gitdir>/hooks/<name>, never clobbering an
+// existing non-calque hook. Shared by the pre-commit gate and the post-merge
+// scan so the two installers can't drift apart — the tool eats its own dog
+// food. Returns the hook path and whether a fresh hook was written (false when
+// it already existed or a foreign hook was left untouched).
+func installGitHook(repo, name, body, checkCmd, kindLabel string) (string, bool) {
 	gitDir, err := absoluteGitDir(repo)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque hook: %s is not a git repo (%v)\n", repo, err)
@@ -84,27 +113,41 @@ func installPreCommit(repo, checkCmd string) {
 		fmt.Fprintf(os.Stderr, "calque hook: creating %s: %v\n", hooksDir, err)
 		os.Exit(1)
 	}
-	hookPath := filepath.Join(hooksDir, "pre-commit")
+	hookPath := filepath.Join(hooksDir, name)
 
 	// Never clobber an existing hook — that's someone else's logic.
 	if existing, err := os.ReadFile(hookPath); err == nil {
 		if strings.Contains(string(existing), "calque") {
-			fmt.Printf("calque hook: already installed at %s — nothing to do.\n", hookPath)
-			return
+			fmt.Printf("calque hook: %s already installed at %s — nothing to do.\n", name, hookPath)
+			return hookPath, false
 		}
-		fmt.Printf("calque hook: a pre-commit hook already exists at %s and is left untouched.\n", hookPath)
-		fmt.Printf("Add this line to it to enable the gate:\n\n  %s\n\n", checkCmd)
-		return
+		fmt.Printf("calque hook: a %s hook already exists at %s and is left untouched.\n", name, hookPath)
+		fmt.Printf("Add this line to it to enable the %s:\n\n  %s\n\n", kindLabel, checkCmd)
+		return hookPath, false
 	}
 
-	body := preCommitScript(checkCmd)
 	if err := os.WriteFile(hookPath, []byte(body), 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "calque hook: writing %s: %v\n", hookPath, err)
 		os.Exit(1)
 	}
-	fmt.Printf("calque hook: installed pre-commit gate at %s\n\n%s\n", hookPath, body)
-	fmt.Println("It runs:", checkCmd)
-	fmt.Println("Warn-only unless you passed --strict. Uninstall: rm", hookPath)
+	fmt.Printf("calque hook: installed %s at %s\n\n%s\n", kindLabel, hookPath, body)
+	return hookPath, true
+}
+
+func installPreCommit(repo, checkCmd string) {
+	hookPath, wrote := installGitHook(repo, "pre-commit", preCommitScript(checkCmd), checkCmd, "pre-commit gate")
+	if wrote {
+		fmt.Println("It runs:", checkCmd)
+		fmt.Println("Warn-only unless you passed --strict. Uninstall: rm", hookPath)
+	}
+}
+
+func installPostMerge(repo, checkCmd string) {
+	hookPath, wrote := installGitHook(repo, "post-merge", postMergeScript(checkCmd), checkCmd, "post-merge scan")
+	if wrote {
+		fmt.Println("It runs after every pull/merge (incl. fast-forward):", checkCmd)
+		fmt.Println("Warn-only — it reports, never blocks. Uninstall: rm", hookPath)
+	}
 }
 
 func showHookSnippets(repo, checkCmd string) {
@@ -118,6 +161,14 @@ func showHookSnippets(repo, checkCmd string) {
 	fmt.Println("Installs", filepath.Join(".git", "hooks", "pre-commit"), "running:")
 	fmt.Println()
 	fmt.Println("   ", checkCmd)
+	fmt.Println()
+	fmt.Println("## git post-merge (scan incoming code — add --post-merge)")
+	fmt.Println()
+	fmt.Println("    calque hook install --post-merge --repo", repo, "[--exclude '…']")
+	fmt.Println()
+	fmt.Println("Also installs", filepath.Join(".git", "hooks", "post-merge")+",", "which runs after every")
+	fmt.Println("pull/merge — including fast-forward, which no pre-commit hook sees. Scans the")
+	fmt.Println("code a contributor just merged for new dual-path drift. Always warn-only.")
 	fmt.Println()
 	fmt.Println("## Claude Code Stop hook (.claude/settings.json)")
 	fmt.Println()

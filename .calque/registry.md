@@ -1074,7 +1074,7 @@ plumbing vocabulary, not a shared seam.
 - verdict: false-alarm
 - reviewed: 2026-06-19
 
-## Run — 2026-06-19 (post-merge hook install)
+## Run — 2026-06-24 (post-merge hook install)
 
 One incidental cluster from the post-merge hook work. The new `installGitHook`
 helper (shared by the pre-commit and post-merge installers) joined a coincidental
@@ -1086,7 +1086,7 @@ CLI's own brand string surfacing as a seam, not a dual path.
 
 - cluster: cmd/calque/hook.go::buildCheckCmd | cmd/calque/hook.go::installGitHook | cmd/calque/labels.go::labelStorePath | cmd/calque/main.go::main | cmd/calque/mcp.go::handleMCP | internal/code/extract_rust.go::rustExtractorBin | internal/llm/judge.go::NewJudge
 - verdict: false-alarm
-- reviewed: 2026-06-19
+- reviewed: 2026-06-24
 
 ## Run — 2026-06-24 (review emitter + shared addCheckFlags collapse)
 

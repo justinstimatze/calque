@@ -22,33 +22,51 @@ import (
 	"github.com/justinstimatze/calque/internal/registry"
 )
 
+// checkFlags is the tuning surface shared by `check` and `review` — both run the
+// same computeCheck core, so they share its knobs. Extracted into one definition
+// so the two commands' flag sets can't drift: calque flagged this very
+// duplication in its own source (runCheck ≟ runReview), and the fix for drift is
+// always to collapse to a single source, not to keep two and add a test.
+type checkFlags struct {
+	minScore                                      *float64
+	minLines, clusterMinMembers, clusterMaxFanout *int
+	regPath                                       *string
+	includeTests, noCalib                         *bool
+}
+
+func addCheckFlags(fs *flag.FlagSet) *checkFlags {
+	return &checkFlags{
+		minScore:          fs.Float64("min-score", 0.18, "minimum suspicion score to consider"),
+		minLines:          fs.Int("min-lines", 4, "ignore functions shorter than this many lines"),
+		regPath:           fs.String("registry", ".calque/registry.md", "registry file (adjudicated pairs)"),
+		clusterMinMembers: fs.Int("cluster-min-members", 3, "smallest N-ary cluster to consider (2 includes diluted pairs)"),
+		clusterMaxFanout:  fs.Int("cluster-max-fanout", 8, "a private symbol touched by more than this is plumbing, not a seam"),
+		includeTests:      fs.Bool("include-tests", false, "gate test↔test pairs/clusters too (excluded by default; test↔prod is always kept)"),
+		noCalib:           fs.Bool("no-calibrated-weights", false, "ignore .calque/weights.json; score on the static prior"),
+	}
+}
+
 func runCheck(args []string) {
 	fs := flag.NewFlagSet("check", flag.ContinueOnError)
 	b := addBoundaryFlags(fs)
 	repo, left, right, exclude := b.repo, b.left, b.right, b.exclude
-	minScore := fs.Float64("min-score", 0.18, "minimum suspicion score to consider")
-	minLines := fs.Int("min-lines", 4, "ignore functions shorter than this many lines")
-	regPath := fs.String("registry", ".calque/registry.md", "registry file (adjudicated pairs)")
+	cf := addCheckFlags(fs)
 	strict := fs.Bool("strict", false, "exit 1 if there are new (un-adjudicated) suspects")
-	clusterMinMembers := fs.Int("cluster-min-members", 3, "smallest N-ary cluster to consider (2 includes diluted pairs)")
-	clusterMaxFanout := fs.Int("cluster-max-fanout", 8, "a private symbol touched by more than this is plumbing, not a seam")
 	noFireLog := fs.Bool("no-fire-log", false, "do not append NEW suspects to .calque/fires.jsonl (calibration telemetry)")
-	noCalib := fs.Bool("no-calibrated-weights", false, "ignore .calque/weights.json; score on the static prior")
-	includeTests := fs.Bool("include-tests", false, "gate test↔test pairs/clusters too (excluded by default; test↔prod is always kept)")
 	if err := fs.Parse(args); err != nil {
 		return
 	}
 
-	if applyCalibratedWeights(*repo, *noCalib) {
+	if applyCalibratedWeights(*repo, *cf.noCalib) {
 		fmt.Fprintln(os.Stderr, "calque: calibrated weights active (.calque/weights.json)")
 	}
-	f, err := computeCheck(*repo, *left, *right, *exclude, *minScore, *minLines, *clusterMinMembers, *clusterMaxFanout, *regPath, *includeTests)
+	f, err := computeCheck(*repo, *left, *right, *exclude, *cf.minScore, *cf.minLines, *cf.clusterMinMembers, *cf.clusterMaxFanout, *cf.regPath, *cf.includeTests)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque check: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Print(renderCheck(f, *regPath))
+	fmt.Print(renderCheck(f, *cf.regPath))
 
 	if !*noFireLog && (len(f.Fresh) > 0 || len(f.FreshC) > 0) {
 		logFires(*repo, f.Fresh, f.FreshC)

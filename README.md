@@ -162,6 +162,50 @@ function, so guard sub-function twins with differential tests.
 calque is built to be driven by a coding agent as the equivalence oracle — see
 `SKILL.md` for the full agent-facing loop.
 
+## Review incoming code (git hook or GitHub Actions)
+
+The pre-commit gate only sees *your* commits. To catch drift a contributor
+introduces, calque scans incoming code two ways:
+
+- **Locally** — `calque hook install --post-merge` also installs a git
+  `post-merge` hook that runs after every `git pull`/merge (including
+  fast-forward, which no pre-commit hook sees). Warn-only: it reports the new
+  dual-path suspects the merged code introduced without blocking.
+
+- **On pull requests** — `calque review` runs the same gate as `check` but emits
+  each new suspect as a GitHub Actions annotation (`::warning file=…,line=…::`),
+  so drift shows up **inline on the PR diff**, and writes an at-a-glance markdown
+  table to the job summary (`$GITHUB_STEP_SUMMARY`) so the run's Checks tab shows
+  the full suspect list at a glance. It's advisory by default (exit 0 —
+  annotations never fail the build); pass `--strict` to make it a hard check.
+  No hosted service, no third party: the code never leaves your CI. The
+  deterministic pass needs no API key; the `--judge` precision half (run via
+  `check`/the generators) uses *your own* key as a CI secret.
+
+  Drop this in `.github/workflows/calque.yml`:
+
+  ```yaml
+  name: calque drift review
+  on: pull_request
+  jobs:
+    calque:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+          with: { fetch-depth: 0 }
+        - uses: actions/setup-go@v5
+          with: { go-version: stable }
+        - run: go install github.com/justinstimatze/calque/cmd/calque@latest
+        - run: calque review --exclude '**/*_test.go'   # advisory; never fails the build
+  ```
+
+  Commit `.calque/registry.md` and seed it once (`calque check`, adjudicate the
+  initial suspects) **before** turning the PR check on — calque is recall-first,
+  so a fresh repo's first run is noisy by design; the registry is the memory that
+  makes every later PR quieter as the team clears suspects. For non-Go targets,
+  add the matching toolchain to the workflow (`python3` for `.py`,
+  `node`+`typescript` for `.ts`/`.svelte`, `cargo` for `.rs`).
+
 ## What it's good at — and how to read the output
 
 calque is a **recall-first nose, not a prover.** It surfaces *candidates* that

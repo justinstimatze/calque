@@ -1087,3 +1087,57 @@ CLI's own brand string surfacing as a seam, not a dual path.
 - cluster: cmd/calque/hook.go::buildCheckCmd | cmd/calque/hook.go::installGitHook | cmd/calque/labels.go::labelStorePath | cmd/calque/main.go::main | cmd/calque/mcp.go::handleMCP | internal/code/extract_rust.go::rustExtractorBin | internal/llm/judge.go::NewJudge
 - verdict: false-alarm
 - reviewed: 2026-06-19
+
+## Run — 2026-06-24 (review emitter + shared addCheckFlags collapse)
+
+Adding `calque review` (the CI/PR GitHub-annotations surface) duplicated check's
+flag surface; calque flagged `runCheck ≟ runReview` on its own source, so the
+shared knobs were collapsed into one `addCheckFlags` helper both call (the direct
+pair then dropped off). The remainder below are all false-alarm: coincidental
+shared idioms/strings, or — better — functions correctly funnelling through a
+single shared authority (computeCheck / ghAnnotation), which is the opposite of
+drift.
+
+- pair: cmd/calque/review.go::ghEscapeData | cmd/calque/review.go::ghEscapeProp
+- verdict: false-alarm
+- reviewed: 2026-06-24
+  (ghEscapeProp delegates to ghEscapeData then adds two replacements — composition,
+   not two implementations of one contract.)
+- pair: cmd/calque/review.go::emitPairAnnotations | cmd/calque/review.go::emitClusterAnnotations
+- verdict: false-alarm
+- reviewed: 2026-06-24
+  (parallel emitters that both call ghAnnotation; the annotation FORMAT is
+   single-sourced in ghAnnotation, so there is no contract to drift.)
+- pair: cmd/calque/calib.go::runDoctor | cmd/calque/check.go::addCheckFlags
+- verdict: false-alarm
+- reviewed: 2026-06-24
+  (shared generic flag-help strings; unrelated functions.)
+- pair: cmd/calque/check.go::addCheckFlags | cmd/calque/scan.go::addBoundaryFlags
+- verdict: false-alarm
+- reviewed: 2026-06-24
+  (same "add a group of flags to a FlagSet" idiom over DISJOINT flags — no shared
+   contract to drift.)
+- cluster: cmd/calque/calib.go::runDoctor | cmd/calque/calibrate.go::runCalibrate | cmd/calque/check.go::runCheck | cmd/calque/hook.go::runHook | cmd/calque/prune.go::runPrune | cmd/calque/review.go::runReview | cmd/calque/scan.go::runScan
+- verdict: false-alarm
+- reviewed: 2026-06-24
+  (top-level subcommand handlers sharing CLI scaffolding — addBoundaryFlags,
+   applyCalibratedWeights; parallel entry points, not a drifting contract.)
+- cluster: cmd/calque/check.go::runCheck | cmd/calque/mcp.go::mcpCheck | cmd/calque/prune.go::runPrune | cmd/calque/review.go::runReview
+- verdict: false-alarm
+- reviewed: 2026-06-24
+  (all consumers of the single computeCheck/renderCheck core — correct
+   single-sourcing, the intended shape, not duplication.)
+- cluster: cmd/calque/review.go::emitClusterAnnotations | cmd/calque/review.go::emitPairAnnotations | cmd/calque/review.go::runReview | cmd/calque/vocab_check.go::runVocabCheck
+- verdict: false-alarm
+- reviewed: 2026-06-24
+  (the review emitters cluster around the shared ghAnnotation authority;
+   runVocabCheck joins coincidentally on the generic string "warning".)
+
+## Run — 2026-06-24 (review step-summary panel)
+
+- pair: cmd/calque/review.go::writeStepSummary | cmd/calque/review.go::renderStepSummary
+- verdict: false-alarm
+- reviewed: 2026-06-24
+  (writeStepSummary does the env-check + file append around the pure
+   renderStepSummary; render/write split for testability — single authority for
+   the panel content is renderStepSummary, nothing to drift.)

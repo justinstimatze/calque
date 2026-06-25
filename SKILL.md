@@ -122,6 +122,13 @@ above, recording verdicts in the registry.
   contributor's merged code is checked for new dual-path drift before you build
   on it. Always warn-only (the merge has already happened; it reports, never
   blocks).
+- `calque review` is the CI/pull-request surface: the same gate as `check`,
+  emitted as GitHub Actions annotations (`::warning file=…,line=…::`) so drift
+  shows up inline on the PR diff. Advisory by default (exit 0 — never fails the
+  build); `--strict` makes it a hard check. No hosted service; BYOK for the
+  `--judge` precision half. Seed `.calque/registry.md` before turning it on
+  (recall-first → a fresh repo's first run is noisy; the registry decays the
+  noise as the team adjudicates). README has a ready-to-paste workflow.
 - `calque mcp` serves both gates over MCP (stdio JSON-RPC) — tools
   `calque_check` + `calque_vocab_check` — so an agent can ask "did my edit
   introduce new drift?" inline, without shelling out.

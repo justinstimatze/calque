@@ -82,6 +82,9 @@ Usage:
                          --bootstrap, --seed-cmd '<proj seeder>', --exclude
   calque check           spine: registry-aware gate — flag new/drifted vs the
                          registry  (warn-only; --strict to exit 1)
+  calque review          CI/PR surface: same gate as check, emitted as GitHub
+                         Actions annotations (::warning file=…) for inline PR
+                         review (advisory/exit 0; --strict to fail the check)
   calque cardinality     role axis: declare "role R has N implementations", flag
                          when more exist — the multi-path case pairwise misses
                          (declare in the registry; --strict to exit 1)
@@ -152,6 +155,8 @@ func main() {
 		runProposeDeriv(os.Args[2:])
 	case "confess":
 		runConfess(os.Args[2:])
+	case "review":
+		runReview(os.Args[2:])
 	case "hook":
 		runHook(os.Args[2:])
 	case "doctor":

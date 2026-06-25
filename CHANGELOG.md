@@ -6,6 +6,20 @@ All notable changes to calque. The version string itself comes from the git tag
 ## [Unreleased]
 
 ### Added
+- **`calque review` — the CI / pull-request surface.** Runs the same code-axis
+  gate as `check` but emits each new (un-adjudicated) suspect as a GitHub Actions
+  workflow annotation (`::warning file=…,line=…::`), so dual-path drift shows up
+  inline on a PR diff with no hosted service in the loop — the code never leaves
+  your CI. It also writes an at-a-glance markdown table to the job summary
+  (`$GITHUB_STEP_SUMMARY`) so the run's Checks tab shows the full suspect list.
+  Advisory by default (exit 0 — annotations never fail the build);
+  `--strict` makes it a hard check. The deterministic recall pass needs no API
+  key; the `--judge` precision half stays BYOK (your key as a CI secret). Each
+  suspect annotates *both* endpoints so the warning lands inline wherever the PR
+  touched code. README ships a ready-to-paste `.github/workflows/calque.yml`. The
+  shared flag surface between `check` and `review` is collapsed into one
+  `addCheckFlags` helper — calque flagged the `runCheck ≟ runReview` duplication
+  in its own source, and the fix for drift is to single-source, not to keep two.
 - **`calque hook install --post-merge` — scan incoming merged code.** The
   existing pre-commit gate only fires on *your own* commits, so code a
   contributor lands via `git pull` or a fast-forward merge was never checked

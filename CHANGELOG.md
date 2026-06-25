@@ -5,6 +5,8 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-06-24
+
 ### Added
 - **`calque review` — the CI / pull-request surface.** Runs the same code-axis
   gate as `check` but emits each new (un-adjudicated) suspect as a GitHub Actions

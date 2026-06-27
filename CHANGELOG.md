@@ -5,6 +5,8 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-06-27
+
 ### Added
 - **`calque nearest` — the author-time surface (drift *prevention*).** Every
   other surface (`check` / `review` / the git hooks) finds dual-path drift *after*

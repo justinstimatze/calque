@@ -257,8 +257,20 @@ func Rank(left, right []*FuncSig, minLines int, minScore float64, top int, inclu
 	// token, which is a superset of every pair scorePair can accept — so this is
 	// output-identical to the naive L×R double loop, just far fewer scorePair
 	// calls. anchorChannels MUST track scorePair's hasAnchor gate (see block.go).
+	// The score→gate→sort→dedup→top spine is shared with Nearest via scoreAndRank.
+	return scoreAndRank(candidatePairs(L, R, anchorChannels), minScore, top, includeTests)
+}
+
+// scoreAndRank scores candidate pairs, drops those failing scorePair's noise
+// gate or falling below minScore, sorts by score descending, dedups on the
+// unordered pair {left,right}, and truncates to top. It is the shared spine of
+// Rank (boundary scan) and Nearest (single-query author-time lookup) — extracted
+// so the two paths can't silently diverge, which is exactly the duplication
+// calque exists to catch. Truncation matches Rank's original semantics (callers
+// always pass a positive top); Nearest normalizes its own top before calling.
+func scoreAndRank(pairs [][2]*FuncSig, minScore float64, top int, includeTests bool) []Suspicion {
 	var out []Suspicion
-	for _, p := range candidatePairs(L, R, anchorChannels) {
+	for _, p := range pairs {
 		a, b := p[0], p[1]
 		// Asymmetric test gate: two test functions sharing signal is almost always
 		// a shared setup/mock fixture, not drift — dropped by default. A test↔prod

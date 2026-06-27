@@ -184,9 +184,5 @@ func installBinary(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	tmp := dst + ".tmp"
-	if err := os.WriteFile(tmp, in, 0o755); err != nil {
-		return err
-	}
-	return os.Rename(tmp, dst)
+	return atomicWrite(dst, in, 0o755)
 }

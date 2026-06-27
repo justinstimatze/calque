@@ -1141,3 +1141,77 @@ drift.
   (writeStepSummary does the env-check + file append around the pure
    renderStepSummary; render/write split for testability — single authority for
    the panel content is renderStepSummary, nothing to drift.)
+
+## Run — 2026-06-27 (Nearest author-time core)
+
+- pair: internal/code/score.go::Rank | internal/code/score.go::scoreAndRank
+- verdict: false-alarm
+- reviewed: 2026-06-27
+  (scoreAndRank was extracted FROM Rank as the shared score→gate→sort→dedup→top
+   spine; Rank now calls it. The flag fires on the name stem "rank" + the shared
+   call — but the logic lives in ONE place (scoreAndRank), so there is no contract
+   to drift. This is the collapse, not the duplication — exactly the resolution
+   the author-time Nearest path is meant to drive callers toward.)
+
+## Run — 2026-06-27 (ExtractCached index-cache)
+
+- pair: internal/code/cache.go::ExtractCached | internal/code/scan.go::Extract
+- verdict: false-alarm
+- reviewed: 2026-06-27
+  (ExtractCached is the cached variant of Extract. The genuinely shared logic was
+   COLLAPSED: the tree-walk + skip-stat accounting into walkSources, the sig
+   finalize + test-attribution into prepareSigs, the atomic write into atomicWrite.
+   What remains (0.73) is the irreducible "loop byExt → run extractor → accumulate
+   Files/Funcs/CodeFiles" skeleton common to any repo extractor — structure, not a
+   contract that can drift. Extract must NOT delegate to ExtractCached: that would
+   force cache writes on every uncached caller.)
+- pair: internal/code/cache.go::cacheKey | internal/llm/judge.go::Judge.cacheKey
+- verdict: false-alarm
+- reviewed: 2026-06-27
+  (name-only collision across packages; never share a file. code.cacheKey maps a
+   walk path to the FuncSig.File-relative form; Judge.cacheKey builds an LLM
+   judge-cache key. Disjoint domains.)
+- pair: internal/code/cache.go::cacheKey | internal/pairkey/pairkey.go::Key
+- verdict: false-alarm
+- reviewed: 2026-06-27
+  (name stem "key" only; pairkey.Key canonicalizes an unordered pair, cacheKey
+   relativizes a path. No shared logic.)
+- pair: internal/code/cache.go::loadIndexCache | internal/code/cache.go::saveIndexCache
+- verdict: false-alarm
+- reviewed: 2026-06-27
+  (deliberate load/save inverses sharing the "index cache" name stem; opposite
+   operations over the same on-disk format — the format authority is the indexCache
+   type, nothing to drift.)
+- pair: internal/code/cache.go::ExtractCached | internal/code/symbols.go::ExtractSymbols
+- verdict: false-alarm
+- reviewed: 2026-06-27
+  (both consume the INTENDED single-source walkExtractable — that is its whole
+   purpose — plus share the "extract" stem; different outputs, FuncSigs vs symbols.)
+- pair: internal/code/scan.go::walkSources | internal/corpus/corpus.go::Walk
+- verdict: false-alarm
+- reviewed: 2026-06-27
+  (name stem "walk" only; corpus.Walk walks a prose corpus, walkSources groups code
+   files by extension. Different package, different domain.)
+
+## Run — 2026-06-27 (nearest author-time command)
+
+- pair: cmd/calque/nearest.go::runNearest | internal/code/nearest.go::Nearest
+- verdict: false-alarm
+- reviewed: 2026-06-27
+  (runNearest is the CLI wrapper — flag parsing, PreToolUse-payload decode, pending
+   compose, output formatting — that CALLS the pure recall core code.Nearest. The
+   flag fires on the shared "nearest" name + that one call; command-wraps-core is
+   the correct layering, no duplicated logic.)
+- cluster: internal/code/cache.go::ExtractCached | internal/code/scan.go::Extract | internal/code/scan.go::ExtractPending
+- verdict: false-alarm
+- reviewed: 2026-06-27
+  (the three extraction entry points cluster around the INTENDED single-source
+   helpers walkSources/prepareSigs — the very collapse this session performed.
+   Sharing the authority is correct single-sourcing, the opposite of drift.)
+- cluster: cmd/calque/hook.go::runHook | cmd/calque/main.go::main | cmd/calque/nearest.go::runNearest
+- verdict: false-alarm
+- reviewed: 2026-06-27
+  (main is the command dispatcher that calls both runHook and runNearest; they
+   cluster on the shared "hook"/"nearest" command tokens + the dispatch edge —
+   parallel CLI entry points around the single main switch, same shape as the
+   already-adjudicated subcommand-handler cluster. No shared contract to drift.)

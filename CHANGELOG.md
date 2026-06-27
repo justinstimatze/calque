@@ -5,6 +5,28 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+### Added
+- **`calque nearest` — the author-time surface (drift *prevention*).** Every
+  other surface (`check` / `review` / the git hooks) finds dual-path drift *after*
+  both copies exist; `nearest` surfaces an existing twin *while you're still
+  writing the function* — "this may already exist" before you commit to a second
+  implementation. It reads a Claude Code PreToolUse hook payload on stdin,
+  composes the pending post-edit file (so a fragment edit still parses), extracts
+  the new function(s), and reports the corpus functions that share their seam
+  above a calque-calibrated threshold — silent (exit 0) otherwise, so it never
+  breaks the edit. `--hook` emits the PreToolUse JSON envelope
+  (`hookSpecificOutput.additionalContext`) so the warning lands in-context without
+  blocking the tool; `calque hook install --pre-write` prints the paste-ready
+  `.claude/settings.json` snippet (printed, not auto-merged — calque never mutates
+  your settings.json). Substrate-agnostic: serves Go, TypeScript, and Python.
+- **`ExtractCached` — a persistent per-file extraction cache** (`.calque/index.json`,
+  keyed by mtime+size) so an author-time query hits a warm index instead of
+  re-walking the repo; set-equivalent to a full extract, degrades to a rebuild on
+  any cache miss or corruption. Internally, `Rank` and the new single-query
+  `Nearest` now share one `scoreAndRank` spine, and `Extract` / `ExtractCached`
+  share `walkSources` / `prepareSigs` — calque flagged each duplication on its own
+  new code, and the fix is to single-source, not to keep two.
+
 ## [0.10.0] - 2026-06-24
 
 ### Added

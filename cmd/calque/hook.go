@@ -1,10 +1,5 @@
 package main
 
-// hook — make calque's gate ongoing/automated (the keystone of real use). Wires
-// `calque check` into a git pre-commit hook (auto-installed, local, reversible)
-// and prints the Claude Code Stop-hook snippet. Modelled on the slimemold/cupel
-// hook shape: warn-only by default (never blocks a commit), --strict to gate.
-
 import (
 	"flag"
 	"fmt"
@@ -28,7 +23,16 @@ func runHook(args []string) {
 	repo, left, right, exclude := b.repo, b.left, b.right, b.exclude
 	strict := fs.Bool("strict", false, "make the gate BLOCK the commit on new suspects (default: warn-only)")
 	postMerge := fs.Bool("post-merge", false, "also install a post-merge hook that scans pulled/merged code (closes the contributor-merge gap; always warn-only)")
+	preWrite := fs.Bool("pre-write", false, "show the Claude Code PreToolUse hook snippet (author-time: surface existing twins before you write a new function)")
 	if err := fs.Parse(args); err != nil {
+		return
+	}
+
+	if *preWrite {
+		// The author-time hook lives in Claude Code's settings.json, not git — it
+		// warns while you WRITE, before the commit the git hooks gate. Snippet-only:
+		// calque never mutates the user's settings.json.
+		showPreWriteSnippet(*repo)
 		return
 	}
 
@@ -229,4 +233,38 @@ func jsonQuote(s string) string {
 	}
 	b.WriteByte('"')
 	return b.String()
+}
+
+// showPreWriteSnippet prints the Claude Code settings.json entry that wires
+// calque's author-time drift nose: a PreToolUse hook running `calque nearest` on
+// every Edit/Write, which surfaces existing twins of the function being written
+// (silent unless a strong match; never blocks the edit). Printed rather than
+// merged — settings.json is precious shared config, so calque hands you the
+// snippet to paste instead of mutating it.
+func showPreWriteSnippet(repo string) {
+	abs, err := filepath.Abs(repo)
+	if err != nil {
+		abs = repo
+	}
+	fmt.Printf(`## Claude Code author-time hook (calque nearest)
+
+Add to %s/.claude/settings.json (merge into an existing "hooks" block if present):
+
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "calque nearest --stdin --hook --repo %s" }
+        ]
+      }
+    ]
+  }
+}
+
+Before you write a function, calque surfaces existing functions that share its
+seam — "this may already exist" — as inline context. Advisory: silent unless a
+strong twin, and it never blocks the edit.
+`, abs, abs)
 }

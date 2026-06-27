@@ -85,6 +85,9 @@ Usage:
   calque review          CI/PR surface: same gate as check, emitted as GitHub
                          Actions annotations (::warning file=…) for inline PR
                          review (advisory/exit 0; --strict to fail the check)
+  calque nearest         author-time: read a PreToolUse payload on stdin, surface
+                         existing functions sharing the PENDING edit's seam —
+                         "this may already exist" before you write it (--stdin)
   calque cardinality     role axis: declare "role R has N implementations", flag
                          when more exist — the multi-path case pairwise misses
                          (declare in the registry; --strict to exit 1)
@@ -110,7 +113,9 @@ Usage:
                          --judge adjudicates the directed twin candidates)
   calque hook            spine: wire check into a git pre-commit / Stop hook
                          (calque hook install — auto-installs pre-commit;
-                         add --post-merge to also scan pulled/merged code)
+                         add --post-merge to also scan pulled/merged code;
+                         --pre-write prints a Claude Code PreToolUse hook snippet
+                         that surfaces twins via nearest before you write them)
   calque doctor          spine: calibration rollup (fire-rate, hit-rate)
   calque mark-fire <id> <verdict>   spine: tag a finding  useful|mixed|not-useful
   calque calibrate       spine: reweight signal channels from adjudicated labels
@@ -157,6 +162,8 @@ func main() {
 		runConfess(os.Args[2:])
 	case "review":
 		runReview(os.Args[2:])
+	case "nearest":
+		runNearest(os.Args[2:])
 	case "hook":
 		runHook(os.Args[2:])
 	case "doctor":

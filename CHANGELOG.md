@@ -5,6 +5,8 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-02
+
 ### Added
 - **`calque scan` runs a belt-and-suspenders `jscpd`/`dupl` companion pass.**
   calque's own engine still only targets Type-4 (behavioral) drift — Type-1/2

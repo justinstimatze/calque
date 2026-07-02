@@ -5,6 +5,18 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+### Fixed
+- **The code axis silently skipped `.js`/`.jsx`/`.mjs`/`.cjs`.** The extractor
+  dispatch map only routed `.ts`/`.tsx`/`.svelte` to the TS extractor, even
+  though plain-JS extensions were already counted as "code" for skip-stat
+  purposes — so a repo with real `.mjs`/`.js` build scripts got zero functions
+  extracted from them, with no boundary warning to surface the hole (the TS
+  parser already handles plain JS; it's a superset grammar). All four extensions
+  now route through the same extractor. Field-report credit: an external run
+  surfaced a live dual-path drift bug hidden entirely behind this gap — a `.mjs`
+  script had silently drifted from its `.ts` source of truth with no counterpart
+  to pair against.
+
 ## [0.11.0] - 2026-06-27
 
 ### Added

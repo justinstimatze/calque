@@ -227,6 +227,33 @@ func TestExtractTSSkipsBroken(t *testing.T) {
 	}
 }
 
+// A .mjs file must route through extractTSBatch (batchExtractors previously
+// only mapped .ts/.tsx/.svelte, so plain-JS build scripts parsed to zero
+// functions — the exact gap that hid a real dual-path drift bug in a live repo:
+// an .mjs script reimplementing a .ts contract's precedence order, invisible
+// because the .mjs side had no counterpart to pair with).
+func TestExtractMJSParses(t *testing.T) {
+	dir := t.TempDir()
+	if !tsToolchainAvailable(t, dir) {
+		t.Skip("node + typescript not available")
+	}
+	src := `export function resolveToken(env) {
+  return env.LEGACY_KEY || env.PRIMARY_KEY;
+}
+`
+	f := filepath.Join(dir, "resolve.mjs")
+	if err := os.WriteFile(f, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sigs, err := extractors[".mjs"]([]string{f}, dir)
+	if err != nil {
+		t.Fatalf("extractors[\".mjs\"]: %v", err)
+	}
+	if sigByQual(sigs, "resolveToken") == nil {
+		t.Fatalf("resolveToken not extracted from .mjs; got %d sigs", len(sigs))
+	}
+}
+
 func assertHas(t *testing.T, label string, got, want []string) {
 	t.Helper()
 	set := map[string]bool{}

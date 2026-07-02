@@ -18,6 +18,10 @@ var extractors = map[string]func(paths []string, root string) ([]*FuncSig, error
 	".py":     extractPyBatch,
 	".ts":     extractTSBatch,
 	".tsx":    extractTSBatch,
+	".js":     extractTSBatch, // the TS parser accepts plain JS (superset grammar)
+	".jsx":    extractTSBatch, // extract_ts.mjs already selects ScriptKind.TSX for it
+	".mjs":    extractTSBatch,
+	".cjs":    extractTSBatch,
 	".svelte": extractTSBatch, // <script lang="ts"> blocks, masked from the template
 	".rs":     extractRustBatch,
 }

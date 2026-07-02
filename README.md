@@ -254,6 +254,14 @@ functions equivalent; that's undecidable. Read the output with that in mind:
 - **Tune the boundary, not the threshold.** A well-chosen `--left/--right` (two
   things that genuinely should agree — harness vs prod, client vs server, v2 vs v1)
   beats scanning a whole repo against itself every time.
+- **A boundary is `--left` × `--right`, not `--left` × `--left`.** Two near-identical
+  twins that both land on the *same* side of a scoped boundary are never compared
+  to each other — by design (a client-vs-server split shouldn't cross-pair two
+  server files), not a scorer miss. Verified: a synthetic pair matching a
+  real-world "same shape, both `.ts`, zero fires" report scored 1.00 the moment it
+  was forced onto opposite sides (or scanned with no boundary at all, the
+  self-scan default, which always covers same-side twins). If a boundary run comes
+  back suspiciously clean, re-run once with no `--left`/`--right` to rule this out.
 
 `docs/DESIGN_NOTES.md` §13 has the honest breakdown of what generalizes (the
 convention-free engine) versus what's still style-tuned (the pairwise

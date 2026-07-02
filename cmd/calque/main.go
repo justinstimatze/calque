@@ -75,6 +75,9 @@ first, you (or an LLM) adjudicate, the registry remembers.
 Usage:
   calque scan            code axis: rank dual-path / behavioral-twin (Type-4)
                          suspects across a boundary  [--left G --right G ...]
+                         also runs jscpd/dupl if found on $PATH — Type-1/2
+                         (textual) clone coverage calque's own engine doesn't
+                         attempt (see README); --no-companions to skip
   calque vocab-report    prose axis: frequency surface of hyphenated compounds
   calque synonym-report  prose axis: embedding near-synonyms (single words)
   calque vocab-check     prose gate: flag compounds (freq ≥ min) not in the

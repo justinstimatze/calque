@@ -1215,3 +1215,14 @@ drift.
    cluster on the shared "hook"/"nearest" command tokens + the dispatch edge —
    parallel CLI entry points around the single main switch, same shape as the
    already-adjudicated subcommand-handler cluster. No shared contract to drift.)
+
+## Run — 2026-07-02 (jscpd/dupl companion pass)
+
+- pair: internal/code/extract_shell.go::runJSONExtractor | internal/companion/companion.go::runTool
+- verdict: false-alarm
+- reviewed: 2026-07-02
+  (both are generic "run a subprocess, capture output" plumbing — same shape by
+   necessity for anything that shells out — but serve unrelated contracts:
+   runJSONExtractor parses a per-extractor JSON protocol (node/python), runTool
+   passes through an external clone-detector's raw report verbatim. Nothing to
+   keep in sync between them.)

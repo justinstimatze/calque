@@ -46,6 +46,7 @@ func runScan(args []string) {
 	clusterMaxFanout := fs.Int("cluster-max-fanout", 8, "a private symbol touched by more than this is plumbing, not a seam")
 	noCalib := fs.Bool("no-calibrated-weights", false, "ignore .calque/weights.json; score on the static prior")
 	includeTests := fs.Bool("include-tests", false, "rank test↔test pairs too (excluded by default — two test cases sharing a setup/mock fixture are the dominant false twin; test↔prod pairs are always kept)")
+	noCompanions := fs.Bool("no-companions", false, "skip the jscpd/dupl companion pass (Type-1/2 textual-clone coverage calque's own Type-4 engine doesn't cover; tools run only if already on $PATH, never fetched)")
 	if err := fs.Parse(args); err != nil {
 		return
 	}
@@ -98,6 +99,10 @@ func runScan(args []string) {
 				fmt.Printf("- `%s` (%s:%d)\n", m.Qualname, m.File, m.Line)
 			}
 		}
+	}
+
+	if !*noCompanions {
+		printCompanions(*repo)
 	}
 }
 

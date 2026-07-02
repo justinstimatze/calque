@@ -49,6 +49,14 @@ pairs by overlap — plus an N-ary cluster pass that catches a shared private se
 inlined across several differently-named functions (the case pairwise scoring
 structurally dilutes).
 
+That boundary stays where it is — calque's own engine still only targets Type-4 —
+but `calque scan` now also *runs* `jscpd`/`dupl` as a belt-and-suspenders
+companion pass if either is already on `$PATH`, so one invocation surfaces both
+axes instead of requiring two separate tools in your pipeline. Best-effort and
+purely additive: a tool absent from `$PATH` is skipped with an install hint
+(never fetched), and neither tool's output touches calque's own scoring or
+registry. `--no-companions` to skip it.
+
 ## The invariant
 
 Every drift it catches is the same shape:

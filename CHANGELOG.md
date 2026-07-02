@@ -5,6 +5,18 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+### Added
+- **`calque scan` runs a belt-and-suspenders `jscpd`/`dupl` companion pass.**
+  calque's own engine still only targets Type-4 (behavioral) drift — Type-1/2
+  textual clones are `jscpd`/`dupl`'s job, per the README's existing scope line
+  — but `scan` now shells out to either if it's already on `$PATH` and prints
+  its report alongside calque's own, clearly attributed, so one run covers both
+  axes. Best-effort and purely additive: a tool not found is skipped with an
+  install hint (never fetched or auto-installed), a non-zero exit still
+  surfaces the tool's report, and neither tool's output touches calque's own
+  scoring or registry. `--no-companions` to skip. New `internal/companion`
+  package.
+
 ### Fixed
 - **The code axis silently skipped `.js`/`.jsx`/`.mjs`/`.cjs`.** The extractor
   dispatch map only routed `.ts`/`.tsx`/`.svelte` to the TS extractor, even

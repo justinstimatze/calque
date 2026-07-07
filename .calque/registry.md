@@ -1285,3 +1285,136 @@ node) and Rust's `Body` gains a `visit_stmt` override alongside its existing
    ClusterByTouchpoint — the cluster grew because the shared seam is now
    literally the SAME function (single-sourced), not five drifting copies. The
    best-case outcome of this refactor, not a new risk.)
+
+## Run — 2026-07-06 (--distance-boost dogfood, one-time opt-in adjudication)
+
+Enabling `--distance-boost` on this repo before deciding whether to adopt it,
+per the design's own default-off rationale. Isolated the effect precisely by
+diffing `check --distance-boost` against a plain `check` run: exactly 20 pairs
+are surfaced by the boost alone (73 → 93 new), all landing at score 0.18–0.20 —
+right at the `--min-score` edge, confirming the boost does what it's designed to
+do (nudge marginal pairs), not manufacture unrelated ones (`hasAnchor` still
+gates first). On THIS codebase the marginal band the boost pulls across is
+dominated by single-shared-token name-stem coincidences (`visit`, `key`, `has`,
+`all`, `label`, `judge`, `nearest`, `shell`, `alarm+false`) between functions in
+unrelated cross-directory files — exactly the failure mode a name-stem-heavy
+scorer risks once distance stops discriminating against it. Two pairs are real:
+the cross-language visitor-twin category (§ above) gains its TS↔Rust and Go↔Rust
+legs now that `visit`/`visit_stmt` exist on both sides.
+
+Cross-language visitor twins (extends the existing category above):
+
+- pair: internal/code/extract_ts.mjs::BodyVisitor.visit | internal/code/rust-extractor/src/main.rs::Body.visit_stmt
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-06
+- pair: internal/code/extract_go.go::goBody.Visit | internal/code/rust-extractor/src/main.rs::Body.visit_stmt
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-06
+
+Same-class dispatch siblings (Python's new `visit` override vs its own
+pre-existing `visit_X` handlers — same file, same receiver, flagged
+`same-receiver` by the structural hint already):
+
+- pair: internal/code/extract.py::_BodyVisitor.visit | internal/code/extract.py::_BodyVisitor.visit_Assign
+- verdict: false-alarm
+- reviewed: 2026-07-06
+- pair: internal/code/extract.py::_BodyVisitor.visit | internal/code/extract.py::_BodyVisitor.visit_Call
+- verdict: false-alarm
+- reviewed: 2026-07-06
+- pair: internal/code/extract.py::_BodyVisitor.visit | internal/code/extract.py::_BodyVisitor.visit_Return
+- verdict: false-alarm
+- reviewed: 2026-07-06
+
+Same-file script-generator + its own installer (hook.go) — same category as
+the already-adjudicated `buildCheckCmd | installPreCommit | ...` cluster
+(2026-06-14 run above), just the pre-commit/post-merge sibling pair:
+
+- pair: cmd/calque/hook.go::preCommitScript | cmd/calque/hook.go::installPreCommit
+- verdict: false-alarm
+- reviewed: 2026-07-06
+- pair: cmd/calque/hook.go::postMergeScript | cmd/calque/hook.go::installPostMerge
+- verdict: false-alarm
+- reviewed: 2026-07-06
+
+Shared generic idiom, unrelated purpose (verified by reading both sides — the
+shared signal is a common Go idiom, not a duplicated CONTRACT):
+
+- pair: cmd/calque/labels.go::labelStorePath | internal/llm/judge.go::NewJudge
+- verdict: false-alarm
+- reviewed: 2026-07-06
+  (both resolve a path via env-override → os.UserCacheDir() → os.TempDir()
+   fallback chain — labelStorePath for the label store, NewJudge for the judge
+   cache — the same "resolve an app data path" idiom, applied to two different
+   paths with no shared contract to drift.)
+- pair: cmd/calque/vocab_check.go::runSeedCmd | internal/code/extract_rust.go::buildRustExtractor
+- verdict: false-alarm
+- reviewed: 2026-07-06
+  (both set `cmd.Dir` before running an `exec.Command` — the standard
+   os/exec idiom for "run a subprocess in a specific directory" — one runs a
+   user-configured seed shell command, the other builds the Rust extractor
+   via cargo; unrelated purposes.)
+- pair: cmd/calque/propose.go::runProposeRoles | internal/code/testfile_test.go::TestAsymmetricTestGateCluster
+- verdict: false-alarm
+- reviewed: 2026-07-06
+  (both merely SET the same `ClusterOptions.IncludeTests` field — production
+   code reading a flag, a test fixture hardcoding `true` — coincidental via a
+   shared struct field name, not a duplicated behavior.)
+
+Single-shared-token name-stem coincidences (no other channel fired; the
+functions are unrelated beyond sharing one word):
+
+- pair: internal/code/extract_ts_test.go::assertHas | internal/registry/registry.go::Registry.Has
+- verdict: false-alarm
+- reviewed: 2026-07-06
+- pair: cmd/calque/scan.go::falseAlarmSuffix | internal/code/falsealarm.go::FalseAlarmHint
+- verdict: false-alarm
+- reviewed: 2026-07-06
+  (falseAlarmSuffix is the thin CLI-rendering wrapper that CALLS
+   code.FalseAlarmHint — command-wraps-core, the same layering already
+   established for runNearest ≟ Nearest above — not two implementations.)
+- pair: cmd/calque/scan.go::falseAlarmSuffix | internal/code/falsealarm_test.go::TestFalseAlarmHint
+- verdict: false-alarm
+- reviewed: 2026-07-06
+  (the shared-calls signal is both sides calling FalseAlarmHint — the wrapper,
+   and FalseAlarmHint's own test — not each other.)
+- pair: cmd/calque/scan.go::orAll | internal/code/testfile_test.go::TestAllTest
+- verdict: false-alarm
+- reviewed: 2026-07-06
+- pair: cmd/calque/scan.go::orAll | internal/code/testfile.go::allTest
+- verdict: false-alarm
+- reviewed: 2026-07-06
+  (orAll formats a glob-or-"all" display string; allTest checks whether every
+   member of a cluster is test code — unrelated domains sharing the token
+   "all".)
+- pair: cmd/calque/calib.go::resolveLabel | internal/code/optype.go::opLabel
+- verdict: false-alarm
+- reviewed: 2026-07-06
+- pair: cmd/calque/propose_deep.go::runJudge | internal/llm/judge.go::NewJudge
+- verdict: false-alarm
+- reviewed: 2026-07-06
+  (runJudge orchestrates judging candidates and constructs its Judge via
+   NewJudge internally — consumer calls constructor, not a twin.)
+- pair: cmd/calque/nearest.go::runNearest | internal/code/nearest_test.go::nearestHas
+- verdict: false-alarm
+- reviewed: 2026-07-06
+  (nearestHas is a test-assertion helper for a DIFFERENT test file; unrelated
+   to the CLI entry point beyond the shared "nearest" stem.)
+- pair: cmd/calque/hook.go::shellQuote | internal/code/touchpoint_test.go::makeShell
+- verdict: false-alarm
+- reviewed: 2026-07-06
+  ("shell" means two different things: a POSIX shell-escaping helper vs a test
+   fixture constructor for a fake "Shell" struct.)
+- pair: internal/llm/judge.go::Judge.cacheKey | internal/pairkey/pairkey.go::Key
+- verdict: false-alarm
+- reviewed: 2026-07-06
+  (Judge.cacheKey sha256-hashes a verdict cache key; pairkey.Key normalizes an
+   unordered string pair — different algorithms, coincidental "key" stem.)
+
+**Conclusion:** `--distance-boost` works exactly as designed (a bounded,
+gate-respecting nudge on marginal pairs), but on this repo's current size and
+vocabulary the marginal band is dominated by name-stem noise rather than real
+drift — 18 of 20 false-alarm, 2 confirming an already-known twin category, 0
+new drift found. Recommendation: keep it off by default (already the ship
+default) and reach for it selectively on a boundary-scoped run (`--left`/
+`--right`) where cross-directory pairs are inherently more meaningful than a
+whole-repo self-scan, rather than as a blanket self-scan flag.

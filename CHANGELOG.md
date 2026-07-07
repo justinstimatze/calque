@@ -5,6 +5,8 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-07-06
+
 ### Added
 - **`--distance-boost`** — an opt-in score boost for pairs sitting physically
   far apart (cross-directory weighted more than same-file line distance),

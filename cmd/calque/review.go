@@ -29,7 +29,7 @@ func runReview(args []string) {
 	}
 
 	_ = applyCalibratedWeights(*repo, *cf.noCalib)
-	f, err := computeCheck(*repo, *left, *right, *exclude, *cf.minScore, *cf.minLines, *cf.clusterMinMembers, *cf.clusterMaxFanout, *cf.regPath, *cf.includeTests)
+	f, err := computeCheck(*repo, *left, *right, *exclude, *cf.minScore, *cf.minLines, *cf.minNodes, *cf.clusterMinMembers, *cf.clusterMaxFanout, *cf.regPath, *cf.distanceBoost, *cf.includeTests)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque review: %v\n", err)
 		os.Exit(1)

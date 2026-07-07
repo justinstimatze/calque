@@ -2,6 +2,7 @@ package code
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -164,6 +165,12 @@ type Suspicion struct {
 	Left, Right *FuncSig
 	Score       float64
 	Signals     map[string]float64
+	// DistBoost is the distanceBoost multiplier actually applied to Score (1.0 =
+	// no-op, either because distanceBoostEnabled is off or the pair sits close
+	// together). Kept separate from Signals since it's a post-hoc multiplier on
+	// the combined score, not a per-channel similarity with its own jaccard/avail
+	// semantics — see distanceBoost's doc comment.
+	DistBoost float64
 }
 
 // Reason renders the fired signals, strongest first (matches the Python report).
@@ -182,6 +189,11 @@ func (s Suspicion) Reason() string {
 	var bits []string
 	for _, f := range fired {
 		bits = append(bits, f.def.render(s.Left, s.Right, f.v))
+	}
+	// distBoost is a post-hoc multiplier, not a signalDef entry (no jaccard/
+	// avail of its own) — rendered last, after every fired similarity channel.
+	if dr := distBoostReason(s.Left, s.Right, s.DistBoost); dr != "" {
+		bits = append(bits, dr)
 	}
 	return strings.Join(bits, "; ")
 }
@@ -222,7 +234,16 @@ func scorePair(a, b *FuncSig) (Suspicion, bool) {
 	if !hasAnchor {
 		return Suspicion{}, false
 	}
-	return Suspicion{Left: a, Right: b, Score: score, Signals: sig}, true
+
+	// distanceBoost is a post-hoc multiplier, applied after the anchor gate so
+	// it can never itself manufacture an anchor out of raw distance — it only
+	// corroborates a pair that already cleared the gate on its own signals.
+	distBoost := 1.0
+	if distanceBoostEnabled {
+		distBoost = distanceBoost(a, b)
+		score = math.Min(1.0, score*distBoost)
+	}
+	return Suspicion{Left: a, Right: b, Score: score, Signals: sig, DistBoost: distBoost}, true
 }
 
 func setEqual(a, b set) bool {
@@ -241,11 +262,11 @@ func setEqual(a, b set) bool {
 // deduped on the UNORDERED pair {left,right} — fixing the original Python's
 // symmetric-output bug (a self-scan, where left==right, otherwise emits both
 // A≟B and B≟A). calque must not carry the bug it detects.
-func Rank(left, right []*FuncSig, minLines int, minScore float64, top int, includeTests bool) []Suspicion {
+func Rank(left, right []*FuncSig, gate SizeGate, minScore float64, top int, includeTests bool) []Suspicion {
 	keep := func(fs []*FuncSig) []*FuncSig {
 		var out []*FuncSig
 		for _, f := range fs {
-			if f.NLines >= minLines && !strings.HasPrefix(f.Name, "__") {
+			if gate.keep(f) && !strings.HasPrefix(f.Name, "__") {
 				out = append(out, f)
 			}
 		}

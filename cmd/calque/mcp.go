@@ -123,9 +123,11 @@ func mcpCheck(rawArgs json.RawMessage) string {
 		Exclude           string  `json:"exclude"`
 		MinScore          float64 `json:"min_score"`
 		MinLines          int     `json:"min_lines"`
+		MinNodes          int     `json:"min_nodes"`
 		ClusterMinMembers int     `json:"cluster_min_members"`
 		ClusterMaxFanout  int     `json:"cluster_max_fanout"`
 		Registry          string  `json:"registry"`
+		DistanceBoost     bool    `json:"distance_boost"`
 	}
 	// Defaults match the CLI flag defaults in check.go.
 	a.Repo, a.MinScore, a.MinLines = ".", 0.18, 4
@@ -139,7 +141,12 @@ func mcpCheck(rawArgs json.RawMessage) string {
 	if a.Repo == "" {
 		a.Repo = "."
 	}
-	f, err := computeCheck(a.Repo, a.Left, a.Right, a.Exclude, a.MinScore, a.MinLines, a.ClusterMinMembers, a.ClusterMaxFanout, a.Registry, false)
+	// computeCheck calls code.SetDistanceBoost(a.DistanceBoost) on every call
+	// (even when false) — required here since runMCP is a long-running loop
+	// serving many requests in one process, unlike the one-shot CLI commands;
+	// without an explicit reset each request, a prior request's --distance-boost
+	// would leak into the next.
+	f, err := computeCheck(a.Repo, a.Left, a.Right, a.Exclude, a.MinScore, a.MinLines, a.MinNodes, a.ClusterMinMembers, a.ClusterMaxFanout, a.Registry, a.DistanceBoost, false)
 	if err != nil {
 		return "calque_check: " + err.Error()
 	}

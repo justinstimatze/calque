@@ -5,6 +5,24 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+### Added
+- **`--distance-boost`** — an opt-in score boost for pairs sitting physically
+  far apart (cross-directory weighted more than same-file line distance),
+  capped at +15%/+10% respectively. Distant convergence is a more surprising,
+  less-likely-intentional drift signal than an adjacent near-duplicate
+  (often deliberate — overloads, table-driven siblings). Default off (no
+  behavior change without the flag); wired into `scan`/`check`/`review`/
+  `prune`/`calibrate`/`doctor`/`nearest`/`propose-deep`/the `calque_check` MCP
+  tool. `Reason()` renders the fired boost as `dist-boost=1.09x(cross-dir, 3
+  hops)`.
+- **`--min-nodes`** — a size gate on AST-node count of the function body, a
+  more precise substantiality proxy than `--min-lines`' raw line span (a
+  one-line ternary and a ten-statement one-liner both count as "1 line").
+  `FuncSig.NodeCount` is now populated by all four extractors (Go/Python/
+  TypeScript/Rust); 0 disables the gate (default, matches prior behavior
+  exactly). Wired everywhere `--min-lines` already is, plus `--cluster-*`'s
+  `ClusterOptions.MinNodes`. See `docs/DESIGN_NOTES.md` §20.
+
 ## [0.12.0] - 2026-07-02
 
 ### Added

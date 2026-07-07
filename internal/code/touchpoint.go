@@ -66,7 +66,11 @@ func (c Cluster) Key() string { return pairkey.SetKey(c.MemberKeys()) }
 // ClusterOptions tune the touchpoint pass. Zero value is not valid; use
 // DefaultClusterOptions and override.
 type ClusterOptions struct {
-	MinLines   int     // ignore functions shorter than this (dilution-prone noise)
+	MinLines int // ignore functions shorter than this (dilution-prone noise)
+	// MinNodes is the AST-node-count analog of MinLines — a more precise
+	// substantiality proxy (see SizeGate). 0 disables it, matching pre-existing
+	// behavior for every caller that doesn't set it.
+	MinNodes   int
 	MinMembers int     // smallest cluster to report (3 keeps it additive to pairs)
 	MaxFanout  int     // a symbol touched by more than this is plumbing, not a seam
 	MinScore   float64 // drop clusters below this combined rarity
@@ -232,9 +236,10 @@ func isDomainConst(s string) bool {
 // one or more rare private seam symbols. See the package doc for why.
 func ClusterByTouchpoint(sigs []*FuncSig, opts ClusterOptions) []Cluster {
 	// Scope: real functions only (mirror Rank's keep filter).
+	gate := SizeGate{MinLines: opts.MinLines, MinNodes: opts.MinNodes}
 	var pool []*FuncSig
 	for _, f := range sigs {
-		if f.NLines >= opts.MinLines && !strings.HasPrefix(f.Name, "__") {
+		if gate.keep(f) && !strings.HasPrefix(f.Name, "__") {
 			pool = append(pool, f)
 		}
 	}

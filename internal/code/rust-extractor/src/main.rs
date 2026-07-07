@@ -40,6 +40,11 @@ struct Record {
     name: String,
     line: usize,
     n_lines: usize,
+    // node_count is the number of AST nodes visited in the body — a more precise
+    // substantiality proxy than n_lines (a one-line ternary and a ten-statement
+    // one-liner both count as "1 line"). Mirrors the Go/Python/TS extractors'
+    // per-node counters.
+    node_count: usize,
     strings: Vec<String>,
     writes: Vec<String>,
     reads: Vec<String>,
@@ -73,6 +78,7 @@ struct Body {
     calls: BTreeSet<String>,
     consts: BTreeSet<String>,
     delegates: bool,
+    node_count: usize,
 }
 
 impl Body {
@@ -130,6 +136,7 @@ impl Body {
 
 impl<'ast> Visit<'ast> for Body {
     fn visit_expr(&mut self, node: &'ast Expr) {
+        self.node_count += 1;
         match node {
             Expr::Lit(l) => {
                 if let Lit::Str(s) = &l.lit {
@@ -200,6 +207,15 @@ impl<'ast> Visit<'ast> for Body {
         // Recurse into children (closures/nested exprs are conflated into the
         // enclosing fn, matching extract.py's whole-body visitor).
         visit::visit_expr(self, node);
+    }
+
+    // syn's default visit_stmt/visit_local already delegate into visit_expr for
+    // nested expressions, so overriding visit_expr alone misses only statement-
+    // WRAPPER nodes (Local/Item/Macro) — this override closes that gap so
+    // node_count matches "every AST node visited", not "every expression".
+    fn visit_stmt(&mut self, node: &'ast Stmt) {
+        self.node_count += 1;
+        visit::visit_stmt(self, node);
     }
 }
 
@@ -288,6 +304,7 @@ fn emit_fn(
         name,
         line,
         n_lines,
+        node_count: body.node_count,
         reads: body.read_set(),
         strings: body.strings.into_iter().collect(),
         writes: body.writes.into_iter().collect(),

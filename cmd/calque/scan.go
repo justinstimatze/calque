@@ -41,6 +41,8 @@ func runScan(args []string) {
 	top := fs.Int("top", 30, "max suspect pairs to report")
 	minScore := fs.Float64("min-score", 0.18, "minimum suspicion score to report")
 	minLines := fs.Int("min-lines", 4, "ignore functions shorter than this many lines")
+	minNodes := fs.Int("min-nodes", 0, "size gate on AST-node count of the function body — more precise than --min-lines' raw line span (a one-line ternary and a ten-statement one-liner both count as '1 line'); 0 disables (default, matches current behavior exactly)")
+	distanceBoost := fs.Bool("distance-boost", false, "boost score for pairs sitting far apart (cross-directory weighted more than same-file line distance) — distant convergence is a more surprising, less-likely-intentional signal than an adjacent near-duplicate; default off (opt-in, may surface new candidates on an already-calibrated repo)")
 	noClusters := fs.Bool("no-clusters", false, "skip the N-ary private-seam clustering pass")
 	clusterMinMembers := fs.Int("cluster-min-members", 3, "smallest N-ary cluster to report (2 includes diluted pairs)")
 	clusterMaxFanout := fs.Int("cluster-max-fanout", 8, "a private symbol touched by more than this is plumbing, not a seam")
@@ -54,8 +56,9 @@ func runScan(args []string) {
 	if applyCalibratedWeights(*repo, *noCalib) {
 		fmt.Fprintln(os.Stderr, "calque: calibrated weights active (.calque/weights.json)")
 	}
-	copts := clusterOptsFrom(*minLines, *clusterMinMembers, *clusterMaxFanout, *top)
-	r, err := codeAxis(*repo, *left, *right, *exclude, *minScore, *minLines, *top, copts, !*noClusters, *includeTests)
+	gate := code.SizeGate{MinLines: *minLines, MinNodes: *minNodes}
+	copts := clusterOptsFrom(*minLines, *minNodes, *clusterMinMembers, *clusterMaxFanout, *top)
+	r, err := codeAxis(*repo, *left, *right, *exclude, *minScore, gate, *top, copts, *distanceBoost, !*noClusters, *includeTests)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque scan: walking %s: %v\n", *repo, err)
 		os.Exit(1)
@@ -174,9 +177,9 @@ func unparsedExts(files []string) []string {
 
 // clusterOptsFrom builds ClusterOptions from the common cluster flags — shared by
 // scan/check/doctor so the cluster knobs stay single-sourced.
-func clusterOptsFrom(minLines, minMembers, maxFanout, top int) code.ClusterOptions {
+func clusterOptsFrom(minLines, minNodes, minMembers, maxFanout, top int) code.ClusterOptions {
 	o := code.DefaultClusterOptions()
-	o.MinLines, o.MinMembers, o.MaxFanout, o.Top = minLines, minMembers, maxFanout, top
+	o.MinLines, o.MinNodes, o.MinMembers, o.MaxFanout, o.Top = minLines, minNodes, minMembers, maxFanout, top
 	return o
 }
 
@@ -192,8 +195,12 @@ type codeAxisResult struct {
 // codeAxis runs the shared recall pipeline — extract → filter → rank (pairs) +
 // touchpoint cluster (N-ary) — single-sourced so scan, check, and doctor can't
 // drift on how they recall (the pipeline calque flagged duplicated across them).
-// withClusters lets a caller skip the N-ary pass.
-func codeAxis(repo, left, right, exclude string, minScore float64, minLines, top int, copts code.ClusterOptions, withClusters, includeTests bool) (codeAxisResult, error) {
+// withClusters lets a caller skip the N-ary pass. distBoost sets the package-level
+// distance-decay toggle for this call — codeAxis is the single spine shared by
+// every subcommand that scores pairs via Rank, so setting it here (rather than in
+// each of scan/check/calibrate/doctor separately) is the one place it can't drift.
+func codeAxis(repo, left, right, exclude string, minScore float64, gate code.SizeGate, top int, copts code.ClusterOptions, distBoost, withClusters, includeTests bool) (codeAxisResult, error) {
+	code.SetDistanceBoost(distBoost)
 	all, st, err := code.Extract(repo, splitCSV(exclude))
 	if err != nil {
 		return codeAxisResult{}, err
@@ -201,7 +208,7 @@ func codeAxis(repo, left, right, exclude string, minScore float64, minLines, top
 	L := code.Filter(all, left)
 	R := code.Filter(all, right)
 	copts.IncludeTests = includeTests // single-source the test gate across pairs + clusters
-	res := codeAxisResult{All: all, Stats: st, Pairs: code.Rank(L, R, minLines, minScore, top, includeTests)}
+	res := codeAxisResult{All: all, Stats: st, Pairs: code.Rank(L, R, gate, minScore, top, includeTests)}
 	if withClusters {
 		res.Clusters = code.ClusterByTouchpoint(unionSigs(L, R), copts)
 	}

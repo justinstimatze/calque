@@ -48,6 +48,8 @@ func runNearest(args []string) {
 	threshold := fs.Float64("threshold", nearestDefaultThreshold, "minimum suspicion score to surface a twin")
 	top := fs.Int("top", 5, "max twins to surface per pending function")
 	minLines := fs.Int("min-lines", 3, "ignore corpus functions shorter than this many lines")
+	minNodes := fs.Int("min-nodes", 0, "size gate on AST-node count of the function body; 0 disables (default, matches current behavior exactly)")
+	distanceBoost := fs.Bool("distance-boost", false, "boost score for pairs sitting far apart (cross-directory weighted more than same-file line distance); default off")
 	includeTests := fs.Bool("include-tests", false, "include test↔test twins (default: only test↔prod and prod↔prod)")
 	hookFmt := fs.Bool("hook", false, "emit a Claude Code PreToolUse JSON envelope (hookSpecificOutput.additionalContext) instead of plain text — for use as a settings.json hook")
 	if err := fs.Parse(args); err != nil {
@@ -84,14 +86,16 @@ func runNearest(args []string) {
 	}
 
 	_ = applyCalibratedWeights(*repo, false)
+	code.SetDistanceBoost(*distanceBoost)
 	corpus, _, err := code.ExtractCached(*repo, splitCSV(*exclude))
 	if err != nil {
 		return
 	}
 
+	gate := code.SizeGate{MinLines: *minLines, MinNodes: *minNodes}
 	var b strings.Builder
 	for _, q := range queries {
-		for _, h := range code.Nearest(q, corpus, *minLines, *threshold, *top, *includeTests) {
+		for _, h := range code.Nearest(q, corpus, gate, *threshold, *top, *includeTests) {
 			fmt.Fprintf(&b, "- `%s` (%s:%d) may already exist — twin of `%s` (%s:%d) [%.2f] %s\n",
 				q.Name, rel, q.Line, h.Right.Qualname, h.Right.File, h.Right.Line, h.Score, h.Reason())
 		}

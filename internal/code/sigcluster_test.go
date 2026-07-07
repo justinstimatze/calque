@@ -62,7 +62,7 @@ func TestSignatureCandidates(t *testing.T) {
 		// Too short — filtered by minLines.
 		mkSig("e.ts", "tiny", "tiny", "(Task)=>void", 2),
 	}
-	cands := SignatureCandidates(sigs, 4, 2, 6)
+	cands := SignatureCandidates(sigs, SizeGate{MinLines: 4}, 2, 6)
 
 	// Exactly one candidate: the worktree pair. (opposed CRUD filtered; primitive sig
 	// not informative; the void/Task group has only the tiny short one left after
@@ -89,7 +89,7 @@ func TestNameStemCandidates(t *testing.T) {
 		// Shares only the common stem "get" with nothing rich — no pair.
 		mkSig("c.ts", "getUser", "getUser", "()=>User", 6),
 	}
-	cands := NameStemCandidates(sigs, 4, 0.6, 8)
+	cands := NameStemCandidates(sigs, SizeGate{MinLines: 4}, 0.6, 8)
 	if len(cands) != 1 {
 		t.Fatalf("expected 1 name-stem candidate (the format pair), got %d: %+v", len(cands), cands)
 	}
@@ -110,7 +110,7 @@ func TestNameStemFanoutCap(t *testing.T) {
 		// All share the stem "handle" but are otherwise distinct → high fanout.
 		sigs = append(sigs, mkSig("f.ts", "handle"+string(rune('A'+i)), "handle"+string(rune('A'+i)), "()=>void", 6))
 	}
-	if got := NameStemCandidates(sigs, 4, 0.6, 8); len(got) != 0 {
+	if got := NameStemCandidates(sigs, SizeGate{MinLines: 4}, 0.6, 8); len(got) != 0 {
 		t.Errorf("stem 'handle' shared by 10 funcs exceeds fanout cap 8, expected 0, got %d", len(got))
 	}
 }
@@ -178,7 +178,7 @@ func TestSignatureCandidatesRarityWindow(t *testing.T) {
 	for i := 0; i < 8; i++ {
 		sigs = append(sigs, mkSig("f.ts", string(rune('a'+i)), string(rune('a'+i)), "(Foo)=>Bar", 5))
 	}
-	if got := SignatureCandidates(sigs, 4, 2, 6); len(got) != 0 {
+	if got := SignatureCandidates(sigs, SizeGate{MinLines: 4}, 2, 6); len(got) != 0 {
 		t.Errorf("group of 8 exceeds maxMembers=6, expected 0 candidates, got %d", len(got))
 	}
 }

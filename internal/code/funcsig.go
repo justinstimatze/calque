@@ -16,6 +16,7 @@
 package code
 
 import (
+	_ "embed"
 	"regexp"
 	"strings"
 )
@@ -24,17 +25,23 @@ import (
 // extractor interchange format: any extractor (go/ast, python3, …) emits these;
 // the scorer consumes them. Derived set/stem forms are computed by Prepare.
 type FuncSig struct {
-	File     string   `json:"file"`
-	Qualname string   `json:"qualname"` // "Type.Method" or "func"
-	Name     string   `json:"name"`
-	Line     int      `json:"line"`
-	NLines   int      `json:"n_lines"`
-	Strings  []string `json:"strings"`  // emitted string literals (≥4 chars)
-	Writes   []string `json:"writes"`   // dotted attribute/field write targets
-	Reads    []string `json:"reads"`    // dotted attribute/field READ paths (derivation inputs)
-	RetKeys  []string `json:"ret_keys"` // keys of a returned map/struct literal
-	Calls    []string `json:"calls"`    // called function/method leaf names
-	Consts   []string `json:"consts"`   // referenced SCREAMING_SNAKE domain constants (V_BELOW, GRID)
+	File     string `json:"file"`
+	Qualname string `json:"qualname"` // "Type.Method" or "func"
+	Name     string `json:"name"`
+	Line     int    `json:"line"`
+	NLines   int    `json:"n_lines"`
+	// NodeCount is the number of AST nodes visited in the body — a more precise
+	// substantiality proxy than NLines (a one-line ternary and a ten-statement
+	// one-liner both count as "1 line"). Populated by each extractor's existing
+	// body-walk visitor; an extractor that omits it yields 0, a harmless no-op
+	// everywhere it's gated on (SizeGate.MinNodes defaults to 0 = disabled).
+	NodeCount int      `json:"node_count,omitempty"`
+	Strings   []string `json:"strings"`  // emitted string literals (≥4 chars)
+	Writes    []string `json:"writes"`   // dotted attribute/field write targets
+	Reads     []string `json:"reads"`    // dotted attribute/field READ paths (derivation inputs)
+	RetKeys   []string `json:"ret_keys"` // keys of a returned map/struct literal
+	Calls     []string `json:"calls"`    // called function/method leaf names
+	Consts    []string `json:"consts"`   // referenced SCREAMING_SNAKE domain constants (V_BELOW, GRID)
 	// DeclConsts is the SCREAMING_SNAKE constants DECLARED at module/file scope in
 	// THIS function's file (repeated across the file's functions). The touchpoint
 	// pass unions it across the corpus to gate the const seam channel on
@@ -91,8 +98,6 @@ func (f *FuncSig) Prepare() {
 	f.stem = stemTokens(f.Name)
 }
 
-// --- string sets ---
-
 type set map[string]struct{}
 
 func toSet(xs []string) set {
@@ -139,8 +144,6 @@ func intersect(a, b set) []string {
 	}
 	return out
 }
-
-// --- name → role stem (_norm_tokens / _stem_tokens / _role_prefix) ---
 
 // rolePrefixes are stripped when normalizing a name to its role stem, so
 // _handle_leave_town and leave_town collapse to the same contract stem.
@@ -204,3 +207,21 @@ func rolePrefix(name string) string {
 // IsDelegationRoot reports whether the first component of a dotted attribute
 // path is a known wrapper attribute (used by extractors to set Delegates).
 func IsDelegationRoot(root string) bool { return delegationRoots.has(root) }
+
+// SizeGate bounds which functions the recall passes consider substantial
+// enough to score, on two independent axes: MinLines (raw line span) and
+// MinNodes (AST-node count of the body — a more precise substantiality proxy,
+// since a one-line ternary and a ten-statement one-liner both count as "1
+// line" but have very different NodeCount). The zero value disables both
+// floors — exactly today's behavior from before this struct existed, so every
+// existing caller that only cared about line count keeps its exact result by
+// leaving MinNodes at 0.
+type SizeGate struct {
+	MinLines int
+	MinNodes int
+}
+
+// keep reports whether f clears both size floors.
+func (g SizeGate) keep(f *FuncSig) bool {
+	return f.NLines >= g.MinLines && f.NodeCount >= g.MinNodes
+}

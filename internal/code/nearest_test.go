@@ -40,7 +40,7 @@ func TestNearestSurfacesTwin(t *testing.T) {
 	twin := fsig("layout.go", "deriveBounds", []string{"bounds"}, []string{"box.w", "box.h"}, nil, nil)
 	unrelated := fsig("flags.go", "parseFlags", []string{"verbose"}, []string{"cfg.debug"}, nil, nil)
 
-	got := Nearest(query, []*FuncSig{unrelated, twin}, 4, 0.15, 5, false)
+	got := Nearest(query, []*FuncSig{unrelated, twin}, SizeGate{MinLines: 4}, 0.15, 5, false)
 	if len(got) == 0 {
 		t.Fatal("Nearest returned nothing; expected the shared-seam twin")
 	}
@@ -59,7 +59,7 @@ func TestNearestSkipsSelf(t *testing.T) {
 	q := fsig("layout.go", "deriveBounds", []string{"bounds"}, []string{"box.w", "box.h"}, nil, nil)
 	twin := fsig("other.go", "computeBounds", []string{"bounds"}, []string{"box.w", "box.h"}, nil, nil)
 
-	got := Nearest(q, []*FuncSig{q, twin}, 4, 0.15, 5, false)
+	got := Nearest(q, []*FuncSig{q, twin}, SizeGate{MinLines: 4}, 0.15, 5, false)
 	if nearestHas(got, "deriveBounds") {
 		t.Error("Nearest matched the query against itself")
 	}
@@ -79,12 +79,12 @@ func TestNearestCorpusMinLines(t *testing.T) {
 	short := fsig("layout.go", "deriveBounds", []string{"bounds"}, []string{"box.w", "box.h"}, nil, nil)
 	short.NLines = 2
 
-	if got := Nearest(query, []*FuncSig{short}, 4, 0.15, 5, false); len(got) != 0 {
+	if got := Nearest(query, []*FuncSig{short}, SizeGate{MinLines: 4}, 0.15, 5, false); len(got) != 0 {
 		t.Errorf("corpus twin below minLines should be excluded, got %d match(es)", len(got))
 	}
 
 	short.NLines = 10 // now over the floor
-	if got := Nearest(query, []*FuncSig{short}, 4, 0.15, 5, false); len(got) == 0 {
+	if got := Nearest(query, []*FuncSig{short}, SizeGate{MinLines: 4}, 0.15, 5, false); len(got) == 0 {
 		t.Error("a stub query must still surface a long-enough corpus twin")
 	}
 }

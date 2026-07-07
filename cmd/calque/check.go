@@ -28,21 +28,23 @@ import (
 // duplication in its own source (runCheck ≟ runReview), and the fix for drift is
 // always to collapse to a single source, not to keep two and add a test.
 type checkFlags struct {
-	minScore                                      *float64
-	minLines, clusterMinMembers, clusterMaxFanout *int
-	regPath                                       *string
-	includeTests, noCalib                         *bool
+	minScore                                                *float64
+	minLines, minNodes, clusterMinMembers, clusterMaxFanout *int
+	regPath                                                 *string
+	includeTests, noCalib, distanceBoost                    *bool
 }
 
 func addCheckFlags(fs *flag.FlagSet) *checkFlags {
 	return &checkFlags{
 		minScore:          fs.Float64("min-score", 0.18, "minimum suspicion score to consider"),
 		minLines:          fs.Int("min-lines", 4, "ignore functions shorter than this many lines"),
+		minNodes:          fs.Int("min-nodes", 0, "size gate on AST-node count of the function body — more precise than --min-lines' raw line span (a one-line ternary and a ten-statement one-liner both count as '1 line'); 0 disables (default, matches current behavior exactly)"),
 		regPath:           fs.String("registry", ".calque/registry.md", "registry file (adjudicated pairs)"),
 		clusterMinMembers: fs.Int("cluster-min-members", 3, "smallest N-ary cluster to consider (2 includes diluted pairs)"),
 		clusterMaxFanout:  fs.Int("cluster-max-fanout", 8, "a private symbol touched by more than this is plumbing, not a seam"),
 		includeTests:      fs.Bool("include-tests", false, "gate test↔test pairs/clusters too (excluded by default; test↔prod is always kept)"),
 		noCalib:           fs.Bool("no-calibrated-weights", false, "ignore .calque/weights.json; score on the static prior"),
+		distanceBoost:     fs.Bool("distance-boost", false, "boost score for pairs sitting far apart (cross-directory weighted more than same-file line distance); default off (opt-in, may surface new candidates on an already-calibrated repo)"),
 	}
 }
 
@@ -60,7 +62,7 @@ func runCheck(args []string) {
 	if applyCalibratedWeights(*repo, *cf.noCalib) {
 		fmt.Fprintln(os.Stderr, "calque: calibrated weights active (.calque/weights.json)")
 	}
-	f, err := computeCheck(*repo, *left, *right, *exclude, *cf.minScore, *cf.minLines, *cf.clusterMinMembers, *cf.clusterMaxFanout, *cf.regPath, *cf.includeTests)
+	f, err := computeCheck(*repo, *left, *right, *exclude, *cf.minScore, *cf.minLines, *cf.minNodes, *cf.clusterMinMembers, *cf.clusterMaxFanout, *cf.regPath, *cf.distanceBoost, *cf.includeTests)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque check: %v\n", err)
 		os.Exit(1)
@@ -97,9 +99,10 @@ type checkFindings struct {
 // computeCheck runs the scan, diffs against the registry, and returns the
 // new/known/stale split — the shared core behind `calque check` (CLI) and the
 // calque_check MCP tool. No side effects (no print, no fire-log, no exit).
-func computeCheck(repo, left, right, exclude string, minScore float64, minLines, clusterMinMembers, clusterMaxFanout int, regPath string, includeTests bool) (checkFindings, error) {
-	copts := clusterOptsFrom(minLines, clusterMinMembers, clusterMaxFanout, 1<<30)
-	r, err := codeAxis(repo, left, right, exclude, minScore, minLines, 1<<30, copts, true, includeTests)
+func computeCheck(repo, left, right, exclude string, minScore float64, minLines, minNodes, clusterMinMembers, clusterMaxFanout int, regPath string, distBoost, includeTests bool) (checkFindings, error) {
+	gate := code.SizeGate{MinLines: minLines, MinNodes: minNodes}
+	copts := clusterOptsFrom(minLines, minNodes, clusterMinMembers, clusterMaxFanout, 1<<30)
+	r, err := codeAxis(repo, left, right, exclude, minScore, gate, 1<<30, copts, distBoost, true, includeTests)
 	if err != nil {
 		return checkFindings{}, err
 	}

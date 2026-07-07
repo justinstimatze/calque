@@ -42,7 +42,7 @@ func TestTripleShellClustered(t *testing.T) {
 	}
 
 	// Pairwise must MISS it (that's the gap this pass closes).
-	if pairs := Rank(shells, shells, 4, 0.18, 50, false); len(pairs) != 0 {
+	if pairs := Rank(shells, shells, SizeGate{MinLines: 4}, 0.18, 50, false); len(pairs) != 0 {
 		t.Fatalf("expected pairwise to miss the diluted triple, got %d pair(s): %+v", len(pairs), pairs)
 	}
 

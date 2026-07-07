@@ -104,8 +104,10 @@ Makefile           # git-tag versioning via -ldflags
 writes .30, name .22, calls .10, ret .08`), **renormalized over available
 signals** (a pair isn't penalized for neither side emitting strings). A noise
 gate requires a real anchor (name overlap ≥ 0.34 OR any surface/effect/ret
-overlap) so generic-callee coincidences are dropped. Tiny functions (< 4 lines)
-and dunders excluded. Each left fn keeps its single best match.
+overlap) so generic-callee coincidences are dropped. Tiny functions (< 4 lines,
+or below `--min-nodes`'s AST-node floor — §20) and dunders excluded. Each left
+fn keeps its single best match. An optional post-hoc distance-decay boost
+(`--distance-boost`, §20) rewards pairs sitting physically far apart.
 
 **CLI contract:** `--left`/`--right` globs are relative to `--repo`. Only
 left×right pairs are scored (the testing-vs-prod boundary), not within-group. Go
@@ -1274,3 +1276,96 @@ errored, not silently mis-classified). This is concrete motivation for the fence
 hardening (§13 / the stull select-don't-invent pattern): constrain the judge to *select*
 a vetted verdict token under a grammar that fails safe, so a chatty completion can't
 corrupt the parse.
+
+## 20. Distance-decay score boost + AST-node-count size gate
+
+Two ideas worth lifting on their own merits from embedding-based near-duplicate
+detectors in the wider dual-path-detection space (clean-room reimplemented from
+technique, not code — license terms of the surveyed tools vary and some are
+copyleft/incompatible with calque's Apache-2.0). Both are additive to the
+existing pairwise scorer; neither introduces a new dependency or changes
+default behavior.
+
+### 20.1 Distance-decay score boost (`--distance-boost`)
+
+**Idea:** reward pairs that sit physically far apart in the codebase over
+pairs sitting right next to each other, at the same raw jaccard score. Two
+near-identical functions in the same file, ten lines apart, are often
+*deliberate* (overloads, table-driven siblings); the same similarity between
+two functions in unrelated directories is a more surprising, more
+likely-unintentional convergence — exactly the signal a dual-path detector
+should weight up.
+
+**Mechanism** (`internal/code/distance.go`): `distanceBoost(a, b *FuncSig)`
+returns a multiplier in `[1.0, 1.15]`, computed purely from `File`/`Line`
+(already on `FuncSig` — no new field):
+
+- **Same file:** boost by line distance, capped at **+10%**, saturating at
+  300 lines apart.
+- **Different files:** boost by **directory-hop distance** — split each
+  relative path into segments, find the common-prefix length, hops = segments
+  unique to each side (a tree/LCA distance) — capped at **+15%**, saturating
+  at 4 hops.
+
+Applied in `scorePair` (`score.go`) as `score = min(1.0, score * distanceBoost(a,
+b))`, gated by a package-level toggle (`distanceBoostEnabled` /
+`SetDistanceBoost`) mirroring the existing `activeWeights` /
+`UseWeights` / `ResetWeights` calibration pattern — `scorePair` is called from
+more than `Rank` (also `NameStemCandidates`/`SignatureCandidates`, which use
+its `.Score` as a sort tiebreak), so a single package-level switch avoids
+threading a bool through every call site. Applied *after* the anchor gate
+(`hasAnchor`), so distance can only corroborate a pair that already cleared
+the gate on its own signal — it can never manufacture an anchor out of raw
+distance alone. `Suspicion.DistBoost` records the applied multiplier (1.0 =
+no-op); `Reason()` appends `dist-boost=1.09x(cross-dir, 3 hops)` when it
+fired.
+
+**Default off.** Boosting scores for nearly every cross-file pair can push
+previously-sub-`minScore` pairs across the gate on an already-calibrated repo
+— a real one-time re-adjudication cost, not a free lunch. `--distance-boost`
+opts in per-invocation; the CHANGELOG entry is "Added", not "Changed" (no
+default-behavior change).
+
+### 20.2 AST-node-count size gate (`--min-nodes`)
+
+**Idea:** gate candidate functions by AST-node count of the body, not raw
+line count. A one-line ternary and a ten-statement one-liner both count as
+"1 line" under `--min-lines`, but have very different substantiality — line
+count is a proxy for "is there enough here to compare," and node count is a
+strictly more precise version of the same proxy.
+
+**Mechanism:** `FuncSig.NodeCount int` (json `node_count,omitempty`) is
+populated by each extractor's *existing* body-walk visitor — one counter
+increment riding along the same traversal that already computes
+writes/reads/calls/strings, no second walk:
+
+- **Go** (`extract_go.go`): `goBody.Visit` increments per node, guarding
+  `go/ast.Walk`'s post-children `Visit(nil)` sentinel call to avoid
+  double-counting.
+- **Python** (`extract.py`): `_BodyVisitor` overrides the single `visit`
+  dispatcher `ast.NodeVisitor` calls for every node (not each `visit_X`).
+- **TypeScript** (`extract_ts.mjs`): the existing custom recursive `visit`
+  method increments at its top.
+- **Rust** (`rust-extractor/src/main.rs`): `visit_expr` increments per
+  expression; a new `visit_stmt` override closes the gap syn's default
+  traversal leaves (statement-*wrapper* nodes — `Local`/`Item`/`Macro` — that
+  `visit_expr` alone never sees).
+
+An extractor that doesn't populate `NodeCount` yields the zero value, which
+is a harmless no-op everywhere it's gated (see below) — the same
+backward-compatible discipline as `Reads`/`Sig`/`DeclConsts`.
+
+**Consumption:** `SizeGate{MinLines, MinNodes int}` (`funcsig.go`) replaces
+the bare `minLines int` parameter in the four functions that actually gate on
+body size — `Rank`, `Nearest`, `NameStemCandidates`, `SignatureCandidates` —
+plus a `MinNodes` field on `ClusterOptions` for the touchpoint pass.
+`KeySetCandidates` and `SharedDerivationCandidates` are deliberately
+untouched: neither has ever gated on line count (they gate on `minKeys`/
+`minReads` — semantic-set cardinality), and `KeySetCandidates` additionally
+processes non-function entities (tables, corpus-fields) with no per-function
+body walk to source a node count from.
+
+**Default disabled, zero regression risk.** `MinNodes: 0` means "no floor" —
+every existing caller that only ever set `MinLines` keeps its exact prior
+result. `--min-nodes` opts in per-invocation, parallel to every existing
+`--min-lines` flag.

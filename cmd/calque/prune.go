@@ -67,15 +67,17 @@ func runPrune(args []string) {
 	repo, left, right, exclude := b.repo, b.left, b.right, b.exclude
 	minScore := fs.Float64("min-score", 0.18, "minimum suspicion score (liveness is score-independent; passed through for the scan)")
 	minLines := fs.Int("min-lines", 4, "ignore functions shorter than this many lines")
+	minNodes := fs.Int("min-nodes", 0, "size gate on AST-node count of the function body — more precise than --min-lines' raw line span; 0 disables (default, matches current behavior exactly)")
 	regPath := fs.String("registry", ".calque/registry.md", "registry file to prune")
 	clusterMinMembers := fs.Int("cluster-min-members", 3, "smallest N-ary cluster to consider")
 	clusterMaxFanout := fs.Int("cluster-max-fanout", 8, "private-symbol fanout ceiling for a seam")
+	distanceBoost := fs.Bool("distance-boost", false, "boost score for pairs sitting far apart (cross-directory weighted more than same-file line distance); default off — liveness itself is score-independent, but changes which pairs are scanned")
 	write := fs.Bool("write", false, "remove stale entries in place (writes a .bak backup first)")
 	if err := fs.Parse(args); err != nil {
 		return
 	}
 
-	f, err := computeCheck(*repo, *left, *right, *exclude, *minScore, *minLines, *clusterMinMembers, *clusterMaxFanout, *regPath, false)
+	f, err := computeCheck(*repo, *left, *right, *exclude, *minScore, *minLines, *minNodes, *clusterMinMembers, *clusterMaxFanout, *regPath, *distanceBoost, false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque prune: %v\n", err)
 		os.Exit(1)

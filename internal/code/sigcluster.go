@@ -93,10 +93,10 @@ func buildOpposed(pairs [][2]string) map[string]map[string]bool {
 // Cheap and noisier than signature recall; the judge is the precision filter. An
 // inverted stem index keeps it near-linear (only functions sharing a stem are scored),
 // and a fanout cap skips ultra-common stems (get/handle/…) that would pair everything.
-func NameStemCandidates(sigs []*FuncSig, minLines int, minJaccard float64, maxFanout int) []SigCandidate {
+func NameStemCandidates(sigs []*FuncSig, gate SizeGate, minJaccard float64, maxFanout int) []SigCandidate {
 	idx := map[string][]*FuncSig{}
 	for _, f := range sigs {
-		if f.NLines < minLines || strings.HasPrefix(f.Name, "__") || len(f.stem) == 0 {
+		if !gate.keep(f) || strings.HasPrefix(f.Name, "__") || len(f.stem) == 0 {
 			continue
 		}
 		for tok := range f.stem {
@@ -199,13 +199,13 @@ type SigCandidate struct {
 // richest type, most gate-invisible). Opposed-verb pairs are dropped. minMembers/
 // maxMembers bound the rarity window — a signature shared by 2 functions is a strong
 // signal; one shared by 50 is a common shape, not a twin.
-func SignatureCandidates(sigs []*FuncSig, minLines, minMembers, maxMembers int) []SigCandidate {
+func SignatureCandidates(sigs []*FuncSig, gate SizeGate, minMembers, maxMembers int) []SigCandidate {
 	bySig := map[string][]*FuncSig{}
 	for _, f := range sigs {
 		if !signatureInformative(f.Sig) {
 			continue
 		}
-		if f.NLines < minLines || strings.HasPrefix(f.Name, "__") {
+		if !gate.keep(f) || strings.HasPrefix(f.Name, "__") {
 			continue
 		}
 		bySig[f.Sig] = append(bySig[f.Sig], f)

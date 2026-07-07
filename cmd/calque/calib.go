@@ -144,6 +144,8 @@ func runDoctor(args []string) {
 	repo, left, right, exclude := b.repo, b.left, b.right, b.exclude
 	minScore := fs.Float64("min-score", 0.18, "minimum suspicion score to consider")
 	minLines := fs.Int("min-lines", 4, "ignore functions shorter than this many lines")
+	minNodes := fs.Int("min-nodes", 0, "size gate on AST-node count of the function body; 0 disables (default, matches current behavior exactly)")
+	distanceBoost := fs.Bool("distance-boost", false, "boost score for pairs sitting far apart (cross-directory weighted more than same-file line distance); default off")
 	regPath := fs.String("registry", ".calque/registry.md", "registry file (adjudicated verdicts)")
 	clusterMinMembers := fs.Int("cluster-min-members", 3, "smallest N-ary cluster to consider")
 	clusterMaxFanout := fs.Int("cluster-max-fanout", 8, "private-symbol fanout ceiling for a seam")
@@ -161,8 +163,9 @@ func runDoctor(args []string) {
 	if applyCalibratedWeights(*repo, *noCalib) {
 		fmt.Fprintln(os.Stderr, "calque: calibrated weights active (.calque/weights.json)")
 	}
-	copts := clusterOptsFrom(*minLines, *clusterMinMembers, *clusterMaxFanout, 1<<30)
-	r, err := codeAxis(*repo, *left, *right, *exclude, *minScore, *minLines, 1<<30, copts, true, false) // calibrate the gate's real behavior: test↔test excluded
+	gate := code.SizeGate{MinLines: *minLines, MinNodes: *minNodes}
+	copts := clusterOptsFrom(*minLines, *minNodes, *clusterMinMembers, *clusterMaxFanout, 1<<30)
+	r, err := codeAxis(*repo, *left, *right, *exclude, *minScore, gate, 1<<30, copts, *distanceBoost, true, false) // calibrate the gate's real behavior: test↔test excluded
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque doctor: %v\n", err)
 		os.Exit(1)

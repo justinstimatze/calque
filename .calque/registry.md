@@ -1226,3 +1226,62 @@ drift.
    runJSONExtractor parses a per-extractor JSON protocol (node/python), runTool
    passes through an external clone-detector's raw report verbatim. Nothing to
    keep in sync between them.)
+
+## Run — 2026-07-06 (distance-decay score boost + AST-node-count size gate)
+
+Adding `NodeCount` (one counter increment riding the existing per-node body-walk
+in all four extractors) retriggers the cross-language visitor-twin category
+already established below (`goBody.Visit ≟ _BodyVisitor.visit_Call`, "More
+cross-language visitor twins"): Python's `_BodyVisitor` gains a `visit`
+dispatcher override (the single choke point `ast.NodeVisitor` calls for every
+node) and Rust's `Body` gains a `visit_stmt` override alongside its existing
+`visit_expr` — both join the same already-adjudicated shape, not new drift.
+
+- pair: internal/code/extract.py::_BodyVisitor.visit | internal/code/rust-extractor/src/main.rs::Body.visit_expr
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-06
+- pair: internal/code/extract.py::_BodyVisitor.visit | internal/code/rust-extractor/src/main.rs::Body.visit_stmt
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-06
+- pair: internal/code/extract.py::_BodyVisitor.visit | internal/code/extract_ts.mjs::BodyVisitor.visit
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-06
+- pair: internal/code/extract.py::_BodyVisitor.visit | internal/code/extract_ts.mjs::BodyVisitor.visitBody
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-06
+- pair: internal/code/extract_go.go::goBody.Visit | internal/code/extract.py::_BodyVisitor.visit
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-06
+  (five-way cross-language visitor parity — Python's new single-dispatcher
+   `visit` override joins the same "same interchange, different language"
+   category as the existing goBody.Visit/BodyVisitor.visit_Call twins above.
+   Intentional: a future field added to one visitor's counting logic should be
+   mirrored in the others, same as every other channel they already share.)
+- pair: internal/code/rust-extractor/src/main.rs::Body.visit_expr | internal/code/rust-extractor/src/main.rs::Body.visit_stmt
+- verdict: false-alarm
+- reviewed: 2026-07-06
+  (same file, same `Body` visitor struct — syn's `Visit` trait requires separate
+   callbacks for expression vs statement nodes; both do the same one-line
+   "increment then delegate to the default traversal" and are maintained
+   together by construction, not two implementations that could drift apart.)
+- pair: internal/code/distance.go::dirHops | internal/code/distance_test.go::TestDirHops
+- verdict: false-alarm
+- reviewed: 2026-07-06
+  (a function and its own dedicated unit test share name/call signal by
+   construction — the general function-vs-its-test shape, not drift.)
+- cluster: internal/code/extract_py.go::runPyExtractor | internal/code/extract_py_test.go::TestExtractPyConsts | internal/code/extract_py_test.go::TestExtractPyReadsSkipsCallee | internal/code/nodecount_test.go::TestExtractPyNodeCountDiscriminatesFromNLines | internal/code/symbols_test.go::TestExtractSymbolsPyTables
+- verdict: false-alarm
+- reviewed: 2026-07-06
+  (the new NodeCount parity test shares the `extractPyBatch`/`pythonBin` seam
+   with the other Python-extractor tests — same generic-subprocess-plumbing
+   category as the existing rust-extractor clusters above, just on the Python
+   side; joining it is expected, not a new shared contract to drift.)
+- cluster: internal/code/block_test.go::naiveRank | internal/code/extract_ts.mjs::maskSvelteScript | internal/code/nearest.go::Nearest | internal/code/score.go::Rank | internal/code/sigcluster.go::NameStemCandidates | internal/code/sigcluster.go::SignatureCandidates | internal/code/touchpoint.go::ClusterByTouchpoint
+- verdict: false-alarm
+- reviewed: 2026-07-06
+  (the SizeGate refactor collapsed four near-identical `f.NLines >= minLines &&
+   !strings.HasPrefix(f.Name, "__")` inline filters into one `SizeGate.keep`
+   method, now called from Rank/Nearest/NameStemCandidates/SignatureCandidates/
+   ClusterByTouchpoint — the cluster grew because the shared seam is now
+   literally the SAME function (single-sourced), not five drifting copies. The
+   best-case outcome of this refactor, not a new risk.)

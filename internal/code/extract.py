@@ -60,6 +60,16 @@ class _BodyVisitor(ast.NodeVisitor):
         # self.road.compute()), keyed by id(); the read pass skips them so a call
         # name does not masquerade as a field read. Mirrors the Go calleeSkip map.
         self.callee_skip = set()
+        self.node_count = 0
+
+    def visit(self, node):
+        # ast.NodeVisitor.visit is the one dispatcher called for every node
+        # (both the visit_X-handled types below and everything that falls
+        # through to generic_visit) — the single choke point to count from,
+        # cleaner than instrumenting each visit_X override. Mirrors the Go
+        # extractor's per-node Visit counter.
+        self.node_count += 1
+        return super().visit(node)
 
     def visit_Constant(self, node):
         if isinstance(node.value, str) and len(node.value.strip()) >= 4:
@@ -191,6 +201,7 @@ def _extract(path, root):
                     "name": child.name,
                     "line": child.lineno,
                     "n_lines": end - child.lineno + 1,
+                    "node_count": bv.node_count,
                     "strings": sorted(bv.strings),
                     "writes": sorted(bv.writes),
                     "reads": sorted(bv.reads),

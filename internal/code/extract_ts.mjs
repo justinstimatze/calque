@@ -181,6 +181,7 @@ function extractFile(ts, filePath, root) {
       name,
       line: lineOf(node.getStart(sf)),
       n_lines: nLines(node),
+      node_count: bv.nodeCount,
       strings: bv.sorted(bv.strings),
       writes: bv.sorted(bv.writes),
       reads: bv.reads(),
@@ -255,6 +256,7 @@ class BodyVisitor {
     // this.road.compute()); the read pass skips them so a call name does not
     // masquerade as a field read. Mirrors the Go calleeSkip map.
     this.calleeSkip = new Set();
+    this.nodeCount = 0;
   }
 
   sorted(s) { return [...s].sort(); }
@@ -273,6 +275,7 @@ class BodyVisitor {
 
   visit(node) {
     const ts = this.ts;
+    this.nodeCount++;
 
     // String literals (≥4 chars trimmed) — includes un-substituted templates.
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {

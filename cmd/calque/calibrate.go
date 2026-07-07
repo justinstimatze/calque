@@ -100,6 +100,8 @@ func runCalibrate(args []string) {
 	repo, left, right, exclude := b.repo, b.left, b.right, b.exclude
 	minScore := fs.Float64("min-score", 0.05, "low floor so adjudicated pairs aren't filtered out before joining labels")
 	minLines := fs.Int("min-lines", 4, "ignore functions shorter than this many lines")
+	minNodes := fs.Int("min-nodes", 0, "size gate on AST-node count of the function body; 0 disables (default, matches current behavior exactly)")
+	distanceBoost := fs.Bool("distance-boost", false, "boost score for pairs sitting far apart before joining labels — off by default since calibration trains on per-channel Signals, not the boosted Score")
 	regPath := fs.String("registry", ".calque/registry.md", "registry file (adjudicated verdicts)")
 	priorStrength := fs.Float64("prior-strength", 8, "shrinkage: higher keeps weights nearer the static prior (lambda=n/(n+this))")
 	write := fs.Bool("write", false, "persist the calibrated vector to .calque/weights.json")
@@ -112,8 +114,9 @@ func runCalibrate(args []string) {
 	// in-process left activeWeights swapped.
 	code.ResetWeights()
 
-	copts := clusterOptsFrom(*minLines, 3, 8, 1<<30)
-	r, err := codeAxis(*repo, *left, *right, *exclude, *minScore, *minLines, 1<<30, copts, false, false) // calibrate the gate's real behavior: test↔test excluded
+	gate := code.SizeGate{MinLines: *minLines, MinNodes: *minNodes}
+	copts := clusterOptsFrom(*minLines, *minNodes, 3, 8, 1<<30)
+	r, err := codeAxis(*repo, *left, *right, *exclude, *minScore, gate, 1<<30, copts, *distanceBoost, false, false) // calibrate the gate's real behavior: test↔test excluded
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "calque calibrate: %v\n", err)
 		os.Exit(1)

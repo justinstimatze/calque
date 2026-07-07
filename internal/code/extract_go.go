@@ -49,7 +49,7 @@ func ExtractGoFile(path, root string) []*FuncSig {
 		end := fset.Position(fd.End()).Line
 		fs := &FuncSig{
 			File: rel, Qualname: qual, Name: name,
-			Line: start, NLines: end - start + 1,
+			Line: start, NLines: end - start + 1, NodeCount: bv.nodes,
 			Strings: bv.strs.slice(), Writes: bv.writes.slice(),
 			Reads:   bv.reads(),
 			RetKeys: bv.retKeys.slice(), Calls: bv.calls.slice(),
@@ -223,6 +223,9 @@ type goBody struct {
 	// the read pass skips them — a call name is not a field read.
 	calleeSkip map[ast.Expr]bool
 	delegates  bool
+	// nodes counts every AST node visited in the body — see Visit's n == nil guard
+	// for why this isn't a plain unconditional increment.
+	nodes int
 }
 
 // reads returns the derivation read-set: field-paths read in a value position,
@@ -238,6 +241,13 @@ func (b *goBody) reads() []string {
 }
 
 func (b *goBody) Visit(n ast.Node) ast.Visitor {
+	// ast.Walk calls Visit(nil) once after a node's children finish — guard it so
+	// the node count isn't roughly doubled (one real increment per node, one
+	// nil-sentinel call per node's children completing).
+	if n == nil {
+		return b
+	}
+	b.nodes++
 	switch t := n.(type) {
 	case *ast.BasicLit:
 		if t.Kind == token.STRING {

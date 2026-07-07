@@ -10,17 +10,17 @@ import (
 // already occupy its seam?" so a pre-write hook can surface the twin while the
 // DRY-vs-write-new call is still cheap.
 //
-// Unlike Rank it does NOT apply the minLines floor to query itself — an
+// Unlike Rank it does NOT apply the size gate to query itself — an
 // author-time query is often a short stub — only to the corpus side, preserving
 // the corpus quality bar; and it skips the query's own Key, so running it on an
 // already-indexed function never matches itself. Substrate-agnostic: query and
 // corpus are plain FuncSigs, so this serves every language calque extracts
 // (Go, TypeScript, Python), not only defn-indexed Go. top<=0 returns all matches.
-func Nearest(query *FuncSig, corpus []*FuncSig, minLines int, minScore float64, top int, includeTests bool) []Suspicion {
+func Nearest(query *FuncSig, corpus []*FuncSig, gate SizeGate, minScore float64, top int, includeTests bool) []Suspicion {
 	qkey := query.Key()
 	var right []*FuncSig
 	for _, f := range corpus {
-		if f.NLines >= minLines && !strings.HasPrefix(f.Name, "__") && f.Key() != qkey {
+		if gate.keep(f) && !strings.HasPrefix(f.Name, "__") && f.Key() != qkey {
 			right = append(right, f)
 		}
 	}

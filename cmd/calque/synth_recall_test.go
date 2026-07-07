@@ -42,7 +42,7 @@ func TestSynthRecall(t *testing.T) {
 	}
 	// Pick originals with rare, informative signatures (the A-side of the candidate
 	// pass), deduped, with a substantial body to make the rewrite meaningful.
-	cands := code.SignatureCandidates(all, 4, 2, 6)
+	cands := code.SignatureCandidates(all, code.SizeGate{MinLines: 4}, 2, 6)
 	var originals []*code.FuncSig
 	seen := map[string]bool{}
 	for _, c := range cands {

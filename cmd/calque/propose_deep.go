@@ -36,12 +36,14 @@ func runProposeDeep(args []string) {
 	exclude := fs.String("exclude", "", "comma-separated glob(s) to skip entirely (e.g. node_modules/**,dist/**)")
 	regPath := fs.String("registry", ".calque/registry.md", "registry file (dedup vs already-adjudicated pairs)")
 	minLines := fs.Int("min-lines", 4, "ignore functions shorter than this many lines")
+	minNodes := fs.Int("min-nodes", 0, "size gate on AST-node count of the function body; 0 disables (default, matches current behavior exactly)")
 	minMembers := fs.Int("sig-min-members", 2, "smallest signature group to propose from (2 = a rare shared contract)")
 	maxMembers := fs.Int("sig-max-members", 6, "largest signature group to consider (above this the shape is common, not a twin)")
 	top := fs.Int("top", 40, "max candidates to print")
 	noNameStem := fs.Bool("no-name-stem", false, "skip the name-stem recall pass (signature only)")
 	nameJac := fs.Float64("name-jaccard", 0.6, "name-stem pass: min name-token jaccard to pair (1.0 = identical token set)")
 	nameFanout := fs.Int("name-max-fanout", 8, "name-stem pass: skip stems shared by more than this many functions")
+	distanceBoost := fs.Bool("distance-boost", false, "boost score for pairs sitting far apart — shifts the gate-invisibility tiebreak both recall passes sort by; default off")
 	judge := fs.Bool("judge", false, "adjudicate each candidate with the LLM oracle (needs ANTHROPIC_API_KEY; the precision half)")
 	twinsOnly := fs.Bool("twins-only", false, "with --judge, print only candidates the oracle confirms as twins")
 	if err := fs.Parse(args); err != nil {
@@ -59,13 +61,16 @@ func runProposeDeep(args []string) {
 		os.Exit(1)
 	}
 
+	code.SetDistanceBoost(*distanceBoost)
+	gate := code.SizeGate{MinLines: *minLines, MinNodes: *minNodes}
+
 	// Union two representation-independent recall passes: signature (TS-only, rare
 	// domain-typed signature) + name-stem (every language, near-identical role name).
 	// Signature candidates take precedence on conflict; dedup vs already-adjudicated.
-	sigCands := code.SignatureCandidates(sigs, *minLines, *minMembers, *maxMembers)
+	sigCands := code.SignatureCandidates(sigs, gate, *minMembers, *maxMembers)
 	var nameCands []code.SigCandidate
 	if !*noNameStem {
-		nameCands = code.NameStemCandidates(sigs, *minLines, *nameJac, *nameFanout)
+		nameCands = code.NameStemCandidates(sigs, gate, *nameJac, *nameFanout)
 	}
 	seen := map[string]bool{}
 	var fresh []code.SigCandidate

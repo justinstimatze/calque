@@ -1889,3 +1889,143 @@ same same-function-name-tautology noise pattern at scale (1938 candidates on
 (`GameEngine.findPreauthored` ≟ `Game.findPreauthored`, cross-file) worth a
 maintainer's look. Both axes generalize to unfamiliar code, not just this
 repo's own idioms.
+
+## Run — 2026-09-01 (call-site context axis: propose-context self-gate)
+
+First self-scan of `propose-context` (see docs/SPEC-callsite-context-axis.md):
+25 fresh candidates on calque's own repo (`--min-caller-jaccard 0.5
+--min-shape-jaccard 0.5 --max-fanout 8`, defaults). No `--judge` — every
+candidate below was read and adjudicated by hand.
+
+**Different helpers called from the same driver function** (18 of 25 — the
+exact shared-caller-vocabulary trap §5 predicted before any real data
+existed: caller-stem overlap alone catches unrelated siblings of one popular
+caller, not twins):
+
+- pair: cmd/calque/migrate.go::normalizeReviewed | cmd/calque/migrate.go::migrateRegistry
+- verdict: false-alarm
+- reviewed: 2026-09-01
+- pair: cmd/calque/migrate.go::migrateRegistry | cmd/calque/migrate.go::normalizeVerdict
+- verdict: false-alarm
+- reviewed: 2026-09-01
+- pair: cmd/calque/migrate.go::normalizeReviewed | cmd/calque/migrate.go::normalizeVerdict
+- verdict: false-alarm
+- reviewed: 2026-09-01
+  (both normalize a free-form string to a canonical token, but for
+  unrelated domains — a date vs. a verdict enum; same generic ROLE, not
+  the same behavior.)
+- pair: internal/code/extract_go.go::safeAssignIndex | internal/code/extract_go.go::goBody.classifyNilOrErrCheck
+- verdict: false-alarm
+- reviewed: 2026-09-01
+  (this session's own new helpers — a nice confirmation the axis doesn't
+  special-case its own author.)
+- pair: internal/code/touchpoint.go::FuncSig.seamSymbols | internal/code/touchpoint.go::subsetOf
+- verdict: false-alarm
+- reviewed: 2026-09-01
+- pair: internal/code/touchpoint.go::keySet | internal/code/touchpoint.go::dedupSigs
+- verdict: false-alarm
+- reviewed: 2026-09-01
+- pair: internal/code/testfile.go::allTest | internal/code/touchpoint.go::keySet
+- verdict: false-alarm
+- reviewed: 2026-09-01
+- pair: internal/code/testfile.go::allTest | internal/code/touchpoint.go::dedupSigs
+- verdict: false-alarm
+- reviewed: 2026-09-01
+- pair: internal/code/extract_branches_go.go::branchFinder.extractIf | internal/code/extract_branches_go.go::branchFinder.addArm
+- verdict: false-alarm
+- reviewed: 2026-09-01
+  (a direct caller-callee pair, not siblings — extractIf calls addArm.)
+- pair: internal/code/extract_values_go.go::unaryLiteralValue | internal/code/extract_values_go.go::basicLitValue
+- verdict: false-alarm
+- reviewed: 2026-09-01
+  (literalValue's own two dispatch branches by AST node kind — a
+  deliberate split from `c6f788d`, not independent implementations of one
+  behavior.)
+- pair: cmd/calque/calib.go::sortedCounts | cmd/calque/calib.go::loadFires
+- verdict: false-alarm
+- reviewed: 2026-09-01
+- pair: cmd/calque/synonym_report.go::commonPrefix | cmd/calque/synonym_report.go::pairKey
+- verdict: false-alarm
+- reviewed: 2026-09-01
+- pair: internal/code/confess.go::stripCommentLeader | internal/code/confess.go::identifierLike
+- verdict: false-alarm
+- reviewed: 2026-09-01
+- pair: internal/code/extract_rust.go::rustExtractorHash | internal/code/extract_rust.go::exeSuffix
+- verdict: false-alarm
+- reviewed: 2026-09-01
+- pair: internal/code/extract_rust_test.go::rustToolchainAvailable | internal/code/extract_rust.go::extractRustBatch
+- verdict: false-alarm
+- reviewed: 2026-09-01
+  (another direct caller-callee pair — rustToolchainAvailable's own probe
+  calls extractRustBatch.)
+- pair: internal/llm/judge_test.go::newTestJudge | internal/llm/judge.go::Judge.JudgePair
+- verdict: false-alarm
+- reviewed: 2026-09-01
+- pair: cmd/calque/labels.go::langOf | cmd/calque/labels.go::varietyOf
+- verdict: false-alarm
+- reviewed: 2026-09-01
+- pair: internal/llm/judge_test.go::fakeDoer.Do | internal/code/extract_rust.go::buildRustExtractor
+- verdict: false-alarm
+- reviewed: 2026-09-01
+  (cross-package coincidence — a fake HTTP transport for LLM tests and a
+  cargo-build helper share nothing but test-file caller vocabulary.)
+
+**Small, generic, cross-file utilities with no real conceptual overlap** (5 of
+25 — the call-result-SHAPE side of the same trap: "gets its result unquoted /
+deduped / compared" is a common shape, not a shared concept):
+
+- pair: internal/code/extract_sql.go::splitTopComma | internal/code/extract_sql.go::firstIdent
+- verdict: false-alarm
+- reviewed: 2026-09-01
+- pair: internal/code/funcsig.go::toSet | internal/code/funcsig.go::stemTokens
+- verdict: false-alarm
+- reviewed: 2026-09-01
+- pair: internal/code/extract_go.go::litKey | internal/code/extract_go.go::goStringLit
+- verdict: false-alarm
+- reviewed: 2026-09-01
+  (real code overlap — litKey's BasicLit-string branch duplicates
+  goStringLit's whole body — but litKey ALSO handles the Ident/field-name
+  case goStringLit deliberately excludes; different contracts, not a
+  twin. Worth a future look as a DRY cleanup, not as drift.)
+- pair: internal/code/extract_go.go::goStringLit | internal/code/extract_sql.go::dedupStrings
+- verdict: false-alarm
+- reviewed: 2026-09-01
+- pair: internal/code/extract_go.go::litKey | internal/code/extract_sql.go::dedupStrings
+- verdict: false-alarm
+- reviewed: 2026-09-01
+
+**The two genuine hits** (both pre-existing code, not authored this session —
+the axis found them, it didn't create them): deliberately parallel
+implementations of one contract over two input shapes, each self-documented
+in its own doc comment as intentional parity rather than accidental
+duplication:
+
+- pair: internal/code/scan.go::Filter | internal/code/scan.go::MatchGlob
+- verdict: contracted-twin-ok
+- reviewed: 2026-09-01
+  (MatchGlob's own doc comment: "the SAME matcher Filter uses over
+  FuncSig.File, so a boundary glob selects the same files here as it does
+  among parsed functions" — a self-confessing pair, same trim/compile/
+  match-loop skeleton, differing only in input shape and the documented
+  empty-CSV return value.)
+- pair: cmd/calque/hook.go::preCommitScript | cmd/calque/hook.go::postMergeScript
+- verdict: contracted-twin-ok
+- reviewed: 2026-09-01
+  (same "render a git-hook shell script with a no-op PATH guard" skeleton
+  for two different hook events; the only nonzero jaccard score in this
+  batch (0.14) — already faintly visible to the existing gate, this axis
+  just surfaced it with more confidence via caller+shape overlap too.)
+
+**Conclusion:** 23 false-alarm, 2 contracted-twin-ok, 0 drift. Confirms §5's
+prediction exactly, on the very first real corpus this axis ever saw: caller-
+stem overlap alone is dominated by "sibling helpers of one driver function,"
+not twins, and needs the valence-guard stoplist (excluding `ret-err-checked`/
+low-arg-count-only overlaps, or down-weighting a caller whose OWN callees
+list is large — a driver-function signature) before this axis is worth
+running past manual review. Both real hits scored on the SHAPE side more than
+the caller side (shape≈1.00 for both), suggesting shape-tag overlap may be
+the stronger of the two signals in practice — worth testing a higher
+`--min-shape-jaccard` floor with a lower `--min-caller-jaccard` floor once a
+second corpus is available to check that isn't an artifact of this repo's
+small size. Not wired into `--strict`, matches every other generator's
+graduation discipline.

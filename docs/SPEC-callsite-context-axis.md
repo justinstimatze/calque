@@ -164,7 +164,8 @@ requiring-both-signals design in §3 to carry most of the precision burden until
 calibration exists.
 
 **Cross-repo data confirms the AND-gate, not a single-signal cut (stope, 2026-09-01,
-30 hand-adjudicated pairs from a 1785-file/9727-function run).** calque's own 25-pair
+30 pairs adjudicated by an agent reading source directly, not via `--judge`,
+from a 1785-file/9727-function run).** calque's own 25-pair
 self-scan had both real hits at shape≈1.00 (caller≈ 1.00 and 0.14), suggesting shape
 might be the load-bearing signal and caller-stem the noisy one. stope's sample inverted
 that: 4 of 6 real hits had caller≈1.00 exactly, two of those on shape≈ only 0.50 — the

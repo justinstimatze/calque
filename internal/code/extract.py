@@ -35,6 +35,33 @@ _DELEGATION_ROOTS = {
 }
 
 
+def _annot_text(ann):
+    return ast.unparse(ann) if ann is not None else "?"
+
+
+def _sig_of(node):
+    """Build the "(paramType,...)=>returnType" Type-4 signature-rarity string
+    (mirrors extract_ts.mjs's signatureOf / Go's goSignatureOf) from declared
+    annotations only. The leading self/cls of a method is excluded by name —
+    it is never annotated by convention and would otherwise glue every method's
+    signature to a leading "?", hiding a real twin shape between a plain
+    function and a method doing the same thing."""
+    a = node.args
+    positional = list(a.posonlyargs) + list(a.args)
+    params = []
+    for i, arg in enumerate(positional):
+        if i == 0 and arg.arg in ("self", "cls"):
+            continue
+        params.append(_annot_text(arg.annotation))
+    if a.vararg is not None:
+        params.append(_annot_text(a.vararg.annotation))
+    for arg in a.kwonlyargs:
+        params.append(_annot_text(arg.annotation))
+    if a.kwarg is not None:
+        params.append(_annot_text(a.kwarg.annotation))
+    return "(" + ",".join(params) + ")=>" + _annot_text(node.returns)
+
+
 def _attr_path(node):
     parts = []
     cur = node
@@ -210,6 +237,7 @@ def _extract(path, root):
                     "consts": sorted(bv.consts),
                     "decl_consts": decl_consts,
                     "delegates": bv.delegates,
+                    "sig": _sig_of(child),
                 })
                 # nested defs are usually closures — skip
 

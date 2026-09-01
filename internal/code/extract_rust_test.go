@@ -157,6 +157,73 @@ fn span_test(h: f64) -> bool {
 	}
 }
 
+// TestExtractRustSigLifetimeEquivalence pins the lifetime-canonicalization step:
+// two functions differing only in their lifetime NAME ('a vs 'b) over the same
+// contract must produce the IDENTICAL Sig string, so they bucket together in
+// SignatureCandidates.
+func TestExtractRustSigLifetimeEquivalence(t *testing.T) {
+	dir := t.TempDir()
+	if !rustToolchainAvailable(t, dir) {
+		t.Skip("cargo / syn toolchain not available")
+	}
+	src := `struct Road { name: String }
+
+fn foo<'a>(x: &'a Road) -> &'a str { &x.name }
+fn bar<'b>(x: &'b Road) -> &'b str { &x.name }
+`
+	f := filepath.Join(dir, "lifetimes.rs")
+	if err := os.WriteFile(f, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sigs, err := extractRustBatch([]string{f}, dir)
+	if err != nil {
+		t.Fatalf("extractRustBatch: %v", err)
+	}
+	foo := sigByQual(sigs, "foo")
+	bar := sigByQual(sigs, "bar")
+	if foo == nil || bar == nil {
+		t.Fatalf("foo/bar not extracted; got %d sigs", len(sigs))
+	}
+	if foo.Sig != bar.Sig {
+		t.Errorf("foo.Sig = %q, bar.Sig = %q — lifetime-differing twins must normalize identically", foo.Sig, bar.Sig)
+	}
+	if want := "(& '_ Road)=>& '_ str"; foo.Sig != want {
+		t.Errorf("foo.Sig = %q, want %q", foo.Sig, want)
+	}
+	if !signatureInformative(foo.Sig) {
+		t.Errorf("a same-module domain type (Road) must register as informative, got %q", foo.Sig)
+	}
+}
+
+// TestExtractRustSigWrapperNoise pins the informativeness side: a signature
+// built entirely from prelude wrapper types (Result/Option) must NOT register
+// as informative post-stoplist-extension — it's noise, not a domain type.
+func TestExtractRustSigWrapperNoise(t *testing.T) {
+	dir := t.TempDir()
+	if !rustToolchainAvailable(t, dir) {
+		t.Skip("cargo / syn toolchain not available")
+	}
+	src := `fn parse(x: Option<String>) -> Result<String, String> {
+    x.ok_or_else(|| "missing".to_string())
+}
+`
+	f := filepath.Join(dir, "wrapper.rs")
+	if err := os.WriteFile(f, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sigs, err := extractRustBatch([]string{f}, dir)
+	if err != nil {
+		t.Fatalf("extractRustBatch: %v", err)
+	}
+	parse := sigByQual(sigs, "parse")
+	if parse == nil {
+		t.Fatalf("parse not extracted; got %d sigs", len(sigs))
+	}
+	if signatureInformative(parse.Sig) {
+		t.Errorf("a Result/Option-wrapper-only signature must not register as informative, got %q", parse.Sig)
+	}
+}
+
 // A syntactically broken file must be skipped, not abort the batch.
 func TestExtractRustSkipsBroken(t *testing.T) {
 	dir := t.TempDir()

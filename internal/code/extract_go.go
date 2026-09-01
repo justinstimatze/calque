@@ -1,7 +1,25 @@
+// Package code is calque's code axis: per-language extractors produce a common
+// FuncSig (the divergence-robust signature of a function), and a single
+// language-agnostic scorer ranks cross-boundary pairs by how much they smell
+// like the same contract — the recall half of a dual-path / behavioral-twin
+// (Type-4) finder.
+//
+// Why these signals: a dual path (two impls of one contract that drifted) is
+// dissimilar by construction in token/AST shape — that is the bug. So we index
+// what stays invariant under a rewrite: emitted string literals (what it SAYS),
+// attribute write-targets (what it MUTATES), returned keys (what it HANDS BACK),
+// called leaf names (what it leans on), and the name stem (its ROLE).
+//
+// Ported from the original Python calque. The extraction half
+// is per-language (go/ast here; an embedded python3 script for Python); this
+// file is the shared types + scoring substrate.
 package code
 
 import (
+	"bytes"
+	_ "embed"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"sort"
@@ -11,10 +29,6 @@ import (
 	"github.com/justinstimatze/calque/internal/corpus"
 )
 
-// ExtractGoFile parses one Go file and returns a FuncSig per top-level
-// function/method. Tolerant: returns nil on a parse error (skips the file),
-// matching the Python extractor's SyntaxError behavior. In-process via go/ast —
-// no external dependency (the dependency-free code-axis increment).
 func ExtractGoFile(path, root string) []*FuncSig {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, path, nil, 0)
@@ -29,6 +43,7 @@ func ExtractGoFile(path, root string) []*FuncSig {
 	// value in SCREAMING_SNAKE (const GRID = 60) is admitted to the const seam
 	// channel; everything else (std/library refs) is gated out.
 	declConsts := goDeclConsts(f)
+	imports := goImportMap(f)
 
 	var out []*FuncSig
 	for _, decl := range f.Decls {
@@ -37,29 +52,33 @@ func ExtractGoFile(path, root string) []*FuncSig {
 			continue
 		}
 		name := fd.Name.Name
-		qual := name
-		if fd.Recv != nil && len(fd.Recv.List) > 0 {
-			if rt := recvTypeName(fd.Recv.List[0].Type); rt != "" {
-				qual = rt + "." + name
-			}
-		}
-		bv := &goBody{strs: set{}, writes: set{}, retKeys: set{}, calls: set{}, consts: set{}, readsRaw: set{}, pureWrites: set{}, calleeSkip: map[ast.Expr]bool{}}
-		ast.Walk(bv, fd.Body)
-		start := fset.Position(fd.Pos()).Line
-		end := fset.Position(fd.End()).Line
-		fs := &FuncSig{
-			File: rel, Qualname: qual, Name: name,
-			Line: start, NLines: end - start + 1, NodeCount: bv.nodes,
-			Strings: bv.strs.slice(), Writes: bv.writes.slice(),
-			Reads:   bv.reads(),
-			RetKeys: bv.retKeys.slice(), Calls: bv.calls.slice(),
-			Consts:     bv.consts.slice(),
-			DeclConsts: declConsts,
-			Delegates:  bv.delegates,
-		}
+		qual := qualNameFor(name, fd.Recv)
+		fs := goFuncSigFromBody(fset, fd.Body, rel, qual, name)
+		fs.DeclConsts = declConsts
+		fs.Sig = goSignatureOf(fset, imports, fd.Type)
 		out = append(out, fs)
 	}
 	return out
+}
+
+// goFuncSigFromBody walks body with a fresh goBody accumulator and builds the
+// FuncSig its signal bags describe. Shared by ExtractGoFile (whole function
+// bodies) and ExtractBranches (sub-tree branch-arm bodies) — the walk-then-build
+// step is identical, only the subtree, Kind, and key differ per caller.
+func goFuncSigFromBody(fset *token.FileSet, body ast.Node, file, qual, name string) *FuncSig {
+	bv := &goBody{strs: set{}, writes: set{}, retKeys: set{}, calls: set{}, consts: set{}, readsRaw: set{}, pureWrites: set{}, calleeSkip: map[ast.Expr]bool{}}
+	ast.Walk(bv, body)
+	start := fset.Position(body.Pos()).Line
+	end := fset.Position(body.End()).Line
+	return &FuncSig{
+		File: file, Qualname: qual, Name: name,
+		Line: start, NLines: end - start + 1, NodeCount: bv.nodes,
+		Strings: bv.strs.slice(), Writes: bv.writes.slice(),
+		Reads:   bv.reads(),
+		RetKeys: bv.retKeys.slice(), Calls: bv.calls.slice(),
+		Consts:    bv.consts.slice(),
+		Delegates: bv.delegates,
+	}
 }
 
 // goDeclConsts returns the SCREAMING_SNAKE constants declared at file scope in a
@@ -387,4 +406,129 @@ func recvTypeName(e ast.Expr) string {
 		return recvTypeName(t.X)
 	}
 	return ""
+}
+
+// qualNameFor builds a function's Qualname the same way every Go extractor
+// does: "Type.Method" for a method (via recvTypeName on the receiver), or
+// bare name for a plain function. Shared by ExtractGoFile, extractGoBranchesFile,
+// and extractGoValuesFile — three copies of this exact snippet is precisely
+// the sub-function duplication propose-branches is designed to catch, and it
+// caught its own author's.
+func qualNameFor(name string, recv *ast.FieldList) string {
+	if recv != nil && len(recv.List) > 0 {
+		if rt := recvTypeName(recv.List[0].Type); rt != "" {
+			return rt + "." + name
+		}
+	}
+	return name
+}
+
+// goImportMap builds a local-identifier -> import-path map for a parsed file, so
+// signature rendering (goTypeSig) can distinguish stdlib-qualified types (noise
+// for the Type-4 signature-rarity axis) from same-module/third-party ones
+// (signal). The local identifier is the import's alias if given, else the
+// path's last segment (Go's own default-name convention).
+func goImportMap(f *ast.File) map[string]string {
+	m := make(map[string]string, len(f.Imports))
+	for _, imp := range f.Imports {
+		path, err := strconv.Unquote(imp.Path.Value)
+		if err != nil {
+			continue
+		}
+		local := path[strings.LastIndex(path, "/")+1:]
+		if imp.Name != nil {
+			local = imp.Name.Name
+		}
+		m[local] = path
+	}
+	return m
+}
+
+// goStdlibPkg reports whether an import path is a standard-library package —
+// every stdlib path's first slash-delimited segment has no dot (context,
+// net/http, encoding/json); every module path does (github.com/..., golang.org/x/...).
+// A filesystem/GOROOT-free heuristic, so this works against an arbitrary target
+// repo without needing its build environment.
+func goStdlibPkg(path string) bool {
+	seg := path
+	if i := strings.Index(path, "/"); i >= 0 {
+		seg = path[:i]
+	}
+	return !strings.Contains(seg, ".")
+}
+
+// goTypeSig renders a type expression for the signature-rarity axis (Sig). A
+// top-level (or pointer-to) selector resolving to a stdlib import renders as
+// just the lowercase package name (context.Context -> context) instead of the
+// qualified type — this fails signatureInformative's capitalized-type check
+// with zero changes needed in sigcluster.go, and needs no stoplist maintenance
+// as Go's stdlib grows. Any other type (same-module, third-party, unqualified)
+// renders via go/format.Node, whitespace-collapsed exactly like extract_ts.mjs's
+// typeText. Deeper nesting (a stdlib type inside a slice/map element) isn't
+// unwrapped this pass — an accepted, scoped simplification.
+func goTypeSig(fset *token.FileSet, imports map[string]string, expr ast.Expr) string {
+	target := expr
+	if star, ok := target.(*ast.StarExpr); ok {
+		target = star.X
+	}
+	if sel, ok := target.(*ast.SelectorExpr); ok {
+		if pkg, ok := sel.X.(*ast.Ident); ok {
+			if path, known := imports[pkg.Name]; known && goStdlibPkg(path) {
+				return pkg.Name
+			}
+		}
+	}
+	var buf bytes.Buffer
+	if err := format.Node(&buf, fset, expr); err != nil {
+		return "?"
+	}
+	return strings.Join(strings.Fields(buf.String()), "")
+}
+
+// goSignatureOf builds the representation-independent "(paramType,...)=>returnType"
+// signature string for the Type-4 signature-rarity recall pass (SignatureCandidates),
+// mirroring extract_ts.mjs's signatureOf. Declared types only — Go has no
+// annotation-inference ambiguity here, every function is fully statically typed.
+// Flattens grouped param/result names (func f(x, y int) shares one *ast.Field,
+// rendered once per name) and Go's multi-value returns: zero results -> "()",
+// one -> the bare type (no parens, matching TS's convention), two or more ->
+// "(T1,T2)". Type parameters (generics) are read as ordinary identifiers,
+// matching how the TS side never inspects a function's own generic bounds either.
+func goSignatureOf(fset *token.FileSet, imports map[string]string, ft *ast.FuncType) string {
+	var params []string
+	if ft.Params != nil {
+		for _, field := range ft.Params.List {
+			t := goTypeSig(fset, imports, field.Type)
+			n := len(field.Names)
+			if n == 0 {
+				n = 1
+			}
+			for i := 0; i < n; i++ {
+				params = append(params, t)
+			}
+		}
+	}
+	var results []string
+	if ft.Results != nil {
+		for _, field := range ft.Results.List {
+			t := goTypeSig(fset, imports, field.Type)
+			n := len(field.Names)
+			if n == 0 {
+				n = 1
+			}
+			for i := 0; i < n; i++ {
+				results = append(results, t)
+			}
+		}
+	}
+	var ret string
+	switch len(results) {
+	case 0:
+		ret = "()"
+	case 1:
+		ret = results[0]
+	default:
+		ret = "(" + strings.Join(results, ",") + ")"
+	}
+	return "(" + strings.Join(params, ",") + ")=>" + ret
 }

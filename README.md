@@ -49,13 +49,36 @@ pairs by overlap — plus an N-ary cluster pass that catches a shared private se
 inlined across several differently-named functions (the case pairwise scoring
 structurally dilutes).
 
-That boundary stays where it is — calque's own engine still only targets Type-4 —
-but `calque scan` now also *runs* `jscpd`/`dupl` as a belt-and-suspenders
-companion pass if either is already on `$PATH`, so one invocation surfaces both
-axes instead of requiring two separate tools in your pipeline. Best-effort and
-purely additive: a tool absent from `$PATH` is skipped with an install hint
-(never fetched), and neither tool's output touches calque's own scoring or
-registry. `--no-companions` to skip it.
+**Be precise about what that pairwise scorer actually needs, though.** It's a
+weighted overlap across five channels (emitted strings, write-targets, return
+keys, callees, name-stem) — tolerant of heavy rewriting, but it still requires
+*at least one* of those five to overlap before a pair is even considered a
+candidate. Two functions sharing zero tokens across all five — no common name,
+no common string, no common write, no common callee, no common return key — are
+invisible to it, full stop. That's real Type 1–3 territory (renamed, restructured,
+edited-with-gaps), not the textbook zero-footprint Type-4 case.
+
+The one mechanism that needs **no shared token at all** is `propose-deep` — a
+separate, opt-in generator (`calque propose-deep --repo .`, listed under
+Quickstart's "Standing audit" below), not part of the default `scan`/`check`
+loop (Quickstart's "Code axis," also below) and not something you need to
+reach for to get value from calque.
+It groups functions by a *rare, domain-typed signature* — two functions sharing
+`(UserRecord)=>ValidationResult` and nothing else pair up regardless of how
+differently their bodies are written. That's genuinely representation-independent,
+but it depends on the language exposing static types calque can read, which
+covers all five languages today (Go/Python/Rust included). And even
+`propose-deep` needs a **distinctive** signature to anchor on — a generic one
+(`string→bool`) is too common to mean anything. Two independently-written twins
+sharing neither tokens nor a distinctive signature sit outside every axis
+calque has today; see `docs/DESIGN_NOTES.md` §22 for the full breakdown.
+
+`calque scan` also *runs* `jscpd`/`dupl` as a belt-and-suspenders companion pass
+if either is already on `$PATH`, so one invocation surfaces both axes instead of
+requiring two separate tools in your pipeline. Best-effort and purely additive: a
+tool absent from `$PATH` is skipped with an install hint (never fetched), and
+neither tool's output touches calque's own scoring or registry. `--no-companions`
+to skip it.
 
 ## The invariant
 
@@ -125,14 +148,30 @@ calque vocab-check --seed-cmd '<proj seeder>'   # merge a project's own slug lis
 **Standing audit (boundary-free)** — whole-repo generators that need no `--left/--right`:
 
 ```bash
-calque propose-deriv --repo .          # value-derivation twins (same field-set, no shared authority)
-calque confess       --repo .          # functions whose own comments confess a twin
-calque propose-roles --repo .          # N-ary seam clusters → paste-ready cardinality roles
-calque propose-deriv --repo . --judge  # add --judge to adjudicate with the LLM oracle (needs ANTHROPIC_API_KEY)
+calque propose-deriv   --repo .        # value-derivation twins (same field-set, no shared authority)
+calque confess         --repo .        # functions whose own comments confess a twin
+calque propose-roles   --repo .        # N-ary seam clusters → paste-ready cardinality roles
+calque propose-deep    --repo .        # Type-4 twins sharing a rare type signature, no shared tokens
+calque propose-cross   --repo .        # non-function entities (tables, schemas, corpus shapes)
+calque propose-branches --repo .       # intra-function dual paths (if/else arms, switch/select cases)
+calque propose-values  --repo .        # scattered literal values (a maxRetries-style constant, no shared symbol)
+calque propose-deriv   --repo . --judge  # add --judge to adjudicate with the LLM oracle (needs ANTHROPIC_API_KEY)
 ```
 
-These are generators — they print to stdout, never write or gate — so they're safe
-to run against any repo.
+These are generators — they print to stdout, never write or gate, and make **zero
+network calls** on their own, so they're free and safe to run against any repo
+(~0.5s on this repo's own 620-function, 4-language corpus).
+
+**To turn on `--judge`:** export `ANTHROPIC_API_KEY` (or `CALQUE_API_KEY`) in the
+environment, then pass `--judge` on the command line — both steps are required;
+setting the key alone does nothing, calque never calls an LLM unless you also pass
+the flag. It's off by default on every command that has it (`scan`/`check` don't
+have the flag at all). Each judged candidate is one real, billed Anthropic call
+(cached per-pair on disk, so a re-run only pays for new candidates) — a real,
+scaling cost, not a rounding error. Without it you're reading raw candidate lists
+by eye — fine for a handful, not realistic for the dozens a whole-repo generator
+can return (a self-scan of this repo's own Go code returned 63) — so `--judge` is
+what most people will actually want past a handful of candidates.
 
 `scan`/`check` work on Go (native `go/ast`), Python (embedded `python3`),
 TypeScript/TSX (embedded `node` + the TypeScript compiler), Svelte (the
@@ -187,8 +226,11 @@ introduces, calque scans incoming code two ways:
   the full suspect list at a glance. It's advisory by default (exit 0 —
   annotations never fail the build); pass `--strict` to make it a hard check.
   No hosted service, no third party: the code never leaves your CI. The
-  deterministic pass needs no API key; the `--judge` precision half (run via
-  `check`/the generators) uses *your own* key as a CI secret.
+  deterministic pass needs no API key; `--judge` (available on the generators —
+  `propose-deriv`/`confess`/`propose-roles`/`propose-deep`/`propose-cross`/
+  `propose-branches`/`propose-values` — not on `check`/`review` itself) uses
+  *your own* key as a CI secret if you choose to run one of them as a separate
+  step.
 
   Drop this in `.github/workflows/calque.yml`:
 
@@ -297,9 +339,25 @@ effect-footprint scorer:
 - **role-cardinality** (`calque cardinality`) — declare "this role should have one
   implementation; flag whenever it has two or more" and gate it; counting needs no
   resemblance (`docs/DESIGN_NOTES.md` §18).
+- **signature-rarity (`propose-deep`)** — the one channel that needs **no shared
+  token at all**: it groups functions by a rare, domain-typed signature (declared
+  param/return types, e.g. `(UserRecord)=>ValidationResult`), so two functions can
+  pair up sharing zero strings/writes/calls/names. This is calque's actual
+  zero-footprint Type-4 mechanism — every other axis, including the core pairwise
+  scorer above, requires at least one overlapping token to anchor a candidate.
+  All five languages (`docs/DESIGN_NOTES.md` §22).
+- **cross-substrate (`propose-cross`)** — non-function entities (module-level
+  tables, JSON corpus shapes) extracted and scored the same way, for drift that
+  lives outside a function body entirely (`docs/DESIGN_NOTES.md` §19).
+- **sub-function branches (`propose-branches`)** and **scattered values
+  (`propose-values`)** — duplication living *below* function granularity: two
+  conditional arms that drifted apart, or a literal value (a `maxRetries`
+  constant) repeated across sites with no shared symbol (`docs/DESIGN_NOTES.md`
+  §21).
 
 A `--judge` flag on the generators (`propose-deriv`/`confess`/`propose-roles`/
-`propose-deep`/`propose-cross`) runs an LLM equivalence oracle as the precision half,
+`propose-deep`/`propose-cross`/`propose-branches`/`propose-values`) runs an LLM
+equivalence oracle as the precision half,
 and `calque doctor --ablate` rolls every judged verdict into a per-detector × language
 × variety matrix so each detector has to earn its keep. Further axes (config/env,
 catalog, narrative) are roadmapped in `docs/DESIGN_NOTES.md` §16–18. Apache-2.0; the

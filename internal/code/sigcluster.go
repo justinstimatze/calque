@@ -1,6 +1,7 @@
 package code
 
 import (
+	_ "embed"
 	"fmt"
 	"regexp"
 	"sort"
@@ -37,6 +38,32 @@ var builtinGeneric = map[string]bool{
 	"Extract": true, "Awaited": true, "Returntype": true, "Parameters": true,
 	"Iterable": true, "AsyncIterable": true, "Iterator": true, "Object": true,
 	"Date": true, "RegExp": true, "Error": true, "Buffer": true, "JSON": true,
+
+	// Python: typing-module generics + collections.abc aliases (structural, not
+	// domain) plus common builtin exceptions and enum base classes. Residual gaps
+	// accepted: pathlib.Path, decimal.Decimal, uuid.UUID, re.Pattern still register
+	// as informative even though they're stdlib, not domain — a calibrated cut,
+	// same discipline as this map's TS half.
+	"List": true, "Dict": true, "Optional": true, "Union": true, "Tuple": true,
+	"Callable": true, "Any": true, "FrozenSet": true, "Type": true, "Literal": true,
+	"ClassVar": true, "Final": true, "Generic": true, "Protocol": true,
+	"NamedTuple": true, "TypedDict": true, "NoReturn": true, "Sequence": true,
+	"Mapping": true, "MutableMapping": true, "MutableSequence": true,
+	"Collection": true, "Generator": true, "Exception": true, "ValueError": true,
+	"KeyError": true, "TypeError": true, "IndexError": true, "AttributeError": true,
+	"RuntimeError": true, "StopIteration": true, "Enum": true, "IntEnum": true,
+	"Flag": true, "IntFlag": true,
+
+	// Rust: prelude/wrapper types (no `use` statement to resolve via Go's
+	// import-provenance approach, so a stoplist is the only practical mechanism
+	// here) plus trait/associated-type noise from `impl Trait` position.
+	"Result": true, "Option": true, "String": true, "Vec": true, "Box": true,
+	"Rc": true, "Arc": true, "Cow": true, "HashMap": true, "BTreeMap": true,
+	"HashSet": true, "BTreeSet": true, "RefCell": true, "Mutex": true,
+	"RwLock": true, "PathBuf": true, "OsString": true, "Item": true,
+	"Output": true, "Self": true, "Send": true, "Sync": true, "Debug": true,
+	"Clone": true, "Default": true, "Display": true, "Ord": true,
+	"PartialOrd": true, "Eq": true, "PartialEq": true, "Hash": true, "Copy": true,
 }
 
 // signatureInformative reports whether a signature names at least one DOMAIN type
@@ -486,6 +513,78 @@ func SharedDerivationCandidates(sigs []*FuncSig, minReads int, minJaccard float6
 	// Strongest shared derivation first (highest read-set jaccard), then cross-file,
 	// then deterministic — mirrors KeySetCandidates (these never enter scorePair, so
 	// Jaccard ranks descending by match strength).
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Jaccard != out[j].Jaccard {
+			return out[i].Jaccard > out[j].Jaccard
+		}
+		if out[i].CrossFile != out[j].CrossFile {
+			return out[i].CrossFile
+		}
+		return pairkey.Key(out[i].A.Key(), out[i].B.Key()) < pairkey.Key(out[j].A.Key(), out[j].B.Key())
+	})
+	return out
+}
+
+// ValueSiteCandidates is the SCATTERED-VALUE recall pass: it pairs
+// Kind:"value-site" entities (see ExtractValueSites) sharing the EXACT SAME
+// literal value — primary-anchored the same way KeySetCandidates anchors on a
+// shared key. An unbacked literal repeated across independent sites (no
+// shared const/symbol) is inherently suspicious — the maxRetries case: fix
+// one site, the others silently drift. Within a same-value bucket, pairs are
+// ranked/filtered by the jaccard of their NEARBY-IDENTIFIER name-stems
+// (Name's stemTokens, via Prepare) rather than RetKeys — minJaccard=0 admits
+// every same-value pair regardless of name (the loosest, highest-recall/
+// lowest-precision mode, since a coincidental shared literal like `3` or
+// `"error"` recurs constantly for unrelated reasons); a positive minJaccard
+// requires at least one shared name-stem token, the structural anchor that
+// keeps the base case usable without an LLM. Pairs that share the value but
+// fail that anchor (`maxRetries` vs. `retryLimit` — no shared token despite
+// being the same concept) are exactly the low-confidence residual tail this
+// codebase already hands to `--judge` elsewhere (confess/propose-deriv):
+// loosen --name-jaccard to surface them, don't silently drop or accept them.
+// maxFanout drops values shared by too many sites (a coincidentally common
+// literal, not a magic-constant candidate) — same role as KeySetCandidates's
+// maxFanout on ubiquitous keys.
+func ValueSiteCandidates(entities []*FuncSig, minJaccard float64, maxFanout int) []SigCandidate {
+	idx := map[string][]*FuncSig{}
+	for _, e := range entities {
+		if e.Value == "" {
+			continue
+		}
+		idx[e.Value] = append(idx[e.Value], e)
+	}
+	var out []SigCandidate
+	seen := map[string]bool{}
+	for _, ents := range idx {
+		if len(ents) < 2 || len(ents) > maxFanout {
+			continue // shared by too many sites — plumbing, not a magic-constant shape
+		}
+		for i := 0; i < len(ents); i++ {
+			for j := i + 1; j < len(ents); j++ {
+				a, b := ents[i], ents[j]
+				if a.Key() == b.Key() {
+					continue
+				}
+				pk := pairkey.Key(a.Key(), b.Key())
+				if seen[pk] {
+					continue
+				}
+				nj := jaccard(a.stem, b.stem)
+				if nj < minJaccard {
+					continue
+				}
+				seen[pk] = true
+				out = append(out, SigCandidate{
+					A: a, B: b, Kind: "value-site",
+					Sig:       fmt.Sprintf("value=%q name≈%.2f (%s ≟ %s)", a.Value, nj, a.Name, b.Name),
+					GroupSize: 2, Jaccard: nj, CrossFile: a.File != b.File,
+				})
+			}
+		}
+	}
+	// Strongest name-stem correlation first, then cross-file, then deterministic —
+	// same ranking convention KeySetCandidates uses (no scorePair gate to be
+	// invisible to; Jaccard here ranks descending match strength).
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Jaccard != out[j].Jaccard {
 			return out[i].Jaccard > out[j].Jaccard

@@ -18,12 +18,16 @@
 //!   - `strings` are trimmed string literals with >= 4 chars; all sets sorted+unique.
 
 use proc_macro2::Ident;
+use quote::ToTokens;
 use serde::Serialize;
 use std::collections::BTreeSet;
 use std::io::{self, Read};
 use std::path::Path;
 use syn::visit::{self, Visit};
-use syn::{Attribute, BinOp, Block, Expr, ImplItem, Item, Lit, Member, Meta, Stmt, Type};
+use syn::{
+    Attribute, BinOp, Block, Expr, FnArg, ImplItem, Item, Lit, Member, Meta, ReturnType,
+    Signature, Stmt, Type,
+};
 
 /// Field names marking a method as forwarding to a wrapped impl. Mirrors the Go
 /// side's delegationRoots (funcsig.go) + extract.py's _DELEGATION_ROOTS, plus the
@@ -63,6 +67,10 @@ struct Record {
     // tests sit in the SAME .rs file as the production code they exercise, so no
     // file-path rule can see them). The Go side gates test↔test pairs on this.
     test: bool,
+    // sig: the "(paramType,...)=>returnType" Type-4 signature-rarity string
+    // (mirrors extract_ts.mjs's signatureOf / Go's goSignatureOf / Python's
+    // _sig_of). Declared types only, receiver excluded, lifetimes canonicalized.
+    sig: String,
 }
 
 #[derive(Default)]
@@ -273,8 +281,66 @@ fn type_name(ty: &Type) -> Option<String> {
     }
 }
 
+/// Replaces every `'ident` lifetime with a fixed `'_` placeholder, so
+/// `fn foo<'a>(x: &'a str) -> &'a str` and `fn bar<'b>(x: &'b str) -> &'b str`
+/// — the same contract — bucket together. Deliberately collapses "same
+/// lifetime reused vs different lifetimes"; the loss is acceptable for a
+/// Type-4 contract-matching purpose. Types never contain char literals, so
+/// every `'` here is a lifetime, not a char-literal quote.
+fn canonicalize_lifetimes(s: &str) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '\'' {
+            out.push_str("'_");
+            i += 1;
+            while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
+                i += 1;
+            }
+        } else {
+            out.push(chars[i]);
+            i += 1;
+        }
+    }
+    out
+}
+
+/// Renders a type back to source text via quote's ToTokens (deterministic
+/// spacing for structurally-identical types, unlike TS's raw-slice case) and
+/// collapses whitespace RUNS to a single space — not a strip-to-zero, which
+/// would glue `&` + `'_` into `&'_` with no boundary the way `& 'a str` needs
+/// one (TS's strip-to-zero is safe only because JS/TS punctuation never
+/// requires an inter-token space).
+fn render_type(ty: &Type) -> String {
+    let raw = canonicalize_lifetimes(&ty.to_token_stream().to_string());
+    raw.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// signature_of builds the "(paramType,...)=>returnType" Type-4
+/// signature-rarity string (mirrors extract_ts.mjs's signatureOf / Go's
+/// goSignatureOf / Python's _sig_of) from declared types only. The receiver
+/// (self/&self/&mut self) is excluded, matching how TS excludes `this` and Go
+/// excludes the method receiver.
+fn signature_of(sig: &Signature) -> String {
+    let params: Vec<String> = sig
+        .inputs
+        .iter()
+        .filter_map(|arg| match arg {
+            FnArg::Receiver(_) => None,
+            FnArg::Typed(pt) => Some(render_type(&pt.ty)),
+        })
+        .collect();
+    let ret = match &sig.output {
+        ReturnType::Default => "()".to_string(),
+        ReturnType::Type(_, ty) => render_type(ty),
+    };
+    format!("({})=>{}", params.join(","), ret)
+}
+
 fn emit_fn(
     ident: &Ident,
+    sig: &Signature,
     block: &Block,
     rel: &str,
     impl_type: Option<&str>,
@@ -314,6 +380,7 @@ fn emit_fn(
         decl_consts: decl_consts.to_vec(),
         delegates: body.delegates,
         test: is_test,
+        sig: signature_of(sig),
     });
 }
 
@@ -371,7 +438,7 @@ fn walk_items(items: &[Item], rel: &str, decl_consts: &[String], in_test: bool, 
         match item {
             Item::Fn(f) => {
                 let t = in_test || has_test_attr(&f.attrs);
-                emit_fn(&f.sig.ident, &f.block, rel, None, decl_consts, t, out)
+                emit_fn(&f.sig.ident, &f.sig, &f.block, rel, None, decl_consts, t, out)
             }
             Item::Impl(im) => {
                 let ty = type_name(&im.self_ty);
@@ -379,7 +446,16 @@ fn walk_items(items: &[Item], rel: &str, decl_consts: &[String], in_test: bool, 
                 for ii in &im.items {
                     if let ImplItem::Fn(m) = ii {
                         let t = impl_test || has_test_attr(&m.attrs);
-                        emit_fn(&m.sig.ident, &m.block, rel, ty.as_deref(), decl_consts, t, out);
+                        emit_fn(
+                            &m.sig.ident,
+                            &m.sig,
+                            &m.block,
+                            rel,
+                            ty.as_deref(),
+                            decl_consts,
+                            t,
+                            out,
+                        );
                     }
                 }
             }

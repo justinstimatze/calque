@@ -47,7 +47,14 @@ invariants**, not the prose:
 - callee names — what downstream it leans on
 - name-stem (role-prefixes like `handle_`/`resolve_` stripped) — the *role*
 
-None care that the bodies look nothing alike. That's the point.
+None of the five require the bodies to *read* alike — heavy rewriting, restructuring,
+and renamed locals are all fine. **They do require at least one of the five to
+still overlap** (a shared string, a shared write-target, a shared callee, a shared
+return key, or a similar role-name) — a pair sharing zero tokens across all five
+channels never even becomes a candidate. That's a real, useful net for renamed and
+restructured copies (classic Type 1–3), but it is not the zero-footprint case the
+Type-4 framing implies. §22 names the one mechanism that doesn't need any shared
+token, and the boundary that remains even with it.
 
 ---
 
@@ -1369,3 +1376,219 @@ body walk to source a node count from.
 every existing caller that only ever set `MinLines` keeps its exact prior
 result. `--min-nodes` opts in per-invocation, parallel to every existing
 `--min-lines` flag.
+
+## 21. Sub-function granularity: branch + value-site axes (Go pilot)
+
+### 21.1 The gap
+
+Feedback from a sibling session (a different repo, hand-reviewing real
+dual-path bugs) named a blind spot no prior section addressed: calque's unit
+of comparison is one function (`FuncSig`), so it structurally cannot see
+duplication living *below* function granularity — two branches inside ONE
+function that drifted apart (a legacy vs. a new code path), or a scattered
+literal value (a `maxRetries`-style constant) repeated across independent
+call sites with no shared symbol backing it. A 2026 literature sweep
+confirmed this is real, addressable white space, not reinvention:
+statement/branch-granularity clone detection (Deckard-style AST-subtree
+generalization; SonarSource's identical-branches family) is an established,
+separate discipline from whole-function detection calque hadn't made the
+jump to; "extract constant" tooling (Eclipse/IntelliJ/VS Code/PyCharm) only
+solves the single-file, exact-match case, not the cross-file, independently-
+typed maxRetries case.
+
+### 21.2 The branch axis (`propose-branches`)
+
+**Mechanism — reuse `Kind`, reuse `Rank` unchanged.** `FuncSig` already
+generalizes to non-function entities via `Kind` (`""` = function, `"table"`/
+`"corpus-field"` from the cross-substrate axis). A branch arm — an if/else
+body, a switch/select case — gets `Kind: "branch"`, keyed uniquely as
+`EnclosingQualname#branch@line.n` (`Name` stays the enclosing function's
+name, so stem-based signals still reflect its role). Confirmed by reading
+`Rank`/`Filter` directly: neither references `Kind` at all — the split
+between function-only extraction (`Extract`) and Kind-tagged extraction
+(`ExtractSymbols`) is structural, two separate extractor-map walks that
+simply never mix inputs. That means branch fragments need **no new scoring
+code**: a new `ExtractBranches` (mirroring `ExtractSymbols`'s per-language
+extractor-map shape) produces `[]*FuncSig{Kind:"branch"}`, passed straight
+into the *existing* `Rank(left, right, gate, minScore, top, includeTests)` —
+same size-gate, same anchor-channel blocking, same jaccard scorer, same
+`Suspicion`/`Reason()` rendering the function axis already gets.
+
+**Extraction (Go only this pass — `extract_branches_go.go`).** A
+`branchFinder` walks a function body looking for `IfStmt`/`SwitchStmt`/
+`TypeSwitchStmt`/`SelectStmt` boundary nodes; each arm/case is extracted as
+its own fragment via a nested `ast.Walk` (a fresh `goBody` accumulator per
+arm, the same signal-bag logic `ExtractGoFile` already uses, factored out as
+`goFuncSigFromBody`/`goFuncSigFromStmts`). Crucially, `Visit` returns `nil`
+for a handled boundary node — the outer walk never re-discovers a
+conditional NESTED inside an already-extracted arm as its own separate
+top-level fragment (it still contributes to that arm's bag via the normal
+recursive walk), bounding the fragment count to the number of *top-level*
+conditionals in a function, not exponential in nesting depth. Scoring is
+corpus-wide, not sibling-of-one-conditional-only: a pre/post-accept "shed"
+(two regions of one function/file duplicating each other without being
+siblings of a single `if`) needs the same whole-corpus comparison whole
+functions get, not a narrower MVP. Python/TS/Rust extraction is an explicit,
+sequenced follow-up (the nested-accumulator pattern is genuinely new surface
+per language, unlike a one-counter addition like `NodeCount`) — not
+simultaneous with the Go pilot this time.
+
+**CLI.** `propose-branches` — generator only (stdout, no registry writes, no
+exit code, no `--strict` wiring), same discipline `KeySetCandidates`/
+`SharedDerivationCandidates` established for non-function-shaped candidates:
+ship as a `propose-*` generator, calibrate against real adjudication data,
+treat `--strict` graduation as a separate later decision. `--judge` can't
+reuse `runJudge`/`printCandidate` directly (`Suspicion` isn't
+`SigCandidate`-shaped) — it wraps each `Suspicion` pair as `SigCandidate{A:
+s.Left, B: s.Right, Kind:"branch"}` purely to call `recordLabel`, the same
+trick `propose-roles --judge` already uses for its N-ary `Cluster` results.
+
+### 21.3 The scattered-value axis (`propose-values`)
+
+**Mechanism.** One new field, `FuncSig.Value string` (meaningful only for
+`Kind == "value-site"`). A value-site's `Name` is the nearby identifier (the
+assigned variable, the declared const, the composite-literal field/map key);
+`Value` holds the stringified literal. `ValueSiteCandidates` (mirroring
+`KeySetCandidates`'s shape) buckets by **exact `Value` match first** — an
+unbacked literal repeated across independent sites is inherently suspicious —
+then filters by the jaccard of the two sites' `Name`-stems (reusing
+`stemTokens`/`Prepare` for free, no new name-matching code): `minJaccard=0`
+admits every same-value pair regardless of name (the low-confidence residual
+tail — `maxRetries` vs. `retryLimit` share no token despite being the same
+concept — surfaced separately via a loosened flag rather than silently
+dropped or accepted); a positive `minJaccard` requires at least one shared
+name-stem token, the structural anchor that keeps the base case usable
+without an LLM call.
+
+**Extraction (Go only this pass — `extract_values_go.go`).** A `valueFinder`
+binds a numeric/string literal to its nearest identifier via three AST
+shapes: an assignment (`maxRetries := 3`), a var/const declaration (package
+or function scope), or a composite-literal field/map key
+(`Config{MaxRetries: 3}`). Trivial values (`0`, `1`, `-1`, `true`, `false`,
+`""`) are excluded — the standard magic-number-linter convention. Deliberately
+NOT handled: a bare literal passed as a call argument — binding it to the
+callee's *parameter* name would need `go/types` to resolve the callee's
+signature, a real dependency this AST-only, zero-type-info extractor doesn't
+carry anywhere else; left as a follow-up if the assignment/declaration/
+composite-literal channel alone proves insufficient recall.
+
+**CLI.** `propose-values` — its candidates ARE `[]SigCandidate`
+(`ValueSiteCandidates` mirrors `KeySetCandidates`'s return shape exactly), so
+it reuses `printCandidate`/`runJudge` verbatim — no new print/judge code at
+all, only the candidate-generation logic. Same generator-only, non-`--strict`
+discipline as `propose-branches`.
+
+### 21.4 Dogfood findings — honest boundaries
+
+Both axes work as designed and generalize beyond this repo. On an external
+repo (`stope`, 1176 Go files, unrelated codebase), `propose-values` surfaced
+at rank #1 an unprompted, real instance of the target pattern: `MaxTokens =
+128` and `maxTokens = 128` — an LLM-call config constant duplicated across
+two files with no shared symbol, the literal `maxRetries` shape this axis was
+built to catch. `propose-branches` self-caught a real bug in this session's
+OWN code: the receiver-qualname-construction snippet had been copy-pasted
+into all three of `ExtractGoFile`/`extractGoBranchesFile`/
+`extractGoValuesFile` — fixed by extracting `qualNameFor` once the axis
+flagged it.
+
+Two honest, evidence-based (not guessed) noise patterns to calibrate next,
+before considering `--strict` graduation for either axis:
+
+1. **Branches: same-function name-tautology.** Two arms of ONE function
+   always share the enclosing function's name, so the `stem` anchor channel
+   (and its contribution to score) is trivially satisfied for ANY sibling
+   pair regardless of real content overlap — on both this repo and `stope`,
+   this dominated the top-scoring candidates (guard-clause chains, switch
+   dispatch, multi-step statistics functions — all scoring 1.00 on name
+   alone). A same-function discount, or a `Reason()` hint analogous to
+   `FalseAlarmHint` ("same-function siblings scored on name alone"), is the
+   concrete next step.
+2. **Values: fixed-vocabulary noise.** calque's own verdict vocabulary
+   (`"drift"`/`"false-alarm"`/…) and generic test-fixture placeholders
+   (short filenames, round line counts) recur across unrelated test fixtures
+   by design, not by accident — an exclude list for known fixed-vocabulary/
+   placeholder values would raise precision meaningfully; not implemented
+   this pass since it needs real corpus data to calibrate the list from,
+   not a guess.
+
+Full adjudication (46 self-caused `check --strict` pairs, the branch/value
+axes' own top-20 candidates on this repo, and the `stope` cross-check) is in
+`.calque/registry.md`'s 2026-07-09 run.
+
+---
+
+## 22. Two recall mechanisms, and the class neither reaches
+
+§2 and the README both describe calque as targeting Type-4 (behavioral) clones —
+twins alike only in what they do, dissimilar in syntax by construction. That's
+true of exactly one mechanism in this codebase, and it's easy to read the framing
+as describing all of them. It doesn't. Being precise about which mechanism does
+what, and what's still outside both, is worth a section of its own.
+
+### Mechanism A — effect-footprint overlap (`scan`/`check` and everything built on `Rank`)
+
+The pairwise scorer (`internal/code/score.go`) sums five weighted Jaccard
+similarities — emitted strings (0.30), write-targets (0.30), name-stem (0.22),
+callees (0.10), return keys (0.08) — then gates the result: a pair only becomes a
+candidate if `name-stem ≥ 0.34` or at least one of strings/writes/return-keys is
+nonzero. Tolerant of heavy rewriting (different structure, different local names),
+but it needs *something* lexical to anchor on. `propose-branches` and
+`propose-values` (§21) reuse this exact scorer at finer granularity; they inherit
+the same requirement. This is a real, validated mechanism for renamed and
+restructured copies — classic Type 1–3 — not for a pair sharing zero tokens.
+
+### Mechanism B — signature rarity (`propose-deep`)
+
+`SignatureCandidates` (`internal/code/sigcluster.go`) needs no lexical overlap at
+all. It groups functions by a normalized, *declared-types-only* signature string
+(`(paramType,…)=>returnType` — read straight from the syntax, no type inference:
+TS's `t.getText()` on the annotation node, Go's `go/format.Node` on the AST type
+expression, Python's `ast.unparse()` on `arg.annotation`/`FunctionDef.returns`,
+Rust's `quote`-rendered `syn::Signature`), keeps only groups
+of 2–6 members sharing at least one non-generic, capitalized domain type (a bare
+`string→bool` is too common to mean anything — `builtinGeneric` excludes wrappers
+like `Promise`/`Array`/`Map` from counting), and pairs everyone in a surviving
+group regardless of how different their bodies read. The Jaccard scorer only
+sorts the results (lowest-overlap first, since those are what Mechanism A is
+blindest to) — it never gates membership.
+
+This is the one channel that actually earns the Type-4 framing. The motivating
+case: two functions with an identical `sessionId→WorktreeInfo|null` contract,
+scoring 0.00 on every effect-footprint channel (one read from JSON state, the
+other reconstructed it from git) — Mechanism A would never propose that pair.
+Mechanism B did, and they'd already drifted (one fabricated a `createdAt`
+timestamp and hardcoded `isActive`; the other read both from persisted state).
+
+**Coverage: all five languages.** TypeScript, TSX, and Svelte (Svelte's
+`<script lang="ts">` slice routes through the same TS extractor) built the
+mechanism first; Go, Python, and Rust now populate `FuncSig.Sig` too, each via
+the syntactic surface its own language already exposes — `go/ast`'s fully
+static, always-declared param/return types (no inference needed — Go's
+`context.Context`-style stdlib-qualified types resolve via the file's own
+import map and render as a bare lowercase package name, so they fail the
+domain-type check without a hand-maintained stoplist the way TS/Python/Rust's
+`builtinGeneric` needs); Python's `ast.unparse()` on `arg.annotation`/
+`FunctionDef.returns` (coverage tracks how consistently a codebase actually
+uses type hints, which varies far more than in typical TypeScript); Rust's
+`syn::Signature` rendered back to text via `quote`'s `ToTokens`, with every
+lifetime name canonicalized to a fixed `'_` placeholder first so `fn foo<'a>`
+and `fn bar<'b>` over the same contract bucket together. All three reuse
+`sigcluster.go`'s existing `SignatureCandidates`/`signatureInformative`
+unchanged — Python and Rust extended `builtinGeneric` with their own
+stdlib/prelude noise (Go needed zero changes there, since its stoplist problem
+is solved at the extractor via import provenance instead).
+
+### The class neither mechanism reaches
+
+Two independently-written functions that happen to compute the same thing, share
+no string/write/callee/name-stem token, and either have no type signature or a
+signature too generic to be distinctive — sit outside
+every axis calque has. Not low-recall on this class: **zero-recall**. No generator
+proposes the pair, so a `propose-*` command's `--judge` flag never gets a
+candidate to arbitrate — it only ever adjudicates pairs a generator already
+produced. Closing this would need a recall mechanism that doesn't depend on
+tokens *or* a distinctive static signature — e.g. embedding an LLM-generated
+behavioral summary of each function rather than its source text (embedding raw
+code text would still cluster on incidental phrasing/style, not on what the code
+accomplishes) — which is real, unbuilt scope, not a tuning gap in what exists
+today.

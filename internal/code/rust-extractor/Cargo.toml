@@ -23,6 +23,10 @@ syn = { version = "2", features = ["full", "visit", "extra-traits"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Renders a syn::Signature's types back to source text for the Type-4
+# signature-rarity axis (Sig). Already transitively pulled in by syn's default
+# `printing` feature; promoted here to a direct, name-able dependency.
+quote = "1"
 
 [profile.release]
 # opt-level 1 keeps the one-time first-build fast; the helper is I/O-bound parsing,

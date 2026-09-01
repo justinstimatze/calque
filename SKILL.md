@@ -94,7 +94,11 @@ calque synonym-report                        # embedding near-synonyms (needs lo
 ## Boundary-free audit (no `--left/--right`)
 
 Standing whole-repo generators for the drift the boundary scan can't frame. All
-print to stdout, write nothing, and never exit non-zero — safe to run on any repo:
+print to stdout, write nothing, never exit non-zero, and make **zero network
+calls** unless you pass `--judge` — pure static analysis, so running any of
+them costs nothing and is safe on any repo (~0.5s on calque's own 620-function,
+4-language corpus; Rust pays a one-time ~20s toolchain build on the very first
+`.rs` scan anywhere, cached afterward):
 
 ```
 calque propose-deriv --repo <path>   # value-derivation twins: the same quantity derived
@@ -103,14 +107,37 @@ calque propose-deriv --repo <path>   # value-derivation twins: the same quantity
 calque confess       --repo <path>   # functions whose own comment confesses a twin
                                      # ("mirrors X", "keep in sync with Y", "copy of")
 calque propose-roles --repo <path>   # N-ary seam clusters → paste-ready cardinality roles
-calque propose-deep  --repo <path>   # Type-4 twins sharing a rare type signature, no tokens
+calque propose-deep  --repo <path>   # Type-4 twins sharing a rare type signature, no shared
+                                     # tokens needed at all — the one channel that isn't
+                                     # effect-footprint overlap. All five languages.
 calque propose-cross --repo <path>   # non-function entities (tables, schemas, corpus shapes)
+calque propose-branches --repo <path> # intra-function dual paths: if/else arms, switch/select
+                                     # cases that drifted apart — below function granularity
+calque propose-values --repo <path>  # scattered literal values (a maxRetries-style constant)
+                                     # repeated across sites with no shared symbol
 ```
 
-Add `--judge` to any of them to run the LLM equivalence oracle as the precision
-half automatically (needs `ANTHROPIC_API_KEY`); `--twins-only` prints only the
-confirmed twins. Without `--judge` you adjudicate by hand exactly as in the loop
-above, recording verdicts in the registry.
+**Enabling `--judge`.** Add it to any command above (or to `confess`/
+`propose-branches`/`propose-cross`/`propose-deriv`/`propose-values`/
+`propose-roles`) to run the LLM equivalence oracle as the precision half
+automatically. To enable it: export `ANTHROPIC_API_KEY` (or `CALQUE_API_KEY`)
+in the environment calque runs in, then pass `--judge` on the command line —
+both are required; a key alone does nothing, and there is no config file or
+auto-detection that turns it on for you. `--twins-only` then prints only the
+confirmed twins.
+
+**Why it's opt-in, not automatic:** each candidate costs one real, billed
+Anthropic API call (`CALQUE_JUDGE_MODEL` picks the model; results are cached
+on disk per-pair, so a re-run only pays for genuinely new candidates) — a
+whole-repo generator can return dozens of candidates in one pass, so this is a
+real, scaling cost, not a rounding error. **When to reach for it:** a handful
+of candidates (roughly under ten) are usually faster to read by eye than to
+wait on API round-trips for; past that, `--judge` is the practical way to
+actually process the output rather than eyeballing every row. **Without
+`--judge`**, you (or an agent operating calque on someone's behalf) adjudicate
+by hand exactly as in the loop above, recording verdicts in the registry —
+realistic for small candidate counts, not for the full output of a whole-repo
+sweep.
 
 ## Keeping it honest
 

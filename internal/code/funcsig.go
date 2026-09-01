@@ -61,19 +61,32 @@ type FuncSig struct {
 	// noise. Set in Extract; --include-tests opts the test↔test pairs back in.
 	Test bool `json:"test,omitempty"`
 
-	// Kind tags non-function entities the CROSS-SUBSTRATE axis extracts: "" = a
-	// function (the default — the code axis; zero perturbation to existing callers),
-	// "table" = a module-level dict/set/list constant (its keys live in RetKeys),
-	// "corpus-field" = a JSON object (its field names live in RetKeys). Only the
-	// generator-only `propose-cross` path produces non-"" kinds; the scoring gate
-	// (Extract→Rank→check→--strict) never sees them.
+	// Kind tags non-function entities: "" = a function (the default — the code
+	// axis; zero perturbation to existing callers), "table" = a module-level
+	// dict/set/list constant (its keys live in RetKeys), "corpus-field" = a JSON
+	// object (its field names live in RetKeys) — both from the CROSS-SUBSTRATE
+	// axis (generator-only `propose-cross`). "branch" = an intra-function
+	// conditional arm (if/else body, switch/select case) from the sub-function
+	// axis (`propose-branches`) — Qualname is uniquified per arm for Key(), Name
+	// stays the enclosing function's name so stem-based matching still reflects
+	// its role. "value-site" = a scattered literal-value occurrence (its value in
+	// Value, its nearby identifier in Name) from the same axis (`propose-values`).
+	// None of these reach the scoring gate (Extract→Rank→check→--strict) —
+	// generator-only, same discipline as table/corpus-field.
 	Kind string `json:"kind,omitempty"`
+
+	// Value is the stringified literal at a value-site entity (Kind ==
+	// "value-site") — e.g. "3" for `maxRetries := 3`. Empty for every other Kind.
+	// Populated by ExtractValueSites; the scorer never reads it (ValueSiteCandidates
+	// buckets on it directly, ahead of any jaccard/anchor-channel comparison).
+	Value string `json:"value,omitempty"`
 
 	// Sig is the normalized type signature — "(paramType,…)=>returnType" — a
 	// REPRESENTATION-INDEPENDENT invariant: two behavioral (Type-4) twins share a
-	// contract even when they share no token. Populated where the language exposes
-	// types (TS today); empty otherwise. Experimental: drives the signature-rarity
-	// recall pass, not the jaccard scorer.
+	// contract even when they share no token. Populated for all five languages
+	// (Go/Python/TS/TSX/Svelte/Rust); empty only when a function is fully
+	// untyped (bare "?" params/return, e.g. unannotated Python). Experimental:
+	// drives the signature-rarity recall pass, not the jaccard scorer.
 	Sig string `json:"sig,omitempty"`
 
 	// Source is an in-process judge blob for entities with no clean line span (a

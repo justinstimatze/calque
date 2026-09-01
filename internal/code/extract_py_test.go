@@ -90,3 +90,76 @@ def span_test(h):
 		}
 	}
 }
+
+// TestExtractPySig pins the Type-4 signature-rarity channel (Sig) on the Python
+// extractor: an annotated function's Sig reflects its declared types, an
+// unannotated one falls back to "?" per param/return (the None-guard), and a
+// method's leading "self" is excluded from the param list — mirroring Go's
+// receiver exclusion and TS's exclusion of "this" — so a plain function and a
+// method doing the same thing can still bucket together. Skips when python3
+// is absent.
+func TestExtractPySig(t *testing.T) {
+	if _, err := exec.LookPath(pythonBin()); err != nil {
+		t.Skip("python3 not available")
+	}
+	dir := t.TempDir()
+	src := `class Widget:
+    def resize(self, w: int, h: int) -> "Widget":
+        return self
+
+def untyped(a, b):
+    return a + b
+`
+	f := filepath.Join(dir, "widget.py")
+	if err := os.WriteFile(f, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sigs, err := extractPyBatch([]string{f}, dir)
+	if err != nil {
+		t.Fatalf("extractPyBatch: %v", err)
+	}
+	resize := sigByQual(sigs, "Widget.resize")
+	if resize == nil {
+		t.Fatalf("Widget.resize not extracted; got %d sigs", len(sigs))
+	}
+	if want := `(int,int)=>'Widget'`; resize.Sig != want {
+		t.Errorf("Widget.resize.Sig = %q, want %q", resize.Sig, want)
+	}
+	untyped := sigByQual(sigs, "untyped")
+	if untyped == nil {
+		t.Fatalf("untyped not extracted; got %d sigs", len(sigs))
+	}
+	if want := "(?,?)=>?"; untyped.Sig != want {
+		t.Errorf("untyped.Sig = %q, want %q", untyped.Sig, want)
+	}
+}
+
+// TestExtractPySigTypingNoise pins the informativeness side: a signature built
+// entirely from typing-module generics and builtins must NOT register as
+// informative post-stoplist-extension — it's noise, not a domain type.
+func TestExtractPySigTypingNoise(t *testing.T) {
+	if _, err := exec.LookPath(pythonBin()); err != nil {
+		t.Skip("python3 not available")
+	}
+	dir := t.TempDir()
+	src := `from typing import List, Optional
+
+def collect(xs: List[str]) -> Optional[str]:
+    return xs[0] if xs else None
+`
+	f := filepath.Join(dir, "collect.py")
+	if err := os.WriteFile(f, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sigs, err := extractPyBatch([]string{f}, dir)
+	if err != nil {
+		t.Fatalf("extractPyBatch: %v", err)
+	}
+	collect := sigByQual(sigs, "collect")
+	if collect == nil {
+		t.Fatalf("collect not extracted; got %d sigs", len(sigs))
+	}
+	if signatureInformative(collect.Sig) {
+		t.Errorf("a typing-generic-only signature must not register as informative, got %q", collect.Sig)
+	}
+}

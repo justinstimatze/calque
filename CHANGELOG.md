@@ -5,6 +5,30 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+### Added
+- **`propose-branches`** — a new generator for the sub-function "dual-path"
+  axis: extracts intra-function conditional arms (if/else bodies,
+  switch/select cases) as `Kind:"branch"` entities and scores them with the
+  same `Rank` pipeline the function axis uses, catching duplication living
+  *below* function granularity (two arms of one function, or two arms of
+  different functions, that drifted apart) that the whole-function axis
+  structurally cannot see. Go-only this pass. Generator only — stdout, no
+  registry writes, no exit code, no `--strict` wiring.
+- **`propose-values`** — a new generator for the scattered-value axis: pairs
+  a literal value (an assignment, a var/const declaration, a composite-
+  literal field/map key) repeated across independent sites under a
+  similarly-named identifier with no shared const backing it — the
+  `maxRetries`-style bug that can silently drift out of sync. Go-only this
+  pass. Generator only, same discipline as `propose-branches`.
+- **`propose-deep` now covers Go, Python, and Rust**, not just TypeScript/TSX/
+  Svelte — the signature-rarity (Type-4, zero-token) mechanism populates
+  `FuncSig.Sig` for all five languages. Go resolves stdlib-qualified types
+  (`context.Context`) via the file's own import map instead of a hand-
+  maintained stoplist; Python reads `ast.unparse()` on declared annotations;
+  Rust renders `syn::Signature` via `quote` and canonicalizes every lifetime
+  to a fixed `'_` placeholder so `fn foo<'a>` and `fn bar<'b>` over the same
+  contract bucket together.
+
 ## [0.13.0] - 2026-07-06
 
 ### Added

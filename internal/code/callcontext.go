@@ -32,12 +32,7 @@ func CallerStemIndex(sigs []*FuncSig) map[string]set {
 			continue
 		}
 		for _, callee := range f.Calls {
-			if idx[callee] == nil {
-				idx[callee] = set{}
-			}
-			for tok := range f.stem {
-				idx[callee][tok] = struct{}{}
-			}
+			addCallerStem(idx, callee, f.stem)
 		}
 	}
 	return idx
@@ -62,34 +57,8 @@ func CallerStemIndex(sigs []*FuncSig) map[string]set {
 func CallContextCandidates(sigs []*FuncSig, gate SizeGate, minCallerJaccard, minShapeJaccard float64, maxFanout int) []SigCandidate {
 	callerStems := CallerStemIndex(sigs)
 	callShapes := CallShapeIndex(sigs)
-
-	// A candidate callee needs both signals present, and its own definition
-	// kept by the size gate. Iterating sigs (not a map) keeps the pick
-	// deterministic when a leaf name is defined more than once (a method name
-	// reused across types) — first-in-file-order wins; that name COLLISION is
-	// NameStemCandidates' territory, not this axis's.
-	byLeaf := map[string]*FuncSig{}
-	for _, f := range sigs {
-		if !gate.keep(f) || strings.HasPrefix(f.Name, "__") {
-			continue
-		}
-		if len(callerStems[f.Name]) == 0 || len(callShapes[f.Name]) == 0 {
-			continue
-		}
-		if _, dup := byLeaf[f.Name]; !dup {
-			byLeaf[f.Name] = f
-		}
-	}
-
-	// Inverted caller-stem index over candidate callees only, so comparison
-	// stays near-linear like NameStemCandidates: only functions sharing at
-	// least one caller-stem token are ever compared directly.
-	byToken := map[string][]*FuncSig{}
-	for name, f := range byLeaf {
-		for tok := range callerStems[name] {
-			byToken[tok] = append(byToken[tok], f)
-		}
-	}
+	byLeaf := candidateCallees(sigs, gate, callerStems, callShapes)
+	byToken := bucketByCallerToken(byLeaf, callerStems)
 
 	var out []SigCandidate
 	seen := map[string]bool{}
@@ -97,36 +66,7 @@ func CallContextCandidates(sigs []*FuncSig, gate SizeGate, minCallerJaccard, min
 		if len(fns) < 2 || len(fns) > maxFanout {
 			continue // a caller-stem shared by >maxFanout callees is plumbing, not a role
 		}
-		for i := 0; i < len(fns); i++ {
-			for j := i + 1; j < len(fns); j++ {
-				a, b := fns[i], fns[j]
-				if a.Key() == b.Key() {
-					continue
-				}
-				pk := pairkey.Key(a.Key(), b.Key())
-				if seen[pk] {
-					continue
-				}
-				callerJac := jaccard(callerStems[a.Name], callerStems[b.Name])
-				if callerJac < minCallerJaccard {
-					continue
-				}
-				shapeJac := jaccard(callShapes[a.Name], callShapes[b.Name])
-				if shapeJac < minShapeJaccard {
-					continue
-				}
-				seen[pk] = true
-				jac := 0.0
-				if s, ok := scorePair(a, b); ok {
-					jac = s.Score
-				}
-				out = append(out, SigCandidate{
-					A: a, B: b, Kind: "call-context",
-					Sig:       fmt.Sprintf("caller≈%.2f shape≈%.2f", callerJac, shapeJac),
-					GroupSize: 2, Jaccard: jac, CrossFile: a.File != b.File,
-				})
-			}
-		}
+		out = append(out, pairCallContextGroup(fns, callerStems, callShapes, minCallerJaccard, minShapeJaccard, seen)...)
 	}
 
 	// Most gate-invisible first, then most-overlapping-context, then deterministic.
@@ -160,4 +100,87 @@ func CallShapeIndex(sigs []*FuncSig) map[string]set {
 		}
 	}
 	return idx
+}
+
+// addCallerStem folds one caller's stem tokens into idx for a single callee it calls.
+func addCallerStem(idx map[string]set, callee string, stem set) {
+	if idx[callee] == nil {
+		idx[callee] = set{}
+	}
+	for tok := range stem {
+		idx[callee][tok] = struct{}{}
+	}
+}
+
+// bucketByCallerToken inverts byLeaf into caller-stem-token -> candidate
+// callees, so comparison stays near-linear like NameStemCandidates: only
+// functions sharing at least one caller-stem token are ever compared directly.
+func bucketByCallerToken(byLeaf map[string]*FuncSig, callerStems map[string]set) map[string][]*FuncSig {
+	byToken := map[string][]*FuncSig{}
+	for name, f := range byLeaf {
+		for tok := range callerStems[name] {
+			byToken[tok] = append(byToken[tok], f)
+		}
+	}
+	return byToken
+}
+
+// candidateCallees returns the size-gated, both-signals-present functions
+// eligible to be paired, keyed by leaf name. Iterating sigs (not a map) keeps
+// the pick deterministic when a leaf name is defined more than once (a method
+// name reused across types) — first-in-file-order wins; that name COLLISION is
+// NameStemCandidates' territory, not this axis's.
+func candidateCallees(sigs []*FuncSig, gate SizeGate, callerStems, callShapes map[string]set) map[string]*FuncSig {
+	byLeaf := map[string]*FuncSig{}
+	for _, f := range sigs {
+		if !gate.keep(f) || strings.HasPrefix(f.Name, "__") {
+			continue
+		}
+		if len(callerStems[f.Name]) == 0 || len(callShapes[f.Name]) == 0 {
+			continue
+		}
+		if _, dup := byLeaf[f.Name]; !dup {
+			byLeaf[f.Name] = f
+		}
+	}
+	return byLeaf
+}
+
+// pairCallContextGroup compares every pair within one caller-stem bucket,
+// keeping a pair only when BOTH the caller-stem and call-shape jaccard clear
+// their thresholds — see CallContextCandidates' doc comment for why both are
+// required.
+func pairCallContextGroup(fns []*FuncSig, callerStems, callShapes map[string]set, minCallerJaccard, minShapeJaccard float64, seen map[string]bool) []SigCandidate {
+	var out []SigCandidate
+	for i := 0; i < len(fns); i++ {
+		for j := i + 1; j < len(fns); j++ {
+			a, b := fns[i], fns[j]
+			if a.Key() == b.Key() {
+				continue
+			}
+			pk := pairkey.Key(a.Key(), b.Key())
+			if seen[pk] {
+				continue
+			}
+			callerJac := jaccard(callerStems[a.Name], callerStems[b.Name])
+			if callerJac < minCallerJaccard {
+				continue
+			}
+			shapeJac := jaccard(callShapes[a.Name], callShapes[b.Name])
+			if shapeJac < minShapeJaccard {
+				continue
+			}
+			seen[pk] = true
+			jac := 0.0
+			if s, ok := scorePair(a, b); ok {
+				jac = s.Score
+			}
+			out = append(out, SigCandidate{
+				A: a, B: b, Kind: "call-context",
+				Sig:       fmt.Sprintf("caller≈%.2f shape≈%.2f", callerJac, shapeJac),
+				GroupSize: 2, Jaccard: jac, CrossFile: a.File != b.File,
+			})
+		}
+	}
+	return out
 }

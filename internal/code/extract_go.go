@@ -312,10 +312,7 @@ func (b *goBody) Visit(n ast.Node) ast.Visitor {
 				}
 			}
 		}
-		if leaf := callLeafName(t.Fun); leaf != "" {
-			b.tagCallResult(leaf, fmt.Sprintf("arg-count:%d", len(t.Args)))
-			b.classifyCallContext(t, leaf)
-		}
+		b.tagCallSite(t)
 	case *ast.SelectorExpr:
 		// Every field-path read in a value position. The plain-`=` LHS is removed
 		// later via pureWrites (reads()); compound-assign / inc-dec targets stay
@@ -598,7 +595,7 @@ func callResultShapesOf(m map[string]set) map[string][]string {
 // tags ret-assigned-field for a direct `obj.Field = g()` / `m[k] = g()` shape,
 // then defers to classifyNilOrErrCheck for the err/nil-check idioms.
 func (b *goBody) classifyAssign(assign *ast.AssignStmt, call *ast.CallExpr, leaf string) {
-	if idx := rhsIndexOf(assign, call); idx >= 0 && idx < len(assign.Lhs) && len(assign.Rhs) == len(assign.Lhs) {
+	if idx, ok := safeAssignIndex(assign, call); ok {
 		switch assign.Lhs[idx].(type) {
 		case *ast.SelectorExpr, *ast.IndexExpr:
 			b.tagCallResult(leaf, "ret-assigned-field")
@@ -617,11 +614,7 @@ func (b *goBody) classifyCallContext(call *ast.CallExpr, leaf string) {
 	}
 	switch p := b.stack[len(b.stack)-2].(type) {
 	case *ast.BinaryExpr:
-		if isNilComparand(p) {
-			b.tagCallResult(leaf, "ret-nil-checked")
-		} else if isComparisonOp(p.Op) {
-			b.tagCallResult(leaf, "ret-compared")
-		}
+		b.classifyBinaryParent(p, leaf)
 	case *ast.CallExpr:
 		if exprInList(call, p.Args) {
 			b.tagCallResult(leaf, "ret-passed-to-call")
@@ -653,16 +646,8 @@ func (b *goBody) classifyNilOrErrCheck(assign *ast.AssignStmt, leaf string) {
 			b.tagFromCond(gp.Cond, assign.Lhs, leaf)
 		}
 	case *ast.BlockStmt:
-		for i, s := range gp.List {
-			if s != ast.Stmt(assign) {
-				continue
-			}
-			if i+1 < len(gp.List) {
-				if next, ok := gp.List[i+1].(*ast.IfStmt); ok && next.Init == nil {
-					b.tagFromCond(next.Cond, assign.Lhs, leaf)
-				}
-			}
-			break
+		if next := nextIfStmtAfter(gp, assign); next != nil {
+			b.tagFromCond(next.Cond, assign.Lhs, leaf)
 		}
 	}
 }
@@ -688,15 +673,11 @@ func isNilComparand(bin *ast.BinaryExpr) bool {
 // nilCheckedIdent returns the identifier name compared against literal nil in
 // bin (either operand order), or "" if bin isn't an ident-vs-nil comparison.
 func nilCheckedIdent(bin *ast.BinaryExpr) string {
-	if isNilIdent(bin.Y) {
-		if id, ok := bin.X.(*ast.Ident); ok {
-			return id.Name
-		}
+	if id, ok := bin.X.(*ast.Ident); ok && isNilIdent(bin.Y) {
+		return id.Name
 	}
-	if isNilIdent(bin.X) {
-		if id, ok := bin.Y.(*ast.Ident); ok {
-			return id.Name
-		}
+	if id, ok := bin.Y.(*ast.Ident); ok && isNilIdent(bin.X) {
+		return id.Name
 	}
 	return ""
 }
@@ -733,18 +714,13 @@ func (b *goBody) tagFromCond(cond ast.Expr, lhs []ast.Expr, leaf string) {
 		return
 	}
 	name := nilCheckedIdent(bin)
-	if name == "" {
+	if name == "" || !lhsHasIdent(lhs, name) {
 		return
 	}
-	for _, l := range lhs {
-		if id, ok := l.(*ast.Ident); ok && id.Name == name {
-			if name == "err" {
-				b.tagCallResult(leaf, "ret-err-checked")
-			} else {
-				b.tagCallResult(leaf, "ret-nil-checked")
-			}
-			return
-		}
+	if name == "err" {
+		b.tagCallResult(leaf, "ret-err-checked")
+	} else {
+		b.tagCallResult(leaf, "ret-nil-checked")
 	}
 }
 
@@ -759,4 +735,70 @@ func isComparisonOp(op token.Token) bool {
 func isNilIdent(e ast.Expr) bool {
 	id, ok := e.(*ast.Ident)
 	return ok && id.Name == "nil"
+}
+
+// classifyBinaryParent handles the direct-inline form (`if g() != nil`, `if
+// count() > 5`): the call's result is one operand of a comparison.
+func (b *goBody) classifyBinaryParent(bin *ast.BinaryExpr, leaf string) {
+	if isNilComparand(bin) {
+		b.tagCallResult(leaf, "ret-nil-checked")
+	} else if isComparisonOp(bin.Op) {
+		b.tagCallResult(leaf, "ret-compared")
+	}
+}
+
+// lhsHasIdent reports whether lhs contains a plain identifier named name.
+func lhsHasIdent(lhs []ast.Expr, name string) bool {
+	for _, l := range lhs {
+		if id, ok := l.(*ast.Ident); ok && id.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// nextIfStmtAfter returns the *ast.IfStmt immediately following assign in
+// block's statement list, if there is one and it has no Init clause of its
+// own (an Init there would mean it's checking something else's result, not
+// assign's).
+func nextIfStmtAfter(block *ast.BlockStmt, assign *ast.AssignStmt) *ast.IfStmt {
+	for i, s := range block.List {
+		if s != ast.Stmt(assign) {
+			continue
+		}
+		if i+1 >= len(block.List) {
+			return nil
+		}
+		next, ok := block.List[i+1].(*ast.IfStmt)
+		if !ok || next.Init != nil {
+			return nil
+		}
+		return next
+	}
+	return nil
+}
+
+// safeAssignIndex returns call's RHS index within assign, but only when the
+// LHS/RHS arities match 1:1 — a multi-value RHS like `v, err := g()` has no
+// single LHS slot corresponding to the call itself, so index correspondence
+// doesn't apply.
+func safeAssignIndex(assign *ast.AssignStmt, call *ast.CallExpr) (int, bool) {
+	idx := rhsIndexOf(assign, call)
+	if idx < 0 || len(assign.Rhs) != len(assign.Lhs) {
+		return 0, false
+	}
+	return idx, true
+}
+
+// tagCallSite records the call-result-shape signals for one call expression
+// (arg-count, and whatever its immediate syntactic context implies) — see
+// SPEC-callsite-context-axis.md §2. No-op for a callee that isn't a simple
+// name/selector (a func literal, an indexed expression, …).
+func (b *goBody) tagCallSite(call *ast.CallExpr) {
+	leaf := callLeafName(call.Fun)
+	if leaf == "" {
+		return
+	}
+	b.tagCallResult(leaf, fmt.Sprintf("arg-count:%d", len(call.Args)))
+	b.classifyCallContext(call, leaf)
 }

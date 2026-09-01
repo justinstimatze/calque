@@ -155,25 +155,10 @@ func pairCallContextGroup(fns []*FuncSig, callerStems, callShapes map[string]set
 	for i := 0; i < len(fns); i++ {
 		for j := i + 1; j < len(fns); j++ {
 			a, b := fns[i], fns[j]
-			if a.Key() == b.Key() {
+			callerJac, shapeJac, ok := qualifiesForPair(a, b, callerStems, callShapes, minCallerJaccard, minShapeJaccard, seen)
+			if !ok {
 				continue
 			}
-			if callsEachOther(a, b) {
-				continue
-			}
-			pk := pairkey.Key(a.Key(), b.Key())
-			if seen[pk] {
-				continue
-			}
-			callerJac := jaccard(callerStems[a.Name], callerStems[b.Name])
-			if callerJac < minCallerJaccard {
-				continue
-			}
-			shapeJac := jaccard(callShapes[a.Name], callShapes[b.Name])
-			if shapeJac < minShapeJaccard {
-				continue
-			}
-			seen[pk] = true
 			jac := 0.0
 			if s, ok := scorePair(a, b); ok {
 				jac = s.Score
@@ -202,4 +187,28 @@ func pairCallContextGroup(fns []*FuncSig, callerStems, callShapes map[string]set
 // itself, and stays open for the frequency-based stoplist instead.
 func callsEachOther(a, b *FuncSig) bool {
 	return a.sCall.has(b.Name) || b.sCall.has(a.Name)
+}
+
+// qualifiesForPair runs the pair-admission cascade: distinct functions, not
+// caught by callsEachOther, not already emitted (seen), and both jaccard
+// thresholds cleared. Marks seen on success so a later bucket sharing this
+// pair (via a second caller-stem token) doesn't re-emit it.
+func qualifiesForPair(a, b *FuncSig, callerStems, callShapes map[string]set, minCallerJaccard, minShapeJaccard float64, seen map[string]bool) (callerJac, shapeJac float64, ok bool) {
+	if a.Key() == b.Key() || callsEachOther(a, b) {
+		return 0, 0, false
+	}
+	pk := pairkey.Key(a.Key(), b.Key())
+	if seen[pk] {
+		return 0, 0, false
+	}
+	callerJac = jaccard(callerStems[a.Name], callerStems[b.Name])
+	if callerJac < minCallerJaccard {
+		return 0, 0, false
+	}
+	shapeJac = jaccard(callShapes[a.Name], callShapes[b.Name])
+	if shapeJac < minShapeJaccard {
+		return 0, 0, false
+	}
+	seen[pk] = true
+	return callerJac, shapeJac, true
 }

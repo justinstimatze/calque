@@ -1578,6 +1578,40 @@ unchanged — Python and Rust extended `builtinGeneric` with their own
 stdlib/prelude noise (Go needed zero changes there, since its stoplist problem
 is solved at the extractor via import provenance instead).
 
+**Recall quality is not uniform across the five, and the gap isn't tunable —
+it's a fact about each language, not a calque limitation to fix:**
+
+- **Go** — the strongest guarantee of the five: every function is fully
+  statically typed by the compiler, so there's no "maybe untyped" case the
+  way Python has. The one known gap is narrow: `goTypeSig` only elides a
+  stdlib type at the top level or behind a single pointer, so a *nested*
+  stdlib type (`[]context.Context`, a stdlib type inside a slice/map/generic
+  parameter) renders qualified and can register as informative on the
+  strength of a name like `Context` alone — a precision loss on a rare shape,
+  not a recall loss.
+- **Python** — recall tracks how consistently the *target* codebase actually
+  uses type hints, not anything calque controls. A fully unannotated function
+  gets `Sig = "(?,?)=>?"`, which `signatureInformative` always rejects (no
+  capitalized token to match) — so an unannotated function gets **zero**
+  recall from this channel, silently, same as if it were invisible to
+  `propose-deep` entirely. On a codebase that type-hints inconsistently
+  (common outside typed-Python shops), this can be the majority of functions.
+- **Rust** — like Go, every function is fully typed by the compiler, so no
+  annotation gap exists. The noise shape here is different: a generic bound
+  or trait name in `impl Trait`/`<T: SomeTrait>` position can look like a
+  real domain type and isn't caught by import provenance the way Go's is
+  (prelude items and trait bounds have no `use` statement to resolve), so a
+  widely-shared trait bound could pair unrelated functions that happen to
+  share it — a `builtinGeneric` stoplist gap that needs real adjudication
+  data to calibrate, not a guess.
+- **TypeScript/TSX** — the original, longest-calibrated implementation;
+  `builtinGeneric`'s TS half has had the most iteration.
+- **Svelte** — inherits TS's channel only for the `<script lang="ts">` case.
+  A Svelte component without `lang="ts"` is plain JS with no annotations to
+  read, so it gets the same silent zero-recall outcome as unannotated Python
+  — not a Svelte-specific bug, the same "no types on the page, no signal"
+  fact applying to a different syntax.
+
 ### The class neither mechanism reaches
 
 Two independently-written functions that happen to compute the same thing, share

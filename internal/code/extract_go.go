@@ -495,32 +495,8 @@ func goTypeSig(fset *token.FileSet, imports map[string]string, expr ast.Expr) st
 // "(T1,T2)". Type parameters (generics) are read as ordinary identifiers,
 // matching how the TS side never inspects a function's own generic bounds either.
 func goSignatureOf(fset *token.FileSet, imports map[string]string, ft *ast.FuncType) string {
-	var params []string
-	if ft.Params != nil {
-		for _, field := range ft.Params.List {
-			t := goTypeSig(fset, imports, field.Type)
-			n := len(field.Names)
-			if n == 0 {
-				n = 1
-			}
-			for i := 0; i < n; i++ {
-				params = append(params, t)
-			}
-		}
-	}
-	var results []string
-	if ft.Results != nil {
-		for _, field := range ft.Results.List {
-			t := goTypeSig(fset, imports, field.Type)
-			n := len(field.Names)
-			if n == 0 {
-				n = 1
-			}
-			for i := 0; i < n; i++ {
-				results = append(results, t)
-			}
-		}
-	}
+	params := flattenFieldTypes(fset, imports, ft.Params)
+	results := flattenFieldTypes(fset, imports, ft.Results)
 	var ret string
 	switch len(results) {
 	case 0:
@@ -531,4 +507,27 @@ func goSignatureOf(fset *token.FileSet, imports map[string]string, ft *ast.FuncT
 		ret = "(" + strings.Join(results, ",") + ")"
 	}
 	return "(" + strings.Join(params, ",") + ")=>" + ret
+}
+
+// flattenFieldTypes renders each field's type in a param/result list, repeating
+// a field's type once per grouped name (func f(x, y int) shares one *ast.Field,
+// rendered once for x and once for y) or once for an unnamed field. Shared by
+// goSignatureOf's param and result passes — the two were byte-identical logic
+// applied to ft.Params/ft.Results before this extraction.
+func flattenFieldTypes(fset *token.FileSet, imports map[string]string, fl *ast.FieldList) []string {
+	if fl == nil {
+		return nil
+	}
+	var out []string
+	for _, field := range fl.List {
+		t := goTypeSig(fset, imports, field.Type)
+		n := len(field.Names)
+		if n == 0 {
+			n = 1
+		}
+		for i := 0; i < n; i++ {
+			out = append(out, t)
+		}
+	}
+	return out
 }

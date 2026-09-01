@@ -281,6 +281,11 @@ fn type_name(ty: &Type) -> Option<String> {
     }
 }
 
+/// Whether c can continue a lifetime identifier ('a, 'b, '_, 'static, ...).
+fn is_lifetime_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
 /// Replaces every `'ident` lifetime with a fixed `'_` placeholder, so
 /// `fn foo<'a>(x: &'a str) -> &'a str` and `fn bar<'b>(x: &'b str) -> &'b str`
 /// — the same contract — bucket together. Deliberately collapses "same
@@ -295,7 +300,7 @@ fn canonicalize_lifetimes(s: &str) -> String {
         if chars[i] == '\'' {
             out.push_str("'_");
             i += 1;
-            while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
+            while i < chars.len() && is_lifetime_char(chars[i]) {
                 i += 1;
             }
         } else {
@@ -338,34 +343,39 @@ fn signature_of(sig: &Signature) -> String {
     format!("({})=>{}", params.join(","), ret)
 }
 
-fn emit_fn(
-    ident: &Ident,
-    sig: &Signature,
-    block: &Block,
-    rel: &str,
-    impl_type: Option<&str>,
-    decl_consts: &[String],
+/// Bundles emit_fn's per-function inputs — grouped once the signature-rarity
+/// axis pushed the parameter count past a plain positional list's readable
+/// limit (Signature and Block both come from the same syn::Item, so passing
+/// them as a group also mirrors how walk_items already holds them together).
+struct EmitFnArgs<'a> {
+    ident: &'a Ident,
+    sig: &'a Signature,
+    block: &'a Block,
+    rel: &'a str,
+    impl_type: Option<&'a str>,
+    decl_consts: &'a [String],
     is_test: bool,
-    out: &mut Vec<Record>,
-) {
-    let name = ident.to_string();
-    let qualname = match impl_type {
+}
+
+fn emit_fn(args: EmitFnArgs, out: &mut Vec<Record>) {
+    let name = args.ident.to_string();
+    let qualname = match args.impl_type {
         Some(t) => format!("{}.{}", t, name),
         None => name.clone(),
     };
-    let line = ident.span().start().line;
-    let close = block.brace_token.span.close().start().line;
+    let line = args.ident.span().start().line;
+    let close = args.block.brace_token.span.close().start().line;
     let n_lines = if close >= line { close - line + 1 } else { 1 };
 
     let mut body = Body::default();
-    body.visit_block(block);
+    body.visit_block(args.block);
     // The trailing (semicolon-less) expression is Rust's implicit return.
-    if let Some(Stmt::Expr(e, None)) = block.stmts.last() {
+    if let Some(Stmt::Expr(e, None)) = args.block.stmts.last() {
         body.collect_struct_keys(e);
     }
 
     out.push(Record {
-        file: rel.to_string(),
+        file: args.rel.to_string(),
         qualname,
         name,
         line,
@@ -377,10 +387,10 @@ fn emit_fn(
         ret_keys: body.ret_keys.into_iter().collect(),
         calls: body.calls.into_iter().collect(),
         consts: body.consts.into_iter().collect(),
-        decl_consts: decl_consts.to_vec(),
+        decl_consts: args.decl_consts.to_vec(),
         delegates: body.delegates,
-        test: is_test,
-        sig: signature_of(sig),
+        test: args.is_test,
+        sig: signature_of(args.sig),
     });
 }
 
@@ -438,7 +448,18 @@ fn walk_items(items: &[Item], rel: &str, decl_consts: &[String], in_test: bool, 
         match item {
             Item::Fn(f) => {
                 let t = in_test || has_test_attr(&f.attrs);
-                emit_fn(&f.sig.ident, &f.sig, &f.block, rel, None, decl_consts, t, out)
+                emit_fn(
+                    EmitFnArgs {
+                        ident: &f.sig.ident,
+                        sig: &f.sig,
+                        block: &f.block,
+                        rel,
+                        impl_type: None,
+                        decl_consts,
+                        is_test: t,
+                    },
+                    out,
+                )
             }
             Item::Impl(im) => {
                 let ty = type_name(&im.self_ty);
@@ -447,13 +468,15 @@ fn walk_items(items: &[Item], rel: &str, decl_consts: &[String], in_test: bool, 
                     if let ImplItem::Fn(m) = ii {
                         let t = impl_test || has_test_attr(&m.attrs);
                         emit_fn(
-                            &m.sig.ident,
-                            &m.sig,
-                            &m.block,
-                            rel,
-                            ty.as_deref(),
-                            decl_consts,
-                            t,
+                            EmitFnArgs {
+                                ident: &m.sig.ident,
+                                sig: &m.sig,
+                                block: &m.block,
+                                rel,
+                                impl_type: ty.as_deref(),
+                                decl_consts,
+                                is_test: t,
+                            },
                             out,
                         );
                     }

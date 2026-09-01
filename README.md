@@ -345,7 +345,9 @@ effect-footprint scorer:
   pair up sharing zero strings/writes/calls/names. This is calque's actual
   zero-footprint Type-4 mechanism — every other axis, including the core pairwise
   scorer above, requires at least one overlapping token to anchor a candidate.
-  All five languages (`docs/DESIGN_NOTES.md` §22).
+  All five languages, but recall quality isn't uniform across them — it tracks
+  each language's own type-annotation guarantees, not a calque setting
+  (`docs/DESIGN_NOTES.md` §22 breaks it down per language).
 - **cross-substrate (`propose-cross`)** — non-function entities (module-level
   tables, JSON corpus shapes) extracted and scored the same way, for drift that
   lives outside a function body entirely (`docs/DESIGN_NOTES.md` §19).

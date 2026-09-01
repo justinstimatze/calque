@@ -151,11 +151,12 @@ func candidateCallees(sigs []*FuncSig, gate SizeGate, callerStems, callShapes ma
 // their thresholds — see CallContextCandidates' doc comment for why both are
 // required.
 func pairCallContextGroup(fns []*FuncSig, callerStems, callShapes map[string]set, minCallerJaccard, minShapeJaccard float64, seen map[string]bool) []SigCandidate {
+	g := pairGate{callerStems, callShapes, minCallerJaccard, minShapeJaccard, seen}
 	var out []SigCandidate
 	for i := 0; i < len(fns); i++ {
 		for j := i + 1; j < len(fns); j++ {
 			a, b := fns[i], fns[j]
-			callerJac, shapeJac, ok := qualifiesForPair(a, b, callerStems, callShapes, minCallerJaccard, minShapeJaccard, seen)
+			callerJac, shapeJac, ok := qualifiesForPair(a, b, g)
 			if !ok {
 				continue
 			}
@@ -193,22 +194,31 @@ func callsEachOther(a, b *FuncSig) bool {
 // caught by callsEachOther, not already emitted (seen), and both jaccard
 // thresholds cleared. Marks seen on success so a later bucket sharing this
 // pair (via a second caller-stem token) doesn't re-emit it.
-func qualifiesForPair(a, b *FuncSig, callerStems, callShapes map[string]set, minCallerJaccard, minShapeJaccard float64, seen map[string]bool) (callerJac, shapeJac float64, ok bool) {
+func qualifiesForPair(a, b *FuncSig, g pairGate) (callerJac, shapeJac float64, ok bool) {
 	if a.Key() == b.Key() || callsEachOther(a, b) {
 		return 0, 0, false
 	}
 	pk := pairkey.Key(a.Key(), b.Key())
-	if seen[pk] {
+	if g.seen[pk] {
 		return 0, 0, false
 	}
-	callerJac = jaccard(callerStems[a.Name], callerStems[b.Name])
-	if callerJac < minCallerJaccard {
+	callerJac = jaccard(g.callerStems[a.Name], g.callerStems[b.Name])
+	if callerJac < g.minCallerJaccard {
 		return 0, 0, false
 	}
-	shapeJac = jaccard(callShapes[a.Name], callShapes[b.Name])
-	if shapeJac < minShapeJaccard {
+	shapeJac = jaccard(g.callShapes[a.Name], g.callShapes[b.Name])
+	if shapeJac < g.minShapeJaccard {
 		return 0, 0, false
 	}
-	seen[pk] = true
+	g.seen[pk] = true
 	return callerJac, shapeJac, true
+}
+
+// pairGate bundles the per-run indexes, thresholds, and dedup set
+// qualifiesForPair needs, keeping its own argument count under CodeScene's
+// 4-argument ceiling rather than threading five separate parameters.
+type pairGate struct {
+	callerStems, callShapes           map[string]set
+	minCallerJaccard, minShapeJaccard float64
+	seen                              map[string]bool
 }

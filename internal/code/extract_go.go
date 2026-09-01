@@ -53,7 +53,7 @@ func ExtractGoFile(path, root string) []*FuncSig {
 		}
 		name := fd.Name.Name
 		qual := qualNameFor(name, fd.Recv)
-		fs := goFuncSigFromBody(fset, fd.Body, rel, qual, name)
+		fs := goFuncSigFromBody(fset, fd.Body, fragSite{rel, qual, name})
 		fs.DeclConsts = declConsts
 		fs.Sig = goSignatureOf(fset, imports, fd.Type)
 		out = append(out, fs)
@@ -65,13 +65,13 @@ func ExtractGoFile(path, root string) []*FuncSig {
 // FuncSig its signal bags describe. Shared by ExtractGoFile (whole function
 // bodies) and ExtractBranches (sub-tree branch-arm bodies) — the walk-then-build
 // step is identical, only the subtree, Kind, and key differ per caller.
-func goFuncSigFromBody(fset *token.FileSet, body ast.Node, file, qual, name string) *FuncSig {
+func goFuncSigFromBody(fset *token.FileSet, body ast.Node, site fragSite) *FuncSig {
 	bv := &goBody{strs: set{}, writes: set{}, retKeys: set{}, calls: set{}, consts: set{}, readsRaw: set{}, pureWrites: set{}, calleeSkip: map[ast.Expr]bool{}}
 	ast.Walk(bv, body)
 	start := fset.Position(body.Pos()).Line
 	end := fset.Position(body.End()).Line
 	return &FuncSig{
-		File: file, Qualname: qual, Name: name,
+		File: site.file, Qualname: site.qual, Name: site.name,
 		Line: start, NLines: end - start + 1, NodeCount: bv.nodes,
 		Strings: bv.strs.slice(), Writes: bv.writes.slice(),
 		Reads:   bv.reads(),
@@ -530,4 +530,14 @@ func flattenFieldTypes(fset *token.FileSet, imports map[string]string, fl *ast.F
 		}
 	}
 	return out
+}
+
+// fragSite names WHERE a function or sub-function fragment sits: its file,
+// qualified enclosing-function name (for Key()), and the enclosing function's
+// own name (for Name-based stem matching). Shared by goFuncSigFromBody and
+// goFuncSigFromStmts — the two ways an AST subtree becomes a fragment — so
+// the same file/qual/name triple isn't threaded through both as three loose
+// parameters.
+type fragSite struct {
+	file, qual, name string
 }

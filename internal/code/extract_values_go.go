@@ -193,25 +193,41 @@ func (vf *valueFinder) add(name, value string, pos token.Pos) {
 func literalValue(e ast.Expr) (string, bool) {
 	switch t := e.(type) {
 	case *ast.BasicLit:
-		switch t.Kind {
-		case token.INT, token.FLOAT:
-			if t.Value == "0" || t.Value == "1" {
-				return "", false
-			}
-			return t.Value, true
-		case token.STRING:
-			s, err := strconv.Unquote(t.Value)
-			if err != nil || s == "" {
-				return "", false
-			}
-			return s, true
-		}
+		return basicLitValue(t)
 	case *ast.UnaryExpr:
-		if t.Op == token.SUB { // -1, -3, …
-			if v, ok := literalValue(t.X); ok {
-				return "-" + v, true
-			}
-		}
+		return unaryLiteralValue(t)
 	}
 	return "", false
+}
+
+// basicLitValue handles literalValue's *ast.BasicLit case: an int/float
+// literal (excluding the trivial 0/1), or a non-empty string literal.
+func basicLitValue(t *ast.BasicLit) (string, bool) {
+	switch t.Kind {
+	case token.INT, token.FLOAT:
+		if t.Value == "0" || t.Value == "1" {
+			return "", false
+		}
+		return t.Value, true
+	case token.STRING:
+		s, err := strconv.Unquote(t.Value)
+		if err != nil || s == "" {
+			return "", false
+		}
+		return s, true
+	}
+	return "", false
+}
+
+// unaryLiteralValue handles literalValue's *ast.UnaryExpr case: only a
+// negated literal (-1, -3, ...) counts; any other unary op is not a literal.
+func unaryLiteralValue(t *ast.UnaryExpr) (string, bool) {
+	if t.Op != token.SUB {
+		return "", false
+	}
+	v, ok := literalValue(t.X)
+	if !ok {
+		return "", false
+	}
+	return "-" + v, true
 }

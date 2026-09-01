@@ -106,13 +106,13 @@ func (bf *branchFinder) Visit(n ast.Node) ast.Visitor {
 		bf.extractIf(t)
 		return nil
 	case *ast.SwitchStmt:
-		bf.extractCases(t.Body)
+		bf.extractClauses(t.Body)
 		return nil
 	case *ast.TypeSwitchStmt:
-		bf.extractCases(t.Body)
+		bf.extractClauses(t.Body)
 		return nil
 	case *ast.SelectStmt:
-		bf.extractCommClauses(t.Body)
+		bf.extractClauses(t.Body)
 		return nil
 	}
 	return bf
@@ -131,28 +131,6 @@ func (bf *branchFinder) extractIf(ifs *ast.IfStmt) {
 	}
 }
 
-func (bf *branchFinder) extractCases(body *ast.BlockStmt) {
-	if body == nil {
-		return
-	}
-	for _, stmt := range body.List {
-		if cc, ok := stmt.(*ast.CaseClause); ok {
-			bf.addStmts(cc.Body, cc.Pos(), cc.End())
-		}
-	}
-}
-
-func (bf *branchFinder) extractCommClauses(body *ast.BlockStmt) {
-	if body == nil {
-		return
-	}
-	for _, stmt := range body.List {
-		if cc, ok := stmt.(*ast.CommClause); ok {
-			bf.addStmts(cc.Body, cc.Pos(), cc.End())
-		}
-	}
-}
-
 // addArm extracts an if/else block body as one branch fragment. Empty arms
 // (no statements) are skipped — nothing to compare.
 func (bf *branchFinder) addArm(body *ast.BlockStmt) {
@@ -160,7 +138,7 @@ func (bf *branchFinder) addArm(body *ast.BlockStmt) {
 		return
 	}
 	bf.n++
-	bf.tagFrag(goFuncSigFromBody(bf.fset, body, bf.file, bf.qual, bf.name))
+	bf.tagFrag(goFuncSigFromBody(bf.fset, body, fragSite{bf.file, bf.qual, bf.name}))
 }
 
 // addStmts extracts a switch/select case's statement list as one branch
@@ -171,7 +149,7 @@ func (bf *branchFinder) addStmts(stmts []ast.Stmt, start, end token.Pos) {
 		return
 	}
 	bf.n++
-	bf.tagFrag(goFuncSigFromStmts(bf.fset, stmts, start, end, bf.file, bf.qual, bf.name))
+	bf.tagFrag(goFuncSigFromStmts(bf.fset, clauseBody{stmts, start, end}, fragSite{bf.file, bf.qual, bf.name}))
 }
 
 // tagFrag finalizes a fragment built by goFuncSigFromBody/goFuncSigFromStmts
@@ -186,23 +164,48 @@ func (bf *branchFinder) tagFrag(fs *FuncSig) {
 }
 
 // goFuncSigFromStmts is goFuncSigFromBody's sibling for a bare statement list
-// (a switch/select case's Body) rather than a single walkable *ast.BlockStmt —
-// a CaseClause/CommClause's Body has no Lbrace/Rbrace of its own, so the
-// caller supplies the clause's own [start,end) span explicitly.
-func goFuncSigFromStmts(fset *token.FileSet, stmts []ast.Stmt, start, end token.Pos, file, qual, name string) *FuncSig {
+// (a switch/select case's Body) rather than a single walkable *ast.BlockStmt.
+func goFuncSigFromStmts(fset *token.FileSet, cb clauseBody, site fragSite) *FuncSig {
 	bv := &goBody{strs: set{}, writes: set{}, retKeys: set{}, calls: set{}, consts: set{}, readsRaw: set{}, pureWrites: set{}, calleeSkip: map[ast.Expr]bool{}}
-	for _, s := range stmts {
+	for _, s := range cb.stmts {
 		ast.Walk(bv, s)
 	}
-	startLine := fset.Position(start).Line
-	endLine := fset.Position(end).Line
+	startLine := fset.Position(cb.start).Line
+	endLine := fset.Position(cb.end).Line
 	return &FuncSig{
-		File: file, Qualname: qual, Name: name,
+		File: site.file, Qualname: site.qual, Name: site.name,
 		Line: startLine, NLines: endLine - startLine + 1, NodeCount: bv.nodes,
 		Strings: bv.strs.slice(), Writes: bv.writes.slice(),
 		Reads:   bv.reads(),
 		RetKeys: bv.retKeys.slice(), Calls: bv.calls.slice(),
 		Consts:    bv.consts.slice(),
 		Delegates: bv.delegates,
+	}
+}
+
+// clauseBody is a switch/select case's statement list plus its own [start,end)
+// span — a CaseClause/CommClause's Body has no Lbrace/Rbrace of its own, so
+// the span has to travel alongside the statements rather than be derived from
+// them. Bundled so goFuncSigFromStmts doesn't take the three as loose params.
+type clauseBody struct {
+	stmts      []ast.Stmt
+	start, end token.Pos
+}
+
+// extractClauses handles a switch/type-switch/select body: each CaseClause
+// (switch) or CommClause (select) inside becomes one branch fragment. The two
+// clause types never appear in the same block, so one type-switch safely
+// covers both without a second, byte-identical function.
+func (bf *branchFinder) extractClauses(body *ast.BlockStmt) {
+	if body == nil {
+		return
+	}
+	for _, stmt := range body.List {
+		switch cc := stmt.(type) {
+		case *ast.CaseClause:
+			bf.addStmts(cc.Body, cc.Pos(), cc.End())
+		case *ast.CommClause:
+			bf.addStmts(cc.Body, cc.Pos(), cc.End())
+		}
 	}
 }

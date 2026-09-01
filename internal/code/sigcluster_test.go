@@ -182,3 +182,43 @@ func TestSignatureCandidatesRarityWindow(t *testing.T) {
 		t.Errorf("group of 8 exceeds maxMembers=6, expected 0 candidates, got %d", len(got))
 	}
 }
+
+// TestSignatureCandidatesSkipsDirectCallers pins the false-alarm class
+// SPEC-callsite-context-axis.md §5 found on stope and the undercity dogfood
+// (2026-09-01) found again on the TS signature-rarity axis: a function paired with
+// its own direct caller/callee shares a rare signature trivially — it's a pipeline
+// stage, not a twin. Without the callsEachOther guard this fixture's worktree pair
+// (the same shape TestSignatureCandidates already treats as a real hit when NEITHER
+// calls the other) would qualify; it must not once one calls the other directly.
+func TestSignatureCandidatesSkipsDirectCallers(t *testing.T) {
+	a := &FuncSig{File: "a.ts", Qualname: "getWorktreeForSession", Name: "getWorktreeForSession",
+		Sig: "(string)=>WorktreeInfo|null", NLines: 6, Calls: []string{"getWorktreeInfo"}}
+	b := &FuncSig{File: "b.ts", Qualname: "getWorktreeInfo", Name: "getWorktreeInfo",
+		Sig: "(string)=>WorktreeInfo|null", NLines: 8}
+	for _, f := range []*FuncSig{a, b} {
+		f.Prepare()
+	}
+	if got := SignatureCandidates([]*FuncSig{a, b}, SizeGate{MinLines: 4}, 2, 6); len(got) != 0 {
+		t.Errorf("getWorktreeForSession directly calls getWorktreeInfo — a pipeline stage sharing a rare signature, not a twin — must not pair, got %d: %+v", len(got), got)
+	}
+}
+
+// TestNameStemCandidatesSkipsDirectCallers is the name-stem-axis analog of
+// TestSignatureCandidatesSkipsDirectCallers: the undercity dogfood (2026-09-01)
+// found this exact false-alarm shape as the dominant noise source on this axis
+// (processAll/retryFailed, runTask/runTaskCore) — a function paired with its own
+// direct caller/callee shares a near-identical name stem trivially. Without the
+// callsEachOther guard this fixture (the same format-pair shape
+// TestNameStemCandidates already treats as a real hit when neither calls the
+// other) would qualify; it must not once one calls the other directly.
+func TestNameStemCandidatesSkipsDirectCallers(t *testing.T) {
+	a := &FuncSig{File: "a.ts", Qualname: "formatRemainingTime", Name: "formatRemainingTime",
+		NLines: 6, Calls: []string{"formatTimeRemaining"}}
+	b := &FuncSig{File: "a.ts", Qualname: "formatTimeRemaining", Name: "formatTimeRemaining", NLines: 6}
+	for _, f := range []*FuncSig{a, b} {
+		f.Prepare()
+	}
+	if got := NameStemCandidates([]*FuncSig{a, b}, SizeGate{MinLines: 4}, 0.6, 8); len(got) != 0 {
+		t.Errorf("formatRemainingTime directly calls formatTimeRemaining — a pipeline stage sharing a name stem, not a twin — must not pair, got %d: %+v", len(got), got)
+	}
+}

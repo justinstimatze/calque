@@ -110,6 +110,9 @@ calque propose-roles --repo <path>   # N-ary seam clusters → paste-ready cardi
 calque propose-deep  --repo <path>   # Type-4 twins sharing a rare type signature, no shared
                                      # tokens needed at all — the one channel that isn't
                                      # effect-footprint overlap. All five languages.
+calque propose-context --repo <path> # call-site context axis: zero shared tokens AND no
+                                     # distinctive signature — anchors on caller name-stem +
+                                     # call-result shape instead. Go-only.
 calque propose-cross --repo <path>   # non-function entities (tables, schemas, corpus shapes)
 calque propose-branches --repo <path> # intra-function dual paths: if/else arms, switch/select
                                      # cases that drifted apart — below function granularity

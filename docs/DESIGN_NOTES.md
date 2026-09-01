@@ -1550,7 +1550,15 @@ of 2–6 members sharing at least one non-generic, capitalized domain type (a ba
 like `Promise`/`Array`/`Map` from counting), and pairs everyone in a surviving
 group regardless of how different their bodies read. The Jaccard scorer only
 sorts the results (lowest-overlap first, since those are what Mechanism A is
-blindest to) — it never gates membership.
+blindest to) — it never gates membership. A pair is also dropped when either
+side's `FuncSig.Calls` names the other (`callsEachOther`, shared with the
+call-site context axis, `propose-context` — see
+`docs/SPEC-callsite-context-axis.md`) — a function sharing a rare signature or
+name-stem with its own direct caller/callee reads as a pipeline stage the
+call graph already explains. An external dogfood run (undercity, TS,
+2026-09-01, 312 candidates) found this as the dominant false-alarm shape on
+this mechanism too — the same pattern the Go/call-site-context side found
+first.
 
 This is the one channel that actually earns the Type-4 framing. The motivating
 case: two functions with an identical `sessionId→WorktreeInfo|null` contract,

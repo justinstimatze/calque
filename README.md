@@ -73,6 +73,15 @@ covers all five languages today (Go/Python/Rust included). And even
 sharing neither tokens nor a distinctive signature sit outside every axis
 calque has today; see `docs/DESIGN_NOTES.md` §22 for the full breakdown.
 
+`propose-context` covers part of that remaining gap for Go: instead of a type
+signature, it anchors on *call-site context* — two functions with zero shared
+tokens still tend to be called from similarly-named driver functions and
+return similarly-shaped results (both null-checked, both error-checked, …).
+Both signals have to agree (either alone is too noisy). A pair where one side
+directly calls the other is dropped too: the call graph already accounts for
+it, so it reads as a pipeline stage, outside the zero-shared-token twin case
+this axis targets. See `docs/SPEC-callsite-context-axis.md`.
+
 `calque scan` also *runs* `jscpd`/`dupl` as a belt-and-suspenders companion pass
 if either is already on `$PATH`, so one invocation surfaces both axes instead of
 requiring two separate tools in your pipeline. Best-effort and purely additive: a
@@ -152,6 +161,7 @@ calque propose-deriv   --repo .        # value-derivation twins (same field-set,
 calque confess         --repo .        # functions whose own comments confess a twin
 calque propose-roles   --repo .        # N-ary seam clusters → paste-ready cardinality roles
 calque propose-deep    --repo .        # Type-4 twins sharing a rare type signature, no shared tokens
+calque propose-context --repo .        # call-site context axis: no shared tokens AND no distinctive signature (Go-only)
 calque propose-cross   --repo .        # non-function entities (tables, schemas, corpus shapes)
 calque propose-branches --repo .       # intra-function dual paths (if/else arms, switch/select cases)
 calque propose-values  --repo .        # scattered literal values (a maxRetries-style constant, no shared symbol)
@@ -227,8 +237,9 @@ introduces, calque scans incoming code two ways:
   annotations never fail the build); pass `--strict` to make it a hard check.
   No hosted service, no third party: the code never leaves your CI. The
   deterministic pass needs no API key; `--judge` (available on the generators —
-  `propose-deriv`/`confess`/`propose-roles`/`propose-deep`/`propose-cross`/
-  `propose-branches`/`propose-values` — not on `check`/`review` itself) uses
+  `propose-deriv`/`confess`/`propose-roles`/`propose-deep`/`propose-context`/
+  `propose-cross`/`propose-branches`/`propose-values` — not on `check`/`review`
+  itself) uses
   *your own* key as a CI secret if you choose to run one of them as a separate
   step.
 

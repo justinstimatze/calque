@@ -6,6 +6,18 @@ All notable changes to calque. The version string itself comes from the git tag
 ## [Unreleased]
 
 ### Added
+- **`propose-context`** — a new generator for the call-site context axis: pairs
+  functions with **zero shared body tokens and no distinctive type signature**
+  — the class every other channel misses by construction — on overlapping
+  caller name-stems (`CallerStemIndex`) AND overlapping call-result shape tags
+  (`ret-nil-checked`, `ret-err-checked`, `ret-passed-to-call`, …). Go-only this
+  pass. A direct-caller/callee guard (`callsEachOther`) skips a pair when
+  either side's `FuncSig.Calls` names the other — a function paired with its
+  own pipeline stage, not a twin — needing no adjudication data since it's a
+  direct read of the call graph already captured at extraction. Adjudicated
+  against calque's own repo and stope's whole 163-candidate corpus (132
+  false-alarm / 31 contracted-twin-ok / 0 drift on those two Go corpora). See
+  `docs/SPEC-callsite-context-axis.md`.
 - **`propose-branches`** — a new generator for the sub-function "dual-path"
   axis: extracts intra-function conditional arms (if/else bodies,
   switch/select cases) as `Kind:"branch"` entities and scores them with the
@@ -28,6 +40,20 @@ All notable changes to calque. The version string itself comes from the git tag
   Rust renders `syn::Signature` via `quote` and canonicalizes every lifetime
   to a fixed `'_` placeholder so `fn foo<'a>` and `fn bar<'b>` over the same
   contract bucket together.
+
+### Fixed
+- **`propose-deep`'s `SignatureCandidates`/`NameStemCandidates` now skip
+  direct caller/callee pairs**, same `callsEachOther` guard as
+  `propose-context` above. An external dogfood run (undercity, TS, 312
+  candidates, 2026-09-01) found this exact false-alarm shape as the dominant
+  noise source on this axis too — a function paired with its own direct
+  caller/callee shares a rare signature or name-stem trivially
+  (`processAll`/`retryFailed`, `runTask`/`runTaskCore`, the
+  `runAgentLoop`/`buildAgentLoop*` family). Same run confirmed the axis finds
+  real drift once that noise is out of the way — 9 confirmed drift pairs
+  across the 312 candidates, several live (a model-escalation tier list with
+  a duplicated entry that makes escalation a same-tier no-op; a retry-error
+  classifier missing two of four categories in one of its two copies).
 
 ## [0.13.0] - 2026-07-06
 

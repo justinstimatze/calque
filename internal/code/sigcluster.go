@@ -120,6 +120,11 @@ func buildOpposed(pairs [][2]string) map[string]map[string]bool {
 // Cheap and noisier than signature recall; the judge is the precision filter. An
 // inverted stem index keeps it near-linear (only functions sharing a stem are scored),
 // and a fanout cap skips ultra-common stems (get/handle/…) that would pair everything.
+// Direct caller/callee pairs are dropped via callsEachOther — the undercity dogfood
+// (2026-09-01) found this exact false-alarm class (processAll/retryFailed,
+// runTask/runTaskCore, the runAgentLoop/buildAgentLoop* family) as the dominant noise
+// source once real drift pairs were sorted out, the same pattern
+// SPEC-callsite-context-axis.md §5 found on the Go/stope side.
 func NameStemCandidates(sigs []*FuncSig, gate SizeGate, minJaccard float64, maxFanout int) []SigCandidate {
 	idx := map[string][]*FuncSig{}
 	for _, f := range sigs {
@@ -139,7 +144,7 @@ func NameStemCandidates(sigs []*FuncSig, gate SizeGate, minJaccard float64, maxF
 		for i := 0; i < len(fns); i++ {
 			for j := i + 1; j < len(fns); j++ {
 				a, b := fns[i], fns[j]
-				if a.Key() == b.Key() {
+				if a.Key() == b.Key() || callsEachOther(a, b) {
 					continue
 				}
 				pk := pairkey.Key(a.Key(), b.Key())
@@ -223,7 +228,10 @@ type SigCandidate struct {
 
 // SignatureCandidates groups functions by rare informative signature and returns
 // twin candidates, ranked most-promising first (rarest signature, cross-file,
-// richest type, most gate-invisible). Opposed-verb pairs are dropped. minMembers/
+// richest type, most gate-invisible). Opposed-verb pairs and direct caller/callee
+// pairs (callsEachOther — a pipeline stage sharing a rare signature with its own
+// caller/callee, not a twin; the same false-alarm class propose-context's
+// SPEC-callsite-context-axis.md §5 found on stope) are dropped. minMembers/
 // maxMembers bound the rarity window — a signature shared by 2 functions is a strong
 // signal; one shared by 50 is a common shape, not a twin.
 func SignatureCandidates(sigs []*FuncSig, gate SizeGate, minMembers, maxMembers int) []SigCandidate {
@@ -247,7 +255,7 @@ func SignatureCandidates(sigs []*FuncSig, gate SizeGate, minMembers, maxMembers 
 		for i := 0; i < len(fns); i++ {
 			for j := i + 1; j < len(fns); j++ {
 				a, b := fns[i], fns[j]
-				if a.Key() == b.Key() {
+				if a.Key() == b.Key() || callsEachOther(a, b) {
 					continue
 				}
 				if opposed(a.Name, b.Name) {

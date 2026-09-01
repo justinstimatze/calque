@@ -168,17 +168,7 @@ func NameStemCandidates(sigs []*FuncSig, gate SizeGate, minJaccard float64, maxF
 			}
 		}
 	}
-	// Strongest first: highest name-stem jaccard (rendered into Sig), then most
-	// gate-invisible, then deterministic.
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Sig != out[j].Sig {
-			return out[i].Sig > out[j].Sig
-		}
-		if out[i].Jaccard != out[j].Jaccard {
-			return out[i].Jaccard < out[j].Jaccard
-		}
-		return pairkey.Key(out[i].A.Key(), out[i].B.Key()) < pairkey.Key(out[j].A.Key(), out[j].B.Key())
-	})
+	sort.Slice(out, func(i, j int) bool { return nameStemCandidateLess(out[i], out[j]) })
 	return out
 }
 
@@ -278,23 +268,7 @@ func SignatureCandidates(sigs []*FuncSig, gate SizeGate, minMembers, maxMembers 
 		}
 	}
 
-	sort.Slice(out, func(i, j int) bool {
-		ci, cj := out[i], out[j]
-		if ci.GroupSize != cj.GroupSize { // rarer first
-			return ci.GroupSize < cj.GroupSize
-		}
-		if ci.CrossFile != cj.CrossFile { // cross-file first
-			return ci.CrossFile
-		}
-		if rich(ci.Sig) != rich(cj.Sig) { // richer signature first
-			return rich(ci.Sig) > rich(cj.Sig)
-		}
-		if ci.Jaccard != cj.Jaccard { // most gate-invisible first
-			return ci.Jaccard < cj.Jaccard
-		}
-		// deterministic tiebreak
-		return pairkey.Key(ci.A.Key(), ci.B.Key()) < pairkey.Key(cj.A.Key(), cj.B.Key())
-	})
+	sort.Slice(out, func(i, j int) bool { return sigCandidateRarityLess(out[i], out[j]) })
 	return out
 }
 
@@ -603,4 +577,38 @@ func ValueSiteCandidates(entities []*FuncSig, minJaccard float64, maxFanout int)
 		return pairkey.Key(out[i].A.Key(), out[i].B.Key()) < pairkey.Key(out[j].A.Key(), out[j].B.Key())
 	})
 	return out
+}
+
+// sigCandidateRarityLess is SignatureCandidates' sort order, pulled out as a
+// named comparator so the multi-condition tiebreak chain doesn't count against
+// SignatureCandidates' own cyclomatic complexity: rarer group first, cross-file
+// first, richer signature first, most gate-invisible first, deterministic
+// tiebreak last.
+func sigCandidateRarityLess(ci, cj SigCandidate) bool {
+	if ci.GroupSize != cj.GroupSize {
+		return ci.GroupSize < cj.GroupSize
+	}
+	if ci.CrossFile != cj.CrossFile {
+		return ci.CrossFile
+	}
+	if rich(ci.Sig) != rich(cj.Sig) {
+		return rich(ci.Sig) > rich(cj.Sig)
+	}
+	if ci.Jaccard != cj.Jaccard {
+		return ci.Jaccard < cj.Jaccard
+	}
+	return pairkey.Key(ci.A.Key(), ci.B.Key()) < pairkey.Key(cj.A.Key(), cj.B.Key())
+}
+
+// nameStemCandidateLess is NameStemCandidates' sort order, pulled out as a named
+// comparator for the same reason as sigCandidateRarityLess: highest name-stem
+// jaccard first (rendered into Sig), then most gate-invisible, then deterministic.
+func nameStemCandidateLess(a, b SigCandidate) bool {
+	if a.Sig != b.Sig {
+		return a.Sig > b.Sig
+	}
+	if a.Jaccard != b.Jaccard {
+		return a.Jaccard < b.Jaccard
+	}
+	return pairkey.Key(a.A.Key(), a.B.Key()) < pairkey.Key(b.A.Key(), b.B.Key())
 }

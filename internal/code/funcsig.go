@@ -51,6 +51,18 @@ type FuncSig struct {
 	DeclConsts []string `json:"decl_consts,omitempty"`
 	Delegates  bool     `json:"delegates"` // body forwards to a wrapped impl
 
+	// CallResultShapes maps a callee's leaf name to the abstracted shape tags
+	// observed at THIS function's call sites into it (ret-nil-checked,
+	// ret-err-checked, ret-passed-to-call, ret-returned, ret-assigned-field,
+	// ret-compared, arg-count:N — see SPEC-callsite-context-axis.md §2). Powers
+	// the call-site context recall pass (CallContextCandidates), the one
+	// mechanism that instruments the CALLER instead of the candidate — for
+	// pairs with zero shared body tokens AND no distinctive type signature, the
+	// class every other channel misses by construction. Populated by each
+	// extractor's existing body-walk visitor; omitted (nil) for an extractor
+	// that hasn't added this yet, a harmless no-op everywhere it's read.
+	CallResultShapes map[string][]string `json:"call_result_shapes,omitempty"`
+
 	// Test marks a function as TEST code — either by file convention (IsTestPath:
 	// *_test.go, tests.rs, test_*.py, *.test.ts, a tests/ dir, …) or by an
 	// extractor's inline detection (the Rust extractor flags #[cfg(test)] / #[test]

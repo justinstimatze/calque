@@ -99,9 +99,9 @@ Usage:
                          generator only — prints, never gates or writes)
   calque propose-deep    Type-4 axis: twin candidates sharing a rare type
                          signature but no surface tokens — the contract the
-                         jaccard gate is blind to (TS/TSX; generator only).
-                         --judge adjudicates each with the LLM oracle (the
-                         precision half; needs ANTHROPIC_API_KEY)
+                         jaccard gate is blind to (all 5 languages; generator
+                         only). --judge adjudicates each with the LLM oracle
+                         (the precision half; needs ANTHROPIC_API_KEY)
   calque propose-cross   cross-substrate axis: pair non-function entities —
                          module-level tables (.py) and JSON corpus shapes — that
                          share a key set across files/substrates, the drift the
@@ -110,6 +110,18 @@ Usage:
                          functions deriving a value from the SAME input field-set
                          without a shared authority (implementation drift: "fix one
                          path, the twin still has the bug"). generator only; --judge
+  calque propose-branches   sub-function axis: intra-function conditional arms
+                         (if/else, switch/select cases) that drifted apart below
+                         whole-function granularity (generator only; --judge)
+  calque propose-values     sub-function axis: scattered literal-value sites
+                         (a magic number/string repeated under different names)
+                         with no shared authority (generator only; --judge)
+  calque propose-context    call-site context axis: pairs with NO shared body
+                         token and NO distinctive type signature — the class
+                         every other channel misses by construction — matched
+                         on how/where they're called instead. Experimental,
+                         high recall/low precision by design (generator only;
+                         --judge)
   calque confess         comment axis: surface drift-confessing comments ("mirrors
                          X", "keep in sync", "copy of") — a function's own source
                          self-witnessing it's one side of a twin (generator only;
@@ -165,6 +177,8 @@ func main() {
 		runProposeBranches(os.Args[2:])
 	case "propose-values":
 		runProposeValues(os.Args[2:])
+	case "propose-context":
+		runProposeContext(os.Args[2:])
 	case "confess":
 		runConfess(os.Args[2:])
 	case "review":

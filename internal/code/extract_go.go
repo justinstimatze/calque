@@ -18,6 +18,7 @@ package code
 import (
 	"bytes"
 	_ "embed"
+	"fmt"
 	"go/ast"
 	"go/format"
 	"go/parser"
@@ -66,7 +67,7 @@ func ExtractGoFile(path, root string) []*FuncSig {
 // bodies) and ExtractBranches (sub-tree branch-arm bodies) — the walk-then-build
 // step is identical, only the subtree, Kind, and key differ per caller.
 func goFuncSigFromBody(fset *token.FileSet, body ast.Node, site fragSite) *FuncSig {
-	bv := &goBody{strs: set{}, writes: set{}, retKeys: set{}, calls: set{}, consts: set{}, readsRaw: set{}, pureWrites: set{}, calleeSkip: map[ast.Expr]bool{}}
+	bv := &goBody{strs: set{}, writes: set{}, retKeys: set{}, calls: set{}, consts: set{}, readsRaw: set{}, pureWrites: set{}, calleeSkip: map[ast.Expr]bool{}, callShapes: map[string]set{}}
 	ast.Walk(bv, body)
 	start := fset.Position(body.Pos()).Line
 	end := fset.Position(body.End()).Line
@@ -76,8 +77,9 @@ func goFuncSigFromBody(fset *token.FileSet, body ast.Node, site fragSite) *FuncS
 		Strings: bv.strs.slice(), Writes: bv.writes.slice(),
 		Reads:   bv.reads(),
 		RetKeys: bv.retKeys.slice(), Calls: bv.calls.slice(),
-		Consts:    bv.consts.slice(),
-		Delegates: bv.delegates,
+		Consts:           bv.consts.slice(),
+		Delegates:        bv.delegates,
+		CallResultShapes: callResultShapesOf(bv.callShapes),
 	}
 }
 
@@ -245,6 +247,16 @@ type goBody struct {
 	// nodes counts every AST node visited in the body — see Visit's n == nil guard
 	// for why this isn't a plain unconditional increment.
 	nodes int
+	// callShapes maps a callee leaf name to the set of call-result-shape tags
+	// observed at its call sites in this body (see classifyCallContext). Folded
+	// into FuncSig.CallResultShapes, sorted, once the walk finishes.
+	callShapes map[string]set
+	// stack holds the current node's ancestor chain. ast.Walk calls Visit(n) then,
+	// after n's children finish, Visit(nil) exactly once — so pushing on non-nil
+	// and popping on nil gives an accurate ancestor stack with no extra bookkeeping.
+	// Used only by the call-result-shape classifier to find a CallExpr's immediate
+	// syntactic parent (and, for the err/nil-check patterns, its grandparent).
+	stack []ast.Node
 }
 
 // reads returns the derivation read-set: field-paths read in a value position,
@@ -262,11 +274,17 @@ func (b *goBody) reads() []string {
 func (b *goBody) Visit(n ast.Node) ast.Visitor {
 	// ast.Walk calls Visit(nil) once after a node's children finish — guard it so
 	// the node count isn't roughly doubled (one real increment per node, one
-	// nil-sentinel call per node's children completing).
+	// nil-sentinel call per node's children completing), and pop the ancestor
+	// stack pushed below (the nil call is the exact matching "children done"
+	// signal for whichever node was pushed last).
 	if n == nil {
+		if len(b.stack) > 0 {
+			b.stack = b.stack[:len(b.stack)-1]
+		}
 		return b
 	}
 	b.nodes++
+	b.stack = append(b.stack, n)
 	switch t := n.(type) {
 	case *ast.BasicLit:
 		if t.Kind == token.STRING {
@@ -293,6 +311,10 @@ func (b *goBody) Visit(n ast.Node) ast.Visitor {
 					b.delegates = true
 				}
 			}
+		}
+		if leaf := callLeafName(t.Fun); leaf != "" {
+			b.tagCallResult(leaf, fmt.Sprintf("arg-count:%d", len(t.Args)))
+			b.classifyCallContext(t, leaf)
 		}
 	case *ast.SelectorExpr:
 		// Every field-path read in a value position. The plain-`=` LHS is removed
@@ -540,4 +562,201 @@ func flattenFieldTypes(fset *token.FileSet, imports map[string]string, fl *ast.F
 // parameters.
 type fragSite struct {
 	file, qual, name string
+}
+
+// callLeafName returns the leaf identifier of a call's callee — "Foo" for
+// Foo(...), "Bar" for x.Bar(...) — or "" if the callee isn't a simple
+// name/selector (a func literal, an indexed or parenthesized expression, …).
+func callLeafName(fn ast.Expr) string {
+	switch f := fn.(type) {
+	case *ast.Ident:
+		return f.Name
+	case *ast.SelectorExpr:
+		return f.Sel.Name
+	}
+	return ""
+}
+
+// callResultShapesOf flattens a goBody's per-callee tag sets into the sorted
+// slices FuncSig.CallResultShapes stores — sorted so output stays
+// deterministic across runs (map iteration order is not; see the known
+// --strict candidate-report nondeterminism this project already tracks).
+func callResultShapesOf(m map[string]set) map[string][]string {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string][]string, len(m))
+	for leaf, tags := range m {
+		s := tags.slice()
+		sort.Strings(s)
+		out[leaf] = s
+	}
+	return out
+}
+
+// classifyAssign handles a call whose result is the RHS of an assignment:
+// tags ret-assigned-field for a direct `obj.Field = g()` / `m[k] = g()` shape,
+// then defers to classifyNilOrErrCheck for the err/nil-check idioms.
+func (b *goBody) classifyAssign(assign *ast.AssignStmt, call *ast.CallExpr, leaf string) {
+	if idx := rhsIndexOf(assign, call); idx >= 0 && idx < len(assign.Lhs) && len(assign.Rhs) == len(assign.Lhs) {
+		switch assign.Lhs[idx].(type) {
+		case *ast.SelectorExpr, *ast.IndexExpr:
+			b.tagCallResult(leaf, "ret-assigned-field")
+		}
+	}
+	b.classifyNilOrErrCheck(assign, leaf)
+}
+
+// classifyCallContext inspects call's immediate syntactic parent (the top of
+// b.stack is call itself, just pushed by Visit) and tags leaf with whatever
+// shape that parent implies — see SPEC-callsite-context-axis.md §2 for the
+// full tag vocabulary and rationale.
+func (b *goBody) classifyCallContext(call *ast.CallExpr, leaf string) {
+	if len(b.stack) < 2 {
+		return
+	}
+	switch p := b.stack[len(b.stack)-2].(type) {
+	case *ast.BinaryExpr:
+		if isNilComparand(p) {
+			b.tagCallResult(leaf, "ret-nil-checked")
+		} else if isComparisonOp(p.Op) {
+			b.tagCallResult(leaf, "ret-compared")
+		}
+	case *ast.CallExpr:
+		if exprInList(call, p.Args) {
+			b.tagCallResult(leaf, "ret-passed-to-call")
+		}
+	case *ast.ReturnStmt:
+		if exprInList(call, p.Results) {
+			b.tagCallResult(leaf, "ret-returned")
+		}
+	case *ast.AssignStmt:
+		b.classifyAssign(p, call, leaf)
+	}
+}
+
+// classifyNilOrErrCheck looks for the two idiomatic Go shapes that check a
+// just-assigned call result against nil: the single-statement if-init form
+// (`if v, err := g(); err != nil {`, where assign's own parent is the IfStmt)
+// and the two-statement adjacent form (`v, err := g()` immediately followed by
+// `if err != nil {` in the same block). Anything less direct — the check
+// separated by another statement, or the variable renamed/reassigned first —
+// is a real gap: that would need cross-statement dataflow, out of scope for a
+// single-function-local visitor (see SPEC-callsite-context-axis.md §2).
+func (b *goBody) classifyNilOrErrCheck(assign *ast.AssignStmt, leaf string) {
+	if len(b.stack) < 3 {
+		return
+	}
+	switch gp := b.stack[len(b.stack)-3].(type) {
+	case *ast.IfStmt:
+		if gp.Init == ast.Stmt(assign) {
+			b.tagFromCond(gp.Cond, assign.Lhs, leaf)
+		}
+	case *ast.BlockStmt:
+		for i, s := range gp.List {
+			if s != ast.Stmt(assign) {
+				continue
+			}
+			if i+1 < len(gp.List) {
+				if next, ok := gp.List[i+1].(*ast.IfStmt); ok && next.Init == nil {
+					b.tagFromCond(next.Cond, assign.Lhs, leaf)
+				}
+			}
+			break
+		}
+	}
+}
+
+// exprInList reports whether e is (by identity) one of list's elements —
+// used to tell "this call's result IS an argument/return value here" from
+// "this call happens to sit inside a call/return that also does other work".
+func exprInList(e ast.Expr, list []ast.Expr) bool {
+	for _, item := range list {
+		if item == e {
+			return true
+		}
+	}
+	return false
+}
+
+// isNilComparand reports whether bin is an == or != comparison with a literal
+// nil on either side (the direct-inline form: `if g() != nil`).
+func isNilComparand(bin *ast.BinaryExpr) bool {
+	return (bin.Op == token.EQL || bin.Op == token.NEQ) && (isNilIdent(bin.X) || isNilIdent(bin.Y))
+}
+
+// nilCheckedIdent returns the identifier name compared against literal nil in
+// bin (either operand order), or "" if bin isn't an ident-vs-nil comparison.
+func nilCheckedIdent(bin *ast.BinaryExpr) string {
+	if isNilIdent(bin.Y) {
+		if id, ok := bin.X.(*ast.Ident); ok {
+			return id.Name
+		}
+	}
+	if isNilIdent(bin.X) {
+		if id, ok := bin.Y.(*ast.Ident); ok {
+			return id.Name
+		}
+	}
+	return ""
+}
+
+// rhsIndexOf returns call's index within assign's RHS list, or -1 if call
+// isn't a direct (top-level) RHS element of assign.
+func rhsIndexOf(assign *ast.AssignStmt, call *ast.CallExpr) int {
+	for i, r := range assign.Rhs {
+		if r == ast.Expr(call) {
+			return i
+		}
+	}
+	return -1
+}
+
+// tagCallResult records that a call site into leaf showed the given shape tag
+// (see SPEC-callsite-context-axis.md §2 for the vocabulary). Deduplicated per
+// callee; callResultShapesOf sorts and flattens the set once the walk ends.
+func (b *goBody) tagCallResult(leaf, tag string) {
+	if b.callShapes[leaf] == nil {
+		b.callShapes[leaf] = set{}
+	}
+	b.callShapes[leaf][tag] = struct{}{}
+}
+
+// tagFromCond checks whether cond is "<name> == nil" / "<name> != nil" for one
+// of lhs's identifiers, and if so tags leaf ret-err-checked (when the checked
+// variable is named "err", Go's near-universal error-return convention — kept
+// separate from ret-nil-checked because it needs its own down-weight, see §5)
+// or ret-nil-checked otherwise.
+func (b *goBody) tagFromCond(cond ast.Expr, lhs []ast.Expr, leaf string) {
+	bin, ok := cond.(*ast.BinaryExpr)
+	if !ok || (bin.Op != token.EQL && bin.Op != token.NEQ) {
+		return
+	}
+	name := nilCheckedIdent(bin)
+	if name == "" {
+		return
+	}
+	for _, l := range lhs {
+		if id, ok := l.(*ast.Ident); ok && id.Name == name {
+			if name == "err" {
+				b.tagCallResult(leaf, "ret-err-checked")
+			} else {
+				b.tagCallResult(leaf, "ret-nil-checked")
+			}
+			return
+		}
+	}
+}
+
+func isComparisonOp(op token.Token) bool {
+	switch op {
+	case token.EQL, token.NEQ, token.LSS, token.LEQ, token.GTR, token.GEQ:
+		return true
+	}
+	return false
+}
+
+func isNilIdent(e ast.Expr) bool {
+	id, ok := e.(*ast.Ident)
+	return ok && id.Name == "nil"
 }

@@ -166,7 +166,7 @@ func (bf *branchFinder) tagFrag(fs *FuncSig) {
 // goFuncSigFromStmts is goFuncSigFromBody's sibling for a bare statement list
 // (a switch/select case's Body) rather than a single walkable *ast.BlockStmt.
 func goFuncSigFromStmts(fset *token.FileSet, cb clauseBody, site fragSite) *FuncSig {
-	bv := &goBody{strs: set{}, writes: set{}, retKeys: set{}, calls: set{}, consts: set{}, readsRaw: set{}, pureWrites: set{}, calleeSkip: map[ast.Expr]bool{}}
+	bv := &goBody{strs: set{}, writes: set{}, retKeys: set{}, calls: set{}, consts: set{}, readsRaw: set{}, pureWrites: set{}, calleeSkip: map[ast.Expr]bool{}, callShapes: map[string]set{}}
 	for _, s := range cb.stmts {
 		ast.Walk(bv, s)
 	}
@@ -178,8 +178,9 @@ func goFuncSigFromStmts(fset *token.FileSet, cb clauseBody, site fragSite) *Func
 		Strings: bv.strs.slice(), Writes: bv.writes.slice(),
 		Reads:   bv.reads(),
 		RetKeys: bv.retKeys.slice(), Calls: bv.calls.slice(),
-		Consts:    bv.consts.slice(),
-		Delegates: bv.delegates,
+		Consts:           bv.consts.slice(),
+		Delegates:        bv.delegates,
+		CallResultShapes: callResultShapesOf(bv.callShapes),
 	}
 }
 

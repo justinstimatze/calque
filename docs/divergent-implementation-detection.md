@@ -149,6 +149,21 @@ false positives** ("How the Misuse of a Dataset Harmed Semantic Clone Detection"
 *justifies* calque's gating/calibration discipline. Recall-first on a genuinely unseen
 contract caps ~70% F1; promise recall + adjudication, never prover-grade precision.
 
+**Still true as of mid-2026, with fresher and harder evidence.** *Semantic Code Clone
+Detection: Are We There Yet?* (arXiv 2606.25272, Jun 2026) tests 11 SOTA detectors —
+token-, tree-, and graph-based, the last being the closest category to embedding/GNN
+approaches — against newly-constructed, distribution-shifted-but-genuinely-Type-4 clones
+rather than the same tainted benchmarks. Every approach shows "substantial performance
+degradation," and the detectors "heavily rely on shortcut learning based on lexical and
+structural cues rather than robust semantic understanding." Two months old at time of
+writing — the field hasn't solved this, it's still gaming benchmark shortcuts. *TriFusion-LLM*
+(2603.15004, Mar 2026) is a smaller, orthogonal data point: it independently arrives at
+calque's own architecture — cheap structural/statistical signals first, LLM arbitration only
+on the highest-uncertainty ~0.2% of cases — and finds that combination "substantially
+outperforms blind reclassification," which validates the shape of `--judge` (cheap
+deterministic recall, expensive LLM only on already-surfaced candidates), not a new
+mechanism to adopt.
+
 ## The architecture everyone converges on
 
 Independently, all three sweeps (academic, industry, omission-subfield) land on the **same
@@ -232,7 +247,19 @@ explanation).
 Academic / equivalence: ICCheck (arXiv 2504.04537), late-propagation (Barbour/Khomh/Zou),
 DECKARD context-inconsistencies, HyClone (2508.01357), DiffSpec (2410.04249), Mokav
 (2406.10375), PASDA (2311.08071), EquiBench (2502.12466), BugStone (2510.14036), the
-BigCloneBench-misuse audit (2505.04311). Industry: Greptile v3 agentic review, CodeQL CLI
+BigCloneBench-misuse audit (2505.04311), Functional Consistency of LLM Code Embeddings
+(2508.19558 — off-the-shelf code embeddings predominantly capture syntax, not function;
+getting real functional separation took purpose-built contrastive fine-tuning, a caution
+against assuming a plain embed-a-summary pass would cleanly separate Type-4 twins), An
+Empirical Study of LLM-Based Code Clone Detection (2511.01176 — LLM clone-judgment F1
+swings from 0.94 on one benchmark to markedly worse on another depending on clone style;
+LLM-based judgment needs real per-corpus calibration, not an assumed accuracy), Semantic
+Code Clone Detection: Are We There Yet? (2606.25272, Jun 2026 — 11 SOTA detectors across
+token/tree/graph paradigms all degrade substantially under distribution-shifted Type-4
+clones; shortcut learning, not semantic understanding), TriFusion-LLM (2603.15004, Mar
+2026 — cheap structural signals + selective LLM arbitration on ~0.2% of high-uncertainty
+cases beats blind reclassification, validating calque's own recall-then-judge shape).
+Industry: Greptile v3 agentic review, CodeQL CLI
 2.8.3 changelog (mostly-duplicate-function removal), Semgrep join-mode docs, Engler "Bugs as
 Deviant Behavior" (SOSP 2001). Omission/deviant: PR-Miner (FSE 2005), NEGWeb, APISan
 (USENIX Security 2016), MUDetect/MuBench (TSE 2019 / MSR 2016), UBITect+LLift (OOPSLA 2024),

@@ -5,6 +5,8 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-01
+
 ### Added
 - **`propose-context`** — a new generator for the call-site context axis: pairs
   functions with **zero shared body tokens and no distinctive type signature**

@@ -1418,3 +1418,474 @@ new drift found. Recommendation: keep it off by default (already the ship
 default) and reach for it selectively on a boundary-scoped run (`--left`/
 `--right`) where cross-directory pairs are inherently more meaningful than a
 whole-repo self-scan, rather than as a blanket self-scan flag.
+
+## Run — 2026-07-09 (sub-function granularity: branch + value-site axes)
+
+New `propose-branches`/`propose-values` generators (see docs/DESIGN_NOTES.md
+§21) added `internal/code/extract_branches_go.go`, `extract_values_go.go`,
+`cmd/calque/propose_branches.go`, `propose_values.go` — new functions that
+`check --strict`'s own self-scan now sees as ordinary Go functions (they were
+never wired into `--strict`; this is `check` reacting to their PRESENCE in the
+corpus, not the new axes' own candidates). Isolated the delta the same way the
+distance-boost session did: a clean `git worktree` baseline at `411156e`
+(v0.13.0) vs the current tree, order-independent pair-key diff. Note: the
+SAME baseline binary, re-run 3x with zero code changes, already shows 1-2
+pairs flickering in/out (confirmed pre-existing map-iteration-order
+non-determinism in `check`'s candidate report, unrelated to this session —
+worth its own investigation later, not in scope here) — so this diff is
+read as "the new pairs this session's code caused," not a claim of literal
+byte-for-byte stability.
+
+Cross-language/cross-file "Visit" method twins (the established visitor-twin
+category from the NodeCount/distance-boost rollouts — each language's
+extractor needs its own dispatcher over the same node-kind space, so the
+shape recurs by necessity, not by copying):
+
+- pair: internal/code/extract_branches_go.go::branchFinder.Visit | internal/code/extract_go.go::goBody.Visit
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_branches_go.go::branchFinder.Visit | internal/code/extract_ts.mjs::BodyVisitor.visit
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_branches_go.go::branchFinder.Visit | internal/code/extract_ts.mjs::BodyVisitor.visitBody
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_branches_go.go::branchFinder.Visit | internal/code/extract.py::_BodyVisitor.visit
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_branches_go.go::branchFinder.Visit | internal/code/extract.py::_BodyVisitor.visit_Assign
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_branches_go.go::branchFinder.Visit | internal/code/extract.py::_BodyVisitor.visit_Attribute
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_branches_go.go::branchFinder.Visit | internal/code/extract.py::_BodyVisitor.visit_Constant
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_branches_go.go::branchFinder.Visit | internal/code/extract.py::_BodyVisitor.visit_Name
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_branches_go.go::branchFinder.Visit | internal/code/extract.py::_BodyVisitor.visit_Return
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_branches_go.go::branchFinder.Visit | internal/code/extract_values_go.go::valueFinder.Visit
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+  (the two NEW finders this session added, mirroring each other by design —
+   see docs/DESIGN_NOTES.md §21.2.)
+- pair: internal/code/extract_go.go::goBody.Visit | internal/code/extract_values_go.go::valueFinder.Visit
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_ts.mjs::BodyVisitor.visit | internal/code/extract_values_go.go::valueFinder.Visit
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_ts.mjs::BodyVisitor.visitBody | internal/code/extract_values_go.go::valueFinder.Visit
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract.py::_BodyVisitor.visit | internal/code/extract_values_go.go::valueFinder.Visit
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract.py::_BodyVisitor.visit_Assign | internal/code/extract_values_go.go::valueFinder.Visit
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract.py::_BodyVisitor.visit_Attribute | internal/code/extract_values_go.go::valueFinder.Visit
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract.py::_BodyVisitor.visit_Constant | internal/code/extract_values_go.go::valueFinder.Visit
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract.py::_BodyVisitor.visit_Name | internal/code/extract_values_go.go::valueFinder.Visit
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract.py::_BodyVisitor.visit_Return | internal/code/extract_values_go.go::valueFinder.Visit
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+
+Extraction-entry-point twins (a third/fourth `ExtractXxx(repo, exclude) →
+([]*FuncSig, ScanStats, error)` shape, mirroring `Extract`/`ExtractSymbols` by
+design — see docs/DESIGN_NOTES.md §21):
+
+- pair: internal/code/extract_branches_go.go::ExtractBranches | internal/code/extract_values_go.go::ExtractValueSites
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_branches_go.go::ExtractBranches | internal/code/scan.go::Extract
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_branches_go.go::ExtractBranches | internal/code/symbols.go::ExtractSymbols
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_values_go.go::ExtractValueSites | internal/code/scan.go::Extract
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_values_go.go::ExtractValueSites | internal/code/symbols.go::ExtractSymbols
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/cache.go::ExtractCached | internal/code/extract_branches_go.go::ExtractBranches
+- verdict: false-alarm
+- reviewed: 2026-07-09
+  (checked ExtractCached directly: it's a caching layer with stat-based
+   staleness detection, meaningfully more than the walk+extract shape it
+   superficially shares with ExtractBranches.)
+- pair: internal/code/cache.go::ExtractCached | internal/code/extract_values_go.go::ExtractValueSites
+- verdict: false-alarm
+- reviewed: 2026-07-09
+  (same reasoning as the ExtractCached/ExtractBranches pair above.)
+- pair: internal/code/extract_branches_go.go::extractGoBranchesFile | internal/code/extract_go.go::ExtractGoFile
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_branches_go.go::extractGoBranchesFile | internal/code/extract_go.go::extractGoSymbolsFile
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_branches_go.go::extractGoBranchesFile | internal/code/extract_values_go.go::extractGoValuesFile
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_go.go::ExtractGoFile | internal/code/extract_values_go.go::extractGoValuesFile
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_branches_go.go::goFuncSigFromStmts | internal/code/extract_go.go::goFuncSigFromBody
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+  (deliberate siblings by design — goFuncSigFromStmts is goFuncSigFromBody's
+   sibling for a bare statement list; see extract_branches_go.go's own doc
+   comment.)
+
+`propose-*` CLI command twins (every generator shares the same flag-parse →
+extract → registry-load → dedupe → print/--judge shape by necessity — the
+established "generic CLI plumbing, same shape by necessity" category):
+
+- pair: cmd/calque/confess.go::runConfess | cmd/calque/propose_branches.go::runProposeBranches
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: cmd/calque/confess.go::runConfess | cmd/calque/propose_values.go::runProposeValues
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: cmd/calque/propose_branches.go::runProposeBranches | cmd/calque/propose.go::runProposeRoles
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: cmd/calque/propose_branches.go::runProposeBranches | cmd/calque/propose_cross.go::runProposeCross
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: cmd/calque/propose_branches.go::runProposeBranches | cmd/calque/propose_deep.go::runProposeDeep
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: cmd/calque/propose_branches.go::runProposeBranches | cmd/calque/propose_deriv.go::runProposeDeriv
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: cmd/calque/propose_branches.go::runProposeBranches | cmd/calque/propose_values.go::runProposeValues
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+  (the two NEW commands this session added — same CLI shape by design.)
+- pair: cmd/calque/propose_cross.go::runProposeCross | cmd/calque/propose_values.go::runProposeValues
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: cmd/calque/propose_deep.go::runProposeDeep | cmd/calque/propose_values.go::runProposeValues
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: cmd/calque/propose_deriv.go::runProposeDeriv | cmd/calque/propose_values.go::runProposeValues
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+
+Small helper-method twins (deliberate structural mirroring within/across the
+two new finders, same role in each — not accidental duplication):
+
+- pair: internal/code/extract_branches_go.go::branchFinder.addArm | internal/code/extract_branches_go.go::branchFinder.addStmts
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_branches_go.go::branchFinder.addArm | internal/code/extract_values_go.go::valueFinder.add
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_branches_go.go::branchFinder.addStmts | internal/code/extract_values_go.go::valueFinder.add
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: internal/code/extract_values_go.go::valueFinder.fromKeyValue | internal/code/extract_values_go.go::valueFinder.fromValueSpec
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+
+Coincidental short-name collision (checked the actual source — genuinely
+unrelated):
+
+- pair: cmd/calque/ablate.go::ablateCell.add | internal/code/extract_values_go.go::valueFinder.add
+- verdict: false-alarm
+- reviewed: 2026-07-09
+  (ablateCell.add tallies a verdict class into a counter; valueFinder.add
+   builds and appends a FuncSig — unrelated beyond the generic verb "add".)
+
+**Conclusion:** all 46 pairs this session's own new code caused in `check
+--strict`'s self-scan are exactly the expected shape (visitor/extraction-
+entry-point/CLI-command twins already-established categories) — 44
+contracted-twin-ok, 2 false-alarm (both individually verified against actual
+source, not assumed). Zero represent lost detection or real drift. This
+confirms the plan's "neither axis is wired into --strict" claim held in
+practice, not just by construction: `check`'s own candidate SET is unchanged
+except for this session's own new code entering the corpus as ordinary
+functions, which is unavoidable and expected of ANY new .go file, new axis
+or not.
+
+### `propose-branches` dogfood (the axis's OWN candidates, not the check-axis
+self-detection above)
+
+`calque propose-branches --repo .` at defaults (`--min-lines 4`) surfaces 73
+candidates (1462 branch fragments scanned). Read real source for the top 20
+(by score) rather than rubber-stamping the summary line:
+
+- **`rustExtractorBin`'s 4 arms** (extract_rust.go:80/85/95/99 — env-override
+  check, cache-hit check, build-and-cache) — all 6 pairwise combinations
+  scored jac=1.00 driven ENTIRELY by shared name-stem (no shared-calls/
+  strings/writes fired at all). Read the source: these are sequential
+  GUARD-CLAUSE arms (`if <condition> { set path; return }`) doing three
+  DIFFERENT things — same shape by necessity (the guard-clause idiom), not
+  duplicated logic.
+- pair: internal/code/extract_rust.go::rustExtractorBin#branch@80.1 | internal/code/extract_rust.go::rustExtractorBin#branch@85.2
+- verdict: false-alarm
+- reviewed: 2026-07-09
+- pair: internal/code/extract_rust.go::rustExtractorBin#branch@80.1 | internal/code/extract_rust.go::rustExtractorBin#branch@95.4
+- verdict: false-alarm
+- reviewed: 2026-07-09
+- pair: internal/code/extract_rust.go::rustExtractorBin#branch@80.1 | internal/code/extract_rust.go::rustExtractorBin#branch@99.5
+- verdict: false-alarm
+- reviewed: 2026-07-09
+- pair: internal/code/extract_rust.go::rustExtractorBin#branch@85.2 | internal/code/extract_rust.go::rustExtractorBin#branch@95.4
+- verdict: false-alarm
+- reviewed: 2026-07-09
+- pair: internal/code/extract_rust.go::rustExtractorBin#branch@85.2 | internal/code/extract_rust.go::rustExtractorBin#branch@99.5
+- verdict: false-alarm
+- reviewed: 2026-07-09
+- pair: internal/code/extract_rust.go::rustExtractorBin#branch@95.4 | internal/code/extract_rust.go::rustExtractorBin#branch@99.5
+- verdict: false-alarm
+- reviewed: 2026-07-09
+
+- **`CalibrateWeights`'s 4 arms** (calibrate.go:59/64/90/101 — single-class
+  early return, per-channel discrimination loop, normalize block, …) — same
+  pattern: all 6 pairwise combos score jac=1.00 on shared name-stem alone.
+  Read the source: four DIFFERENT statistics steps within one function, not
+  duplicated logic.
+- pair: internal/code/calibrate.go::CalibrateWeights#branch@59.2 | internal/code/calibrate.go::CalibrateWeights#branch@64.3
+- verdict: false-alarm
+- reviewed: 2026-07-09
+- pair: internal/code/calibrate.go::CalibrateWeights#branch@59.2 | internal/code/calibrate.go::CalibrateWeights#branch@90.5
+- verdict: false-alarm
+- reviewed: 2026-07-09
+- pair: internal/code/calibrate.go::CalibrateWeights#branch@59.2 | internal/code/calibrate.go::CalibrateWeights#branch@101.7
+- verdict: false-alarm
+- reviewed: 2026-07-09
+- pair: internal/code/calibrate.go::CalibrateWeights#branch@64.3 | internal/code/calibrate.go::CalibrateWeights#branch@90.5
+- verdict: false-alarm
+- reviewed: 2026-07-09
+- pair: internal/code/calibrate.go::CalibrateWeights#branch@64.3 | internal/code/calibrate.go::CalibrateWeights#branch@101.7
+- verdict: false-alarm
+- reviewed: 2026-07-09
+- pair: internal/code/calibrate.go::CalibrateWeights#branch@90.5 | internal/code/calibrate.go::CalibrateWeights#branch@101.7
+- verdict: false-alarm
+- reviewed: 2026-07-09
+
+- **Same-shape-by-necessity switch/case arms** (checked each directly): a
+  parser handling structurally-different cases with the same accumulation
+  idiom.
+- pair: cmd/calque/migrate.go::migrateRegistry#branch@98.2 | cmd/calque/migrate.go::migrateRegistry#branch@103.3
+- verdict: false-alarm
+- reviewed: 2026-07-09
+  (two `- left:`/`- right:` prefix-parsing cases in a markdown-line scanner —
+   same idiom, different fields.)
+- pair: internal/code/extract_go.go::goBody.recordTarget#branch@330.1 | internal/code/extract_go.go::goBody.recordTarget#branch@334.2
+- verdict: false-alarm
+- reviewed: 2026-07-09
+  (SelectorExpr vs IndexExpr cases both record a write target — same
+   operation, different AST node shape.)
+- pair: internal/code/extract_go.go::goLiteralKeys#branch@177.1 | internal/code/extract_go.go::goLiteralKeys#branch@190.2
+- verdict: false-alarm
+- reviewed: 2026-07-09
+  (MapType vs ArrayType cases share an append-to-keys idiom but the map case
+   does meaningfully more — same shape, not duplicated logic.)
+- pair: internal/code/extract_json.go::jsonCollector.walk#branch@75.2 | internal/code/extract_json.go::jsonCollector.walk#branch@80.3
+- verdict: false-alarm
+- reviewed: 2026-07-09
+  (map[string]any vs []any recursion cases in a JSON tree walker.)
+
+- **The `extractGoBranchesFile ≟ ExtractGoFile` candidate this session's OWN
+  code produced (jac 0.83) was a REAL finding, not noise**: the receiver-
+  qualname-construction snippet (`if fd.Recv != nil && len(fd.Recv.List) > 0
+  { if rt := recvTypeName(...); rt != "" { qual = rt + "." + name } }`) was
+  copy-pasted verbatim into `ExtractGoFile`, `extractGoBranchesFile`, AND
+  `extractGoValuesFile` while writing this session's own code — genuine
+  intra-function-shape duplication, exactly the class of bug this axis
+  targets. Fixed (not adjudicated as a pair — it no longer exists): extracted
+  `qualNameFor(name string, recv *ast.FieldList) string` into extract_go.go,
+  all three call sites now call it. Re-ran `propose-branches` after the fix —
+  the pair is gone.
+
+- **Left un-adjudicated, flagged for the maintainer** (not confidently a
+  false-alarm, not confidently drift — genuinely needs a human call, not a
+  forced verdict):
+  `cmd/calque/vocab_check.go::runVocabCheck#branch@77.6` ≟
+  `cmd/calque/vocab_check.go::renderVocabCheck#branch@159.2` (jac 0.77) — both
+  arms print/build the IDENTICAL "clean across %d file(s) — %d allow-listed
+  compound(s); threshold freq >= %d" message via two SEPARATE format-string
+  literals rather than one delegating to the other. Could drift (edit one
+  message, forget the other) or could be a deliberate CLI-vs-render split
+  (unclear without more context on renderVocabCheck's caller). Not fixed this
+  pass (pre-existing code, unrelated to this session's own changes — out of
+  scope to touch here) — worth a look, not force-adjudicated.
+
+- **The `propose-*` CLI family's shared tail idiom** (`if *judge {
+  runJudge(...); return }; for i, c := range fresh { printCandidate(...) }`) —
+  same established convention already adjudicated above for the check-axis
+  pairs, confirmed again here for two more instances:
+- pair: cmd/calque/propose_deep.go::runProposeDeep#branch@122.9 | cmd/calque/propose_values.go::runProposeValues#branch@81.6
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: cmd/calque/propose_branches.go::runProposeBranches#branch@92.7 | cmd/calque/propose_deriv.go::runProposeDeriv#branch@100.9
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+
+**`propose-branches` conclusion:** the mechanism works — it correctly
+extracts and scores sub-function fragments, and even caught a real, if minor,
+self-introduced duplication this session's own code created (fixed above).
+But the dominant noise pattern at defaults is exactly what the design section
+anticipated: sibling arms of ONE function trivially clear the anchor gate via
+shared name-stem (same enclosing function name), and for functions with
+several structurally-parallel-but-semantically-distinct branches (guard
+clauses, switch/case dispatch), this produces a HIGH nominal score (often
+1.00) driven by name alone, with zero real content overlap — 18 of the 20
+reviewed were exactly this shape. Recommendation: before considering
+`--strict` graduation, add a same-function discount (or a `Reason()` hint
+analogous to `FalseAlarmHint`, "same-function siblings scored on name alone")
+so a human scanning the report can immediately deprioritize the dominant
+noise class, the same way `falseAlarmSuffix` already helps for the
+whole-function axis. Real drift signal exists (the qualNameFor case proves
+it) but is currently buried under name-tautology noise at these defaults.
+
+### `propose-values` dogfood
+
+`calque propose-values --repo .` at defaults (`--name-jaccard 0.01
+--max-fanout 8`) surfaces 105 candidates (386 value-sites scanned). Read real
+source for the top 20:
+
+- **Verdict-vocabulary strings** ("drift"/"false-alarm" assigned to fields
+  named `Verdict` in two different test files) — calque's own fixed verdict
+  vocabulary (`llm.ClassDrift`/`llm.ClassFalseAlarm` etc.) reused correctly in
+  independent test fixtures, not an accidental shared magic value at risk of
+  drifting — there's no "one true value" to keep in sync, both sides
+  correctly reference the SAME established vocabulary term.
+- pair: cmd/calque/ablate_test.go::TestLoadLabelsDedupLatestWins.Verdict#value@63.19 | cmd/calque/check_test.go::TestUnresolvedDrift.Verdict#value@55.9
+- verdict: false-alarm
+- reviewed: 2026-07-09
+- pair: cmd/calque/ablate_test.go::TestLoadLabelsDedupLatestWins.Verdict#value@64.23 | cmd/calque/check_test.go::TestUnresolvedDrift.Verdict#value@53.3
+- verdict: false-alarm
+- reviewed: 2026-07-09
+- pair: cmd/calque/ablate_test.go::TestLoadLabelsDedupLatestWins.Verdict#value@64.23 | cmd/calque/check_test.go::TestUnresolvedDrift.Verdict#value@54.6
+- verdict: false-alarm
+- reviewed: 2026-07-09
+- pair: cmd/calque/ablate_test.go::TestLoadLabelsDedupLatestWins.Verdict#value@65.27 | cmd/calque/check_test.go::TestUnresolvedDrift.Verdict#value@53.3
+- verdict: false-alarm
+- reviewed: 2026-07-09
+- pair: cmd/calque/ablate_test.go::TestLoadLabelsDedupLatestWins.Verdict#value@65.27 | cmd/calque/check_test.go::TestUnresolvedDrift.Verdict#value@54.6
+- verdict: false-alarm
+- reviewed: 2026-07-09
+
+- **`JSONRPC = "2.0"` — a REAL instance of the target pattern** (production
+  `cmd/calque/mcp.go` and its own test file `mcp_test.go`, 4 distinct
+  construction sites, no shared const backing the literal). Verified: this is
+  genuinely the maxRetries-style shape (a protocol-version literal repeated
+  across independent sites). Classified contracted-twin-ok rather than drift
+  because JSON-RPC's wire version is an external, effectively-immutable
+  protocol constant — not presently at risk of silent divergence — but it IS
+  a legitimate hygiene opportunity (extract `const jsonRPCVersion = "2.0"`)
+  even though nothing is currently broken.
+- pair: cmd/calque/mcp.go::errResp.JSONRPC#value@195.7 | cmd/calque/mcp_test.go::TestMCPNotificationSilent.JSONRPC#value@81.3
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: cmd/calque/mcp.go::errResp.JSONRPC#value@195.7 | cmd/calque/mcp_test.go::drive.JSONRPC#value@23.1
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: cmd/calque/mcp.go::handleMCP.JSONRPC#value@68.1 | cmd/calque/mcp_test.go::TestMCPNotificationSilent.JSONRPC#value@81.3
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: cmd/calque/mcp.go::handleMCP.JSONRPC#value@68.1 | cmd/calque/mcp_test.go::drive.JSONRPC#value@23.1
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: cmd/calque/mcp.go::handleMCP.JSONRPC#value@86.4 | cmd/calque/mcp_test.go::TestMCPNotificationSilent.JSONRPC#value@81.3
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: cmd/calque/mcp.go::handleMCP.JSONRPC#value@86.4 | cmd/calque/mcp_test.go::drive.JSONRPC#value@23.1
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: cmd/calque/mcp.go::toolText.JSONRPC#value@187.5 | cmd/calque/mcp_test.go::TestMCPNotificationSilent.JSONRPC#value@81.3
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: cmd/calque/mcp.go::toolText.JSONRPC#value@187.5 | cmd/calque/mcp_test.go::drive.JSONRPC#value@23.1
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+
+- **`type"/"Type" = "text"`** — checked both sites directly: `mcp.go`'s
+  `toolText` builds an MCP `{"type":"text","text":...}` content block;
+  `judge_test.go`'s `apiContentText{Type:"text",...}` fixtures model Claude
+  API response content blocks. Both independently model a similar
+  external-protocol content-block shape for UNRELATED integration points
+  (outbound MCP response vs. inbound Claude API parsing) — coincidental
+  shared-idiom collision, not drift (they're not meant to stay in sync).
+- pair: cmd/calque/mcp.go::toolText.type#value@189.6 | internal/llm/judge_test.go::TestParseVerdictNoJSON.Type#value@105.24
+- verdict: false-alarm
+- reviewed: 2026-07-09
+- pair: cmd/calque/mcp.go::toolText.type#value@189.6 | internal/llm/judge_test.go::TestParseVerdictToleratesProse.Type#value@82.20
+- verdict: false-alarm
+- reviewed: 2026-07-09
+- pair: cmd/calque/mcp.go::toolText.type#value@189.6 | internal/llm/judge_test.go::TestParseVerdictUnknownClass.Type#value@95.22
+- verdict: false-alarm
+- reviewed: 2026-07-09
+
+- **The `propose-*` CLI family's shared `testNote` message convention** — the
+  SAME `--include-tests` explanatory string, deliberately mirrored across
+  every propose-* command (confirmed: this session's own propose_branches.go
+  was written by deliberately copying propose_deriv.go's exact convention).
+- pair: cmd/calque/propose_branches.go::runProposeBranches.testNote#value@72.2 | cmd/calque/propose_deriv.go::runProposeDeriv.testNote#value@74.1
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+- pair: cmd/calque/propose_branches.go::runProposeBranches.testNote#value@74.3 | cmd/calque/propose_deriv.go::runProposeDeriv.testNote#value@76.2
+- verdict: contracted-twin-ok
+- reviewed: 2026-07-09
+
+- **Coincidental test-fixture placeholder values** (two unrelated test
+  functions independently choosing the same generic filler value):
+- pair: internal/code/block_test.go::TestCandidatePairsEmptyChannels.File#value@148.4 | internal/code/touchpoint_test.go::TestClusterKeyOrderIndependent.File#value@272.11
+- verdict: false-alarm
+- reviewed: 2026-07-09
+  ("b.go" as a generic placeholder filename in two unrelated fixture tables.)
+- pair: internal/code/block_test.go::TestCandidatePairsEmptyChannels.NLines#value@148.5 | internal/code/touchpoint_test.go::TestExternalCallNotSeam.NLines#value@120.5
+- verdict: false-alarm
+- reviewed: 2026-07-09
+  ("10" as a generic placeholder line count in two unrelated fixture tables.)
+
+**`propose-values` conclusion:** one genuine instance of the target pattern
+found in the top 20 (JSONRPC="2.0" — real, if low-risk since it's an external
+protocol constant), zero drift, the rest split between calque's own fixed
+verdict-vocabulary reuse, a coincidental cross-protocol idiom collision, an
+established CLI-convention string, and plain test-fixture-placeholder
+coincidence. The `--name-jaccard`/`--max-fanout` anchoring works as intended
+(no bare-value-only noise made the top 20), but a FIXED-VOCABULARY exclude
+list (calque's own verdict classes, common test-fixture placeholders like
+short filenames/line counts) would meaningfully raise precision — a natural
+follow-up once more corpora are calibrated, not implemented this pass.
+
+**Overall recommendation for both axes:** ship as `propose-*` generators
+(already the design — not wired into `--strict`), keep dogfooding on
+external repos before considering `--strict` graduation for either, and
+treat the same-function-name-tautology (branches) and fixed-vocabulary
+(values) noise patterns identified above as the concrete, evidence-based
+next calibration targets — not guessed ones.
+
+**External validation (read-only — this is calque's OWN registry; nothing
+was written to the external repo):** ran both generators against `~/Documents/
+stope` (a large, unrelated Go repo, 1176 files) per the plan's dogfood step.
+`propose-values` surfaced, at rank #1, `MaxTokens = 128` (`cmd/spike-vcr/
+main.go`) ≟ `maxTokens = 128` (`internal/inputllm/inputllm.go`) — an
+unprompted, real-world instance of EXACTLY the `maxRetries`-shaped bug this
+axis was built to catch (an LLM-call config constant duplicated across two
+files, different capitalization, no shared symbol). Also surfaced `asciiEscape`'s
+`"0123456789abcdef"` hex-digit-alphabet string copy-pasted verbatim across 4
+different files' helper functions — a real, if minor, "same utility
+reimplemented instead of shared" pattern. `propose-branches` reproduced the
+same same-function-name-tautology noise pattern at scale (1938 candidates on
+1176 files) but also surfaced a genuinely interesting cross-struct candidate
+(`GameEngine.findPreauthored` ≟ `Game.findPreauthored`, cross-file) worth a
+maintainer's look. Both axes generalize to unfamiliar code, not just this
+repo's own idioms.

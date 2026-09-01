@@ -161,6 +161,10 @@ func main() {
 		runProposeCross(os.Args[2:])
 	case "propose-deriv":
 		runProposeDeriv(os.Args[2:])
+	case "propose-branches":
+		runProposeBranches(os.Args[2:])
+	case "propose-values":
+		runProposeValues(os.Args[2:])
 	case "confess":
 		runConfess(os.Args[2:])
 	case "review":

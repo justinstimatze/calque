@@ -163,6 +163,45 @@ data exactly like the signature axis's stoplist was — not guessed up front. Ex
 requiring-both-signals design in §3 to carry most of the precision burden until that
 calibration exists.
 
+**Cross-repo data confirms the AND-gate, not a single-signal cut (stope, 2026-09-01,
+30 hand-adjudicated pairs from a 1785-file/9727-function run).** calque's own 25-pair
+self-scan had both real hits at shape≈1.00 (caller≈ 1.00 and 0.14), suggesting shape
+might be the load-bearing signal and caller-stem the noisy one. stope's sample inverted
+that: 4 of 6 real hits had caller≈1.00 exactly, two of those on shape≈ only 0.50 — the
+*caller* signal carried them, not shape. Only one hit had caller≈ below 1.00 (0.89) while
+shape≈ stayed at 1.00. Across the two corpora neither signal is consistently the stronger
+one — sometimes caller-stem rescues a weak shape score, sometimes shape rescues a weak
+caller score. Read this as validating the §3 design (both signals required) rather than
+as license to drop or down-weight either one; a stoplist that discounts "the weak signal"
+would have suppressed different real hits in each repo.
+
+**A new mechanical false-alarm pattern, not seen in the calque self-scan: direct
+caller→callee pairs.** `marshalReport`/`SaveReport` (the former was "pulled out of" the
+latter) and `PanelReport.AvgScores`/`.ScoreKeys` (the former calls the latter directly)
+are two functions in a genuine call relationship — trivially sharing caller vocabulary
+and often result shape, but a pipeline, not a twin. **Shipped:** `callsEachOther`
+(`internal/code/callcontext.go`) skips a pair when either's `FuncSig.Calls` names the
+other. Unlike the tag stoplist this needed no adjudication data — it's a direct read of
+the call graph already captured in extraction. Verified against real data, not just the
+unit fixture: rebuilding and re-running against stope removed exactly the pairs this
+check should remove (`marshalReport`/`SaveReport`, `PanelReport.AvgScores`/`.ScoreKeys`,
+plus two more of the same shape found outside the original 30-pair sample —
+`HottestMoment` calling `ScoreAll`, `CapturePromptGold` calling `SaveGold`) and nothing
+else — 171 → 163 candidates, all four removals confirmed by reading the actual call site.
+
+**A closely related but distinct pattern this filter does NOT catch, verified by reading
+source, not assumed:** `shaftWrong`/`shaftAdvance`, `Tokenizer.wordPiece`/`.preTokenize`,
+and `BuildJobs`/`ParseArgs` were mischaracterized in this doc's first pass as more
+caller→callee examples — reading the actual bodies shows neither calls the other in any
+of the three; a third function calls both in sequence and (in the shaft/tokenizer cases)
+threads one's return into the other's argument. That's structurally the same
+same-driver-function-siblings shape §5 already names above, just with a data dependency
+between the siblings — `callsEachOther` correctly leaves these alone, and they remain
+open for the frequency-based stoplist rather than this mechanical check. Don't conflate
+"one function's result feeds another, both called by a third" with "one function calls
+the other" — they look similar in a doc-comment summary and are different in the call
+graph.
+
 ## 6. Precision budget & calibration
 
 Expect the same recall-first profile every boundary-free generator in this codebase

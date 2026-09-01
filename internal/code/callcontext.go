@@ -158,6 +158,9 @@ func pairCallContextGroup(fns []*FuncSig, callerStems, callShapes map[string]set
 			if a.Key() == b.Key() {
 				continue
 			}
+			if callsEachOther(a, b) {
+				continue
+			}
 			pk := pairkey.Key(a.Key(), b.Key())
 			if seen[pk] {
 				continue
@@ -183,4 +186,20 @@ func pairCallContextGroup(fns []*FuncSig, callerStems, callShapes map[string]set
 		}
 	}
 	return out
+}
+
+// callsEachOther reports whether a directly calls b or b directly calls a.
+// A stope dogfood run (2026-09-01, SPEC-callsite-context-axis.md §5) found this
+// as a mechanical false-alarm class distinct from the shared-driver-function
+// trap: a function and its own direct caller/callee trivially share caller
+// vocabulary and often share result shape too (marshalReport/SaveReport,
+// PanelReport.AvgScores/.ScoreKeys) — a pipeline stage, not a twin. Unlike the
+// shape-tag stoplist, this needs no adjudication data: it's a direct read of
+// the call graph already captured in FuncSig.Calls. Does NOT catch the
+// related case where a third function calls both and threads one's result
+// into the other's argument (e.g. ParseArgs/BuildJobs) — that's the ordinary
+// shared-driver-siblings shape, not a call-graph edge between the pair
+// itself, and stays open for the frequency-based stoplist instead.
+func callsEachOther(a, b *FuncSig) bool {
+	return a.sCall.has(b.Name) || b.sCall.has(a.Name)
 }

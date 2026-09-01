@@ -155,3 +155,34 @@ func TestCallContextCandidatesFanoutCap(t *testing.T) {
 		t.Errorf("caller-stem 'shared' shared by 10 callees exceeds fanout cap 8, expected 0, got %d: %+v", len(got), got)
 	}
 }
+
+// TestCallContextCandidatesSkipsDirectCallers pins the mechanical false-alarm
+// class a stope dogfood run found (SPEC-callsite-context-axis.md §5,
+// 2026-09-01): a function paired with its own direct caller/callee trivially
+// clears both jaccard thresholds — a shared external caller pushes caller-
+// stem overlap up, and shared shape tags line up — but it's a pipeline stage
+// (marshalReport/SaveReport, PanelReport.AvgScores/.ScoreKeys), not a twin.
+// Without the callsEachOther guard this fixture's caller≈0.50 shape≈1.00
+// would qualify; it must not.
+func TestCallContextCandidatesSkipsDirectCallers(t *testing.T) {
+	report := &FuncSig{File: "d.go", Qualname: "report", Name: "report", NLines: 6,
+		Calls: []string{"scoreone", "scoretwo"},
+		CallResultShapes: map[string][]string{
+			"scoreone": {"ret-nil-checked"},
+			"scoretwo": {"ret-nil-checked"},
+		},
+	}
+	calleeA := &FuncSig{File: "lib1.go", Qualname: "scoreone", Name: "scoreone", NLines: 6,
+		Calls: []string{"scoretwo"}, // scoreone calls scoretwo directly
+	}
+	calleeB := &FuncSig{File: "lib2.go", Qualname: "scoretwo", Name: "scoretwo", NLines: 6}
+
+	sigs := []*FuncSig{report, calleeA, calleeB}
+	for _, f := range sigs {
+		f.Prepare()
+	}
+
+	if got := CallContextCandidates(sigs, SizeGate{MinLines: 4}, 0.5, 0.5, 8); len(got) != 0 {
+		t.Errorf("scoreone directly calls scoretwo — a pipeline stage, not a twin — must not pair, got %d: %+v", len(got), got)
+	}
+}

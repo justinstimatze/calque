@@ -111,11 +111,22 @@ func TestRankBlockingEquivalence(t *testing.T) {
 // corpus — the realistic mix of anchor channels and scores. Also asserts the
 // index actually blocks (fewer candidates than the full L×R product).
 func TestRankBlockingEquivalenceCorpus(t *testing.T) {
-	sigs, _, err := Extract(".", []string{"*.py", "**/*.py"})
+	// Extract's second arg excludes, it doesn't include — passing the *.py
+	// patterns here was backwards and excluded Python instead of scoping to
+	// it, so Extract fell through to extract_ts.mjs (this package's own TS-
+	// extractor helper script) and failed wherever node/tsc isn't installed.
+	// Exclude the one non-corpus file that needs a toolchain, then Filter
+	// down to the Python corpus this test actually wants to rank.
+	sigs, _, err := Extract(".", []string{"*.mjs", "**/*.mjs"})
 	if err != nil {
 		t.Fatalf("extract: %v", err)
 	}
-	if len(sigs) < 20 {
+	sigs = Filter(sigs, "*.py,**/*.py")
+	// extract.py's real Python corpus is 19 funcs once correctly scoped to
+	// just *.py (the old >=20 passed only because the bug above was pulling
+	// in this whole package's Go signatures too). 15 keeps the sanity check
+	// meaningful without being tied to extract.py's exact current size.
+	if len(sigs) < 15 {
 		t.Fatalf("corpus too small to be a meaningful test: %d funcs", len(sigs))
 	}
 

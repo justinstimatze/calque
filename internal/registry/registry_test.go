@@ -109,3 +109,63 @@ func TestLoadEntryCollapseFields(t *testing.T) {
 		t.Errorf("collapse fields must default empty, got %q / %q", r.Entries[1].Canonical, r.Entries[1].DoNotResync)
 	}
 }
+
+// TestLoadRegistryDir covers registry.d: entries in it count as adjudicated alongside
+// registry.md, an entry never runs across a file boundary (a file ending on a bare
+// `- pair:` does not take the next file's verdict), and a pair recorded twice keeps
+// the reading from registry.md, which is read first.
+func TestLoadRegistryDir(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, content string) {
+		t.Helper()
+		p := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("registry.md", "# calque registry\n\n## a\n- pair: a.go::f | b.go::g\n- verdict: false-alarm\n")
+	write("registry.d/b.md", "## c\n- pair: c.go::f | d.go::g\n- verdict: contracted-twin-ok\n")
+	write("registry.d/c.md", "## dangling\n- pair: e.go::f | f.go::g\n")
+	write("registry.d/d.md", "- verdict: drift\n")
+	write("registry.d/e.md", "## a again\n- pair: b.go::g | a.go::f\n- verdict: drift\n")
+	write("registry.d/notes.txt", "- pair: g.go::f | h.go::g\n- verdict: false-alarm\n")
+
+	r, err := Load(filepath.Join(dir, "registry.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e, ok := r.Lookup("c.go::f", "d.go::g"); !ok || e.Verdict != "contracted-twin-ok" {
+		t.Errorf("registry.d entry: got %+v ok=%v, want contracted-twin-ok", e, ok)
+	}
+	if r.Has("e.go::f", "f.go::g") {
+		t.Error("a pair with no verdict in its own file took the next file's verdict")
+	}
+	if e, _ := r.Lookup("a.go::f", "b.go::g"); e.Verdict != "false-alarm" {
+		t.Errorf("duplicate pair: got verdict %q, want registry.md's false-alarm", e.Verdict)
+	}
+	if r.Has("g.go::f", "h.go::g") {
+		t.Error("a non-.md file in registry.d was read")
+	}
+	if len(r.Entries) != 2 {
+		t.Errorf("got %d entries, want 2", len(r.Entries))
+	}
+}
+
+// TestLoadRegistryDirWithoutFile: a repo that keeps every entry in registry.d and has
+// no registry.md still loads them.
+func TestLoadRegistryDirWithoutFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "registry.d"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "registry.d", "x.md"), []byte("- pair: a::f | b::g\n- verdict: false-alarm\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Load(filepath.Join(dir, "registry.md"))
+	if err != nil || !r.Has("a::f", "b::g") {
+		t.Fatalf("got err=%v has=%v, want the registry.d entry", err, r != nil && r.Has("a::f", "b::g"))
+	}
+}

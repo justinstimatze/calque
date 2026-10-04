@@ -5,6 +5,15 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+### Added
+- **`registry.d/`** — the registry now also reads every `*.md` in a
+  `registry.d` directory beside `registry.md`, in name order, each file parsed
+  on its own. One entry per file means two branches that each record a verdict
+  no longer edit the same lines, which an append-only single file can't avoid
+  (aipotluck's merge queue ejected two PRs for exactly that). `registry.md`
+  still loads first and wins on a pair recorded twice. `calque prune` still
+  rewrites `registry.md` only.
+
 ## [0.14.0] - 2026-09-01
 
 ### Added

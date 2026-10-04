@@ -18,6 +18,8 @@ package registry
 import (
 	"bufio"
 	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -88,16 +90,39 @@ type Registry struct {
 	byRole     map[string]int
 }
 
-// Load parses the registry at path. A missing file is not an error (returns an
-// empty registry) — a repo need not have adjudicated anything yet.
+// Load parses the registry at path, then every *.md in a registry.d directory
+// beside it, in name order. One entry per file in registry.d keeps two branches
+// that each record a verdict from editing the same lines, which an append-only
+// single file cannot avoid. Each file is parsed on its own, so an entry never
+// runs across a file boundary; a pair in two files keeps its first reading. A
+// missing file or directory is not an error (returns what was found) — a repo
+// need not have adjudicated anything yet.
 func Load(path string) (*Registry, error) {
 	r := &Registry{Path: path, byPair: map[string]int{}, byClusters: map[string]int{}, byRole: map[string]int{}}
+	if err := r.loadFile(path); err != nil {
+		return r, err
+	}
+	extra, err := filepath.Glob(filepath.Join(filepath.Dir(path), "registry.d", "*.md"))
+	if err != nil {
+		return r, err
+	}
+	sort.Strings(extra)
+	for _, p := range extra {
+		if err := r.loadFile(p); err != nil {
+			return r, err
+		}
+	}
+	return r, nil
+}
+
+// loadFile parses one registry file into r. A missing file adds nothing.
+func (r *Registry) loadFile(path string) error {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return r, nil
+			return nil
 		}
-		return r, err
+		return err
 	}
 	defer f.Close()
 
@@ -211,7 +236,7 @@ func Load(path string) (*Registry, error) {
 		}
 	}
 	flush()
-	return r, sc.Err()
+	return sc.Err()
 }
 
 // CleanKey normalizes a registry symbol key: trim surrounding whitespace and the

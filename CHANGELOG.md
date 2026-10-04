@@ -5,6 +5,8 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-03
+
 ### Added
 - **`registry.d/`** — the registry now also reads every `*.md` in a
   `registry.d` directory beside `registry.md`, in name order, each file parsed

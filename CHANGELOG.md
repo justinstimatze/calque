@@ -5,6 +5,15 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+### Added
+- **`- family:` registry entries** — one verdict for every pair whose keys match
+  two `<path glob>::<qualname>` sides, in either order (`*` matches any name).
+  Boilerplate that recurs with each new file, like a CLI `main` per eval script,
+  made N² pairs that pair verdicts never caught up with: on aipotluck's
+  `evals/inspect_tasks/`, one family entry takes `calque review` from 261
+  `main`-vs-`main` twins to 0 and covers the next eval too. `check`, `review`
+  and the `propose-*` generators all skip a pair a family covers.
+
 ## [0.15.0] - 2026-10-03
 
 ### Added

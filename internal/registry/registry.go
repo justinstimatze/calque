@@ -10,6 +10,11 @@
 //   - verdict: drift | contracted-twin-ok | false-alarm
 //   - reviewed: <date>            (optional)
 //
+// A family covers every pair whose keys match its two sides, either way round:
+//
+//   - family: <path glob>::<qualname or *> | <path glob>::<qualname or *>
+//   - verdict: false-alarm
+//
 // Titles and notes around them are freeform. Recency is handled by `reviewed`
 // (re-verification cadence) + liveness reconciliation — never age-based eviction
 // (evicting an old false-alarm would just resurface the noise).
@@ -19,10 +24,12 @@ import (
 	"bufio"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/justinstimatze/calque/internal/glob"
 	"github.com/justinstimatze/calque/internal/pairkey"
 )
 
@@ -47,6 +54,50 @@ type ClusterEntry struct {
 	Keys     []string
 	Verdict  string
 	Reviewed string
+}
+
+// FamilyEntry is one adjudicated family: every pair whose two keys match the two
+// sides, in either order, shares the verdict. A side is `<path glob>::<qualname>`,
+// where the glob follows internal/glob and the qualname is exact or `*`. It exists
+// for boilerplate that recurs with every new file (each CLI `main`, each fetch
+// wrapper): N such functions make N² pairs, and a pair verdict never catches up.
+type FamilyEntry struct {
+	Side1, Side2 string
+	Verdict      string
+	Reviewed     string
+	re1, re2     *regexp.Regexp
+	name1, name2 string
+}
+
+// VerdictClass is the leading word of Verdict.
+func (e FamilyEntry) VerdictClass() string { return verdictClass(e.Verdict) }
+
+// compileSide splits `<path glob>::<qualname>` and compiles the glob.
+func compileSide(side string) (*regexp.Regexp, string, bool) {
+	i := strings.LastIndex(side, "::")
+	if i <= 0 || i+2 >= len(side) {
+		return nil, "", false
+	}
+	re, err := glob.ToRegexp(side[:i])
+	if err != nil {
+		return nil, "", false
+	}
+	return re, side[i+2:], true
+}
+
+// matchSide reports whether a `file::qualname` key falls on this side.
+func matchSide(re *regexp.Regexp, name, key string) bool {
+	i := strings.LastIndex(key, "::")
+	if i < 0 {
+		return false
+	}
+	return re.MatchString(key[:i]) && (name == "*" || name == key[i+2:])
+}
+
+// Matches reports whether the unordered pair {k1,k2} belongs to the family.
+func (e FamilyEntry) Matches(k1, k2 string) bool {
+	return (matchSide(e.re1, e.name1, k1) && matchSide(e.re2, e.name2, k2)) ||
+		(matchSide(e.re1, e.name1, k2) && matchSide(e.re2, e.name2, k1))
 }
 
 // RoleEntry is a FORWARD declaration (the role-cardinality axis, DESIGN_NOTES §18):
@@ -85,6 +136,7 @@ type Registry struct {
 	Entries    []Entry
 	Clusters   []ClusterEntry
 	Roles      []RoleEntry
+	Families   []FamilyEntry
 	byPair     map[string]int
 	byClusters map[string]int
 	byRole     map[string]int
@@ -131,8 +183,11 @@ func (r *Registry) loadFile(path string) error {
 	var curPair *Entry
 	var curCluster *ClusterEntry
 	var curRole *RoleEntry
+	var curFamily *FamilyEntry
 	setVerdict := func(v string) {
 		switch {
+		case curFamily != nil:
+			curFamily.Verdict = v
 		case curCluster != nil:
 			curCluster.Verdict = v
 		case curPair != nil:
@@ -143,6 +198,8 @@ func (r *Registry) loadFile(path string) error {
 		switch {
 		case curRole != nil:
 			curRole.Reviewed = v
+		case curFamily != nil:
+			curFamily.Reviewed = v
 		case curCluster != nil:
 			curCluster.Reviewed = v
 		case curPair != nil:
@@ -173,7 +230,10 @@ func (r *Registry) loadFile(path string) error {
 				r.Roles = append(r.Roles, *curRole)
 			}
 		}
-		curPair, curCluster, curRole = nil, nil, nil
+		if curFamily != nil && curFamily.Verdict != "" {
+			r.Families = append(r.Families, *curFamily)
+		}
+		curPair, curCluster, curRole, curFamily = nil, nil, nil, nil
 	}
 
 	sc := bufio.NewScanner(f)
@@ -198,6 +258,18 @@ func (r *Registry) loadFile(path string) error {
 			}
 			if len(keys) >= 2 {
 				curCluster = &ClusterEntry{Keys: keys}
+			}
+		case strings.HasPrefix(line, "- family:"):
+			flush()
+			v := strings.TrimSpace(strings.TrimPrefix(line, "- family:"))
+			if s1, s2, ok := strings.Cut(v, "|"); ok {
+				fe := FamilyEntry{Side1: CleanKey(s1), Side2: CleanKey(s2)}
+				var ok1, ok2 bool
+				fe.re1, fe.name1, ok1 = compileSide(fe.Side1)
+				fe.re2, fe.name2, ok2 = compileSide(fe.Side2)
+				if ok1 && ok2 {
+					curFamily = &fe
+				}
 			}
 		case strings.HasPrefix(line, "- role:"):
 			flush()
@@ -245,10 +317,24 @@ func (r *Registry) loadFile(path string) error {
 // re-implementing the trim (the prior twin was real drift the confess axis caught).
 func CleanKey(s string) string { return strings.TrimSpace(strings.Trim(strings.TrimSpace(s), "`")) }
 
-// Has reports whether the unordered pair {k1,k2} is adjudicated.
+// Has reports whether the unordered pair {k1,k2} is adjudicated, by its own
+// entry or by a family it belongs to.
 func (r *Registry) Has(k1, k2 string) bool {
-	_, ok := r.byPair[pairkey.Key(k1, k2)]
+	if _, ok := r.byPair[pairkey.Key(k1, k2)]; ok {
+		return true
+	}
+	_, ok := r.LookupFamily(k1, k2)
 	return ok
+}
+
+// LookupFamily returns the first family the unordered pair {k1,k2} belongs to.
+func (r *Registry) LookupFamily(k1, k2 string) (FamilyEntry, bool) {
+	for _, f := range r.Families {
+		if f.Matches(k1, k2) {
+			return f, true
+		}
+	}
+	return FamilyEntry{}, false
 }
 
 // Lookup returns the entry for an unordered pair.

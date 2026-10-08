@@ -169,3 +169,46 @@ func TestLoadRegistryDirWithoutFile(t *testing.T) {
 		t.Fatalf("got err=%v has=%v, want the registry.d entry", err, r != nil && r.Has("a::f", "b::g"))
 	}
 }
+
+func TestFamilyCoversEveryPairBetweenItsSides(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "registry.md")
+	content := "## eval mains — boilerplate\n" +
+		"- family: `evals/tasks/**::main` | `evals/tasks/**::main`\n" +
+		"- verdict: false-alarm\n" +
+		"- reviewed: 2026-10-08\n\n" +
+		"## fetch wrappers\n" +
+		"- family: src/api/*.ts::* | src/lib/http.ts::send\n" +
+		"- verdict: contracted-twin-ok\n\n" +
+		"## no verdict, so not adjudicated\n" +
+		"- family: a/**::x | b/**::x\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Families) != 2 {
+		t.Fatalf("want 2 families, got %d: %+v", len(r.Families), r.Families)
+	}
+	if r.Families[0].Reviewed != "2026-10-08" || r.Families[0].VerdictClass() != "false-alarm" {
+		t.Errorf("family 0 = %+v", r.Families[0])
+	}
+	for _, c := range []struct {
+		k1, k2 string
+		want   bool
+	}{
+		{"evals/tasks/a.py::main", "evals/tasks/sub/b.py::main", true},
+		{"evals/tasks/new_eval.py::main", "evals/tasks/a.py::main", true},
+		{"evals/tasks/a.py::main", "evals/tasks/b.py::build", false},
+		{"evals/other/a.py::main", "evals/tasks/b.py::main", false},
+		{"src/lib/http.ts::send", "src/api/users.ts::getUser", true},
+		{"src/api/deep/users.ts::getUser", "src/lib/http.ts::send", false},
+		{"a/x.go::x", "b/y.go::x", false},
+	} {
+		if got := r.Has(c.k1, c.k2); got != c.want {
+			t.Errorf("Has(%q, %q) = %v, want %v", c.k1, c.k2, got, c.want)
+		}
+	}
+}

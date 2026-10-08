@@ -85,6 +85,22 @@ func compileSide(side string) (*regexp.Regexp, string, bool) {
 	return re, side[i+2:], true
 }
 
+// parseFamily reads the value of a `- family:` line; nil when either side is unusable.
+func parseFamily(v string) *FamilyEntry {
+	s1, s2, ok := strings.Cut(strings.TrimSpace(v), "|")
+	if !ok {
+		return nil
+	}
+	fe := FamilyEntry{Side1: CleanKey(s1), Side2: CleanKey(s2)}
+	var ok1, ok2 bool
+	fe.re1, fe.name1, ok1 = compileSide(fe.Side1)
+	fe.re2, fe.name2, ok2 = compileSide(fe.Side2)
+	if !ok1 || !ok2 {
+		return nil
+	}
+	return &fe
+}
+
 // matchSide reports whether a `file::qualname` key falls on this side.
 func matchSide(re *regexp.Regexp, name, key string) bool {
 	i := strings.LastIndex(key, "::")
@@ -261,16 +277,7 @@ func (r *Registry) loadFile(path string) error {
 			}
 		case strings.HasPrefix(line, "- family:"):
 			flush()
-			v := strings.TrimSpace(strings.TrimPrefix(line, "- family:"))
-			if s1, s2, ok := strings.Cut(v, "|"); ok {
-				fe := FamilyEntry{Side1: CleanKey(s1), Side2: CleanKey(s2)}
-				var ok1, ok2 bool
-				fe.re1, fe.name1, ok1 = compileSide(fe.Side1)
-				fe.re2, fe.name2, ok2 = compileSide(fe.Side2)
-				if ok1 && ok2 {
-					curFamily = &fe
-				}
-			}
+			curFamily = parseFamily(strings.TrimPrefix(line, "- family:"))
 		case strings.HasPrefix(line, "- role:"):
 			flush()
 			curRole = &RoleEntry{Name: CleanKey(strings.TrimPrefix(line, "- role:")), Expected: -1}

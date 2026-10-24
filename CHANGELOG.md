@@ -5,6 +5,8 @@ All notable changes to calque. The version string itself comes from the git tag
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-24
+
 ### Added
 - **`- family:` registry entries** — one verdict for every pair whose keys match
   two `<path glob>::<qualname>` sides, in either order (`*` matches any name).
